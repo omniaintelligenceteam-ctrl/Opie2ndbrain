@@ -6,6 +6,7 @@ import {
   useRecentMemories,
   useConnectionStatus,
 } from '../hooks/useRealTimeData';
+import OpieStatusWidget from './OpieStatusWidget';
 
 interface SmartDashboardHomeProps {
   userName?: string;
@@ -224,8 +225,10 @@ export default function SmartDashboardHome({
   onQuickAction,
 }: SmartDashboardHomeProps) {
   const { greeting, suggestion } = useSmartGreeting(userName);
-  const { status, loading: statusLoading } = useSystemStatus(5000);
+  // Poll status more frequently for live updates
+  const { status, loading: statusLoading } = useSystemStatus(2000);
   const { memories, loading: memoriesLoading } = useRecentMemories(5);
+  // Poll connection more frequently for real latency
   const { isOnline, latency } = useConnectionStatus();
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -237,10 +240,14 @@ export default function SmartDashboardHome({
   const getStatusText = () => {
     if (!status?.opie) return 'Connecting...';
     switch (status.opie.status) {
-      case 'online': return 'Online & Ready';
-      case 'thinking': return 'Processing...';
+      case 'online': 
+        if (status.agents?.active > 0) return `${status.agents.active} agents active`;
+        return 'Online & Ready';
+      case 'thinking': 
+        if (status.agents?.active > 0) return `Working (${status.agents.active} agents)`;
+        return 'Thinking...';
       case 'speaking': return 'Speaking...';
-      default: return 'Offline';
+      default: return 'Gateway Offline';
     }
   };
 
@@ -271,52 +278,13 @@ export default function SmartDashboardHome({
           </div>
         </div>
 
-        {/* Right: Opie Status Card */}
-        <div style={styles.statusCard}>
-          <div style={styles.statusCardInner}>
-            <div style={styles.statusHeader}>
-              <StatusOrb status={opieStatus} size={56} />
-              <div style={styles.statusInfo}>
-                <div style={styles.opieName}>
-                  Opie
-                  <span style={styles.modelBadge}>
-                    {status?.model?.split('-').slice(0,2).join('-') || 'claude'}
-                  </span>
-                </div>
-                <div style={{
-                  ...styles.statusText,
-                  color: opieStatus === 'online' ? '#22c55e' : 
-                         opieStatus === 'thinking' ? '#6366f1' : 
-                         opieStatus === 'speaking' ? '#f59e0b' : '#6b7280',
-                }}>
-                  {getStatusText()}
-                </div>
-              </div>
-            </div>
-            
-            <div style={styles.statusMeta}>
-              {status?.opie?.uptime && (
-                <div style={styles.metaItem}>
-                  <span style={styles.metaLabel}>Uptime</span>
-                  <span style={styles.metaValue}>{formatUptime(status.opie.uptime)}</span>
-                </div>
-              )}
-              {latency !== null && (
-                <div style={styles.metaItem}>
-                  <span style={styles.metaLabel}>Latency</span>
-                  <span style={styles.metaValue}>{latency}ms</span>
-                </div>
-              )}
-              {status?.context && (
-                <div style={styles.metaItem}>
-                  <span style={styles.metaLabel}>Context</span>
-                  <span style={styles.metaValue}>
-                    {formatNumber(status.context.used)}/{formatNumber(status.context.total)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Right: Enhanced Opie Status Widget */}
+        <div style={{ minWidth: '320px' }}>
+          <OpieStatusWidget 
+            size="large" 
+            showDetails={true}
+            onClick={() => onNavigate?.('settings')}
+          />
         </div>
       </div>
 

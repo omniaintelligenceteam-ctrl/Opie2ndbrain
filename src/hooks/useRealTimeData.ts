@@ -423,7 +423,7 @@ export function useConnectionStatus() {
     window.addEventListener('offline', handleOffline);
     setIsOnline(navigator.onLine);
 
-    // Ping check
+    // Ping check - more frequent for real-time latency
     const ping = async () => {
       const start = performance.now();
       try {
@@ -433,6 +433,8 @@ export function useConnectionStatus() {
           setLatency(Math.round(end - start));
           setLastPing(new Date());
           setIsOnline(true);
+        } else {
+          setIsOnline(false);
         }
       } catch {
         setIsOnline(false);
@@ -440,7 +442,8 @@ export function useConnectionStatus() {
     };
 
     ping();
-    const interval = setInterval(ping, 30000);
+    // Ping every 5 seconds for real-time latency
+    const interval = setInterval(ping, 5000);
 
     return () => {
       window.removeEventListener('online', handleOnline);

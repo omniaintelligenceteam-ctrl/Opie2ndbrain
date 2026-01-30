@@ -48,11 +48,25 @@ export async function gatewayFetch<T = unknown>(
 export async function gatewayHealth(): Promise<{ connected: boolean; latency: number }> {
   const start = Date.now();
   try {
-    const res = await fetch(`${GATEWAY_URL}/status`, {
-      headers: GATEWAY_TOKEN ? { 'Authorization': `Bearer ${GATEWAY_TOKEN}` } : {},
-      signal: AbortSignal.timeout(5000),
-    });
-    return { connected: res.ok, latency: Date.now() - start };
+    // Try multiple endpoints to check gateway health
+    const endpoints = ['/api/status', '/status', '/health', '/'];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(`${GATEWAY_URL}${endpoint}`, {
+          method: 'HEAD', // Use HEAD to reduce payload
+          headers: GATEWAY_TOKEN ? { 'Authorization': `Bearer ${GATEWAY_TOKEN}` } : {},
+          signal: AbortSignal.timeout(3000),
+        });
+        if (res.ok) {
+          return { connected: true, latency: Date.now() - start };
+        }
+      } catch (e) {
+        // Try next endpoint
+        continue;
+      }
+    }
+    return { connected: false, latency: Date.now() - start };
   } catch {
     return { connected: false, latency: Date.now() - start };
   }

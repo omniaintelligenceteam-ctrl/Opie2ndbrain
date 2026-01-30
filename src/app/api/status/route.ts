@@ -53,20 +53,75 @@ async function getAgentSessions(): Promise<{ active: number; idle: number; total
   }
 }
 
-async function getGatewayStatus(): Promise<{ model?: string; contextUsed?: number; contextTotal?: number }> {
+async function getGatewayStatus(): Promise<{ 
+  model?: string; 
+  contextUsed?: number; 
+  contextTotal?: number; 
+  sessions?: number;
+  isProcessing?: boolean;
+}> {
   try {
-    const data = await gatewayFetch<{ 
-      model?: string;
-      context_window?: number;
-      context_used?: number;
-    }>('/status');
+    // Try multiple endpoints for comprehensive status
+    const [statusData, sessionsData] = await Promise.allSettled([
+      gatewayFetch<{ 
+        model?: string;
+        context_window?: number;
+        context_used?: number;
+        processing?: boolean;
+        status?: string;
+      }>('/api/status'),
+      gatewayFetch<{ 
+        sessions?: Array<{ status?: string; model?: string }>;
+        active_count?: number;
+      }>('/api/sessions')
+    ]);
+
+    let model = undefined;
+    let contextUsed = undefined;
+    let contextTotal = undefined;
+    let sessions = 0;
+    let isProcessing = false;
+
+    // Extract data from status endpoint
+    if (statusData.status === 'fulfilled') {
+      const data = statusData.value;
+      model = data.model || model;
+      contextUsed = data.context_used || contextUsed;
+      contextTotal = data.context_window || contextTotal;
+      isProcessing = data.processing || data.status === 'processing' || isProcessing;
+    }
+
+    // Extract data from sessions endpoint
+    if (sessionsData.status === 'fulfilled') {
+      const data = sessionsData.value;
+      sessions = data.active_count || data.sessions?.length || sessions;
+      
+      // Check if any session is processing
+      if (data.sessions) {
+        isProcessing = data.sessions.some(s => 
+          s.status === 'running' || s.status === 'processing'
+        ) || isProcessing;
+        
+        // Use model from active session if available
+        const activeSession = data.sessions.find(s => s.status === 'running' || s.model);
+        if (activeSession?.model) {
+          model = activeSession.model;
+        }
+      }
+    }
+
     return {
-      model: data.model,
-      contextUsed: data.context_used,
-      contextTotal: data.context_window,
+      model: model || 'claude-sonnet-3.5',
+      contextUsed,
+      contextTotal,
+      sessions,
+      isProcessing,
     };
-  } catch {
-    return {};
+  } catch (error) {
+    console.log('Gateway status fetch error:', error);
+    return {
+      model: 'claude-sonnet-3.5',
+    };
   }
 }
 
@@ -82,9 +137,19 @@ export async function GET() {
   const responseTime = Date.now() - requestStart;
   const uptime = Math.floor((Date.now() - SERVER_START) / 1000);
 
+  // Determine dynamic status based on activity
+  let opieStatus: 'online' | 'thinking' | 'speaking' | 'offline' = 'offline';
+  if (gatewayCheck.connected) {
+    if (gatewayStatus.isProcessing || agentStats.active > 0) {
+      opieStatus = 'thinking'; // Show as thinking when processing or agents active
+    } else {
+      opieStatus = 'online'; // Idle but available
+    }
+  }
+
   const status: SystemStatus = {
     opie: {
-      status: gatewayCheck.connected ? 'online' : 'offline',
+      status: opieStatus,
       lastActivity: new Date().toISOString(),
       uptime,
     },

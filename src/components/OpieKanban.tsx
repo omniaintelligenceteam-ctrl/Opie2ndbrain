@@ -456,16 +456,10 @@ export default function OpieKanban(): React.ReactElement {
         )}
       </div>
 
-      {/* Status */}
+      {/* Live Status Bar */}
       {sidebarExpanded && (
-        <div style={styles.statusBar}>
-          <div style={{
-            ...styles.statusDot,
-            background: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e',
-          }} />
-          <span style={styles.statusText}>
-            {isSpeaking ? 'Speaking' : isLoading ? 'Thinking' : 'Online'}
-          </span>
+        <div style={{ padding: '0 14px' }}>
+          <StatusBar showDetails={true} />
         </div>
       )}
 
@@ -556,15 +550,39 @@ export default function OpieKanban(): React.ReactElement {
     </aside>
   );
 
-  // Mobile Header - uses imported MobileHeader component
-  const MobileHeaderComponent = () => (
-    <MobileHeader
-      title="Opie"
-      subtitle={activeView !== 'dashboard' ? NAV_ITEMS.find(n => n.id === activeView)?.label : undefined}
-      status={micOn ? 'listening' : isSpeaking ? 'speaking' : isLoading ? 'thinking' : 'online'}
-      onMenuClick={() => setMobileMenuOpen(true)}
-    />
-  );
+  // Get live status from the hook
+  const { status: liveStatus, loading: statusLoading } = useSystemStatus(3000);
+  
+  // Mobile Header - enhanced with live status
+  const MobileHeaderComponent = () => {
+    const getLiveStatus = () => {
+      if (micOn) return 'listening';
+      if (isSpeaking) return 'speaking'; 
+      if (isLoading) return 'thinking';
+      
+      // Use real gateway status
+      if (liveStatus?.opie?.status === 'thinking' || liveStatus?.agents?.active > 0) {
+        return 'thinking';
+      }
+      if (liveStatus?.opie?.status === 'offline') {
+        return 'online'; // Don't show offline in mobile header
+      }
+      return 'online';
+    };
+    
+    const statusText = liveStatus?.agents?.active > 0 
+      ? `${liveStatus.agents.active} agents active`
+      : NAV_ITEMS.find(n => n.id === activeView)?.label;
+    
+    return (
+      <MobileHeader
+        title="Opie"
+        subtitle={statusText}
+        status={getLiveStatus()}
+        onMenuClick={() => setMobileMenuOpen(true)}
+      />
+    );
+  };
 
   // Mobile Overlay
   const MobileOverlay = () => (
