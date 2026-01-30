@@ -60,7 +60,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
-// Floating Chat Component with Voice + Minimize
+// Floating Chat Component with Voice + Minimize + Fullscreen + Popout
 function FloatingChat({ 
   messages, 
   input, 
@@ -82,8 +82,245 @@ function FloatingChat({
   isSpeaking: boolean;
   transcript: string;
 }) {
-  const [mode, setMode] = useState<'closed' | 'minimized' | 'open'>('closed');
+  const [mode, setMode] = useState<'closed' | 'minimized' | 'open' | 'fullscreen'>('closed');
   const [size, setSize] = useState({ width: 380, height: 500 });
+  const [poppedOut, setPoppedOut] = useState(false);
+  const popoutWindowRef = useRef<Window | null>(null);
+
+  // Handle popout window
+  const handlePopout = () => {
+    const width = 420;
+    const height = 600;
+    const left = window.screenX + window.outerWidth - width - 50;
+    const top = window.screenY + 50;
+    
+    const popout = window.open(
+      '',
+      'opie-chat',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`
+    );
+    
+    if (popout) {
+      popoutWindowRef.current = popout;
+      setPoppedOut(true);
+      setMode('closed');
+      
+      // Write the popout HTML
+      popout.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Opie Voice Chat</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              background: #0d0d1a; 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              height: 100vh;
+              overflow: hidden;
+            }
+            #chat-root { height: 100%; display: flex; flex-direction: column; }
+            .header {
+              padding: 16px;
+              border-bottom: 1px solid rgba(255,255,255,0.1);
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              background: rgba(255,255,255,0.02);
+            }
+            .header img { width: 40px; height: 40px; border-radius: 50%; }
+            .header .info { flex: 1; }
+            .header .name { color: #fff; font-weight: 600; font-size: 1.1rem; }
+            .header .status { color: rgba(255,255,255,0.5); font-size: 0.8rem; }
+            .messages {
+              flex: 1;
+              overflow-y: auto;
+              padding: 16px;
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+            }
+            .msg {
+              max-width: 85%;
+              padding: 12px 16px;
+              border-radius: 16px;
+              color: #fff;
+              font-size: 0.95rem;
+              line-height: 1.5;
+            }
+            .msg.user {
+              align-self: flex-end;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border-radius: 16px 16px 4px 16px;
+            }
+            .msg.assistant {
+              align-self: flex-start;
+              background: rgba(255,255,255,0.08);
+              border-radius: 16px 16px 16px 4px;
+            }
+            .input-area {
+              padding: 16px;
+              border-top: 1px solid rgba(255,255,255,0.1);
+              display: flex;
+              gap: 10px;
+              align-items: center;
+            }
+            .mic-btn {
+              width: 50px;
+              height: 50px;
+              border-radius: 50%;
+              border: none;
+              background: rgba(255,255,255,0.1);
+              color: #fff;
+              font-size: 22px;
+              cursor: pointer;
+              transition: all 0.2s;
+            }
+            .mic-btn.active { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+            .mic-btn:hover { transform: scale(1.05); }
+            textarea {
+              flex: 1;
+              padding: 14px;
+              background: rgba(255,255,255,0.05);
+              border: 1px solid rgba(255,255,255,0.1);
+              border-radius: 12px;
+              color: #fff;
+              font-size: 0.95rem;
+              resize: none;
+              outline: none;
+              min-height: 50px;
+            }
+            textarea::placeholder { color: rgba(255,255,255,0.3); }
+            .send-btn {
+              padding: 14px 24px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border: none;
+              border-radius: 12px;
+              color: #fff;
+              font-weight: 600;
+              cursor: pointer;
+              transition: all 0.2s;
+            }
+            .send-btn:hover { transform: scale(1.02); }
+            .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+            .empty {
+              text-align: center;
+              color: rgba(255,255,255,0.4);
+              padding: 60px 20px;
+            }
+            .empty img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 20px; opacity: 0.8; }
+          </style>
+        </head>
+        <body>
+          <div id="chat-root">
+            <div class="header">
+              <img src="${window.location.origin}/opie-avatar.png" alt="Opie" />
+              <div class="info">
+                <div class="name">Opie ⚡</div>
+                <div class="status" id="status">Online</div>
+              </div>
+            </div>
+            <div class="messages" id="messages">
+              <div class="empty">
+                <img src="${window.location.origin}/opie-avatar.png" alt="Opie" />
+                <p>Popout chat ready!<br/>Messages sync with main window.</p>
+              </div>
+            </div>
+            <div class="input-area">
+              <button class="mic-btn" id="mic-btn">🎤</button>
+              <textarea id="input" placeholder="Type a message..." rows="1"></textarea>
+              <button class="send-btn" id="send-btn">Send</button>
+            </div>
+          </div>
+          <script>
+            // Communicate with parent window
+            window.addEventListener('message', (e) => {
+              if (e.data.type === 'messages') {
+                const container = document.getElementById('messages');
+                if (e.data.messages.length === 0) {
+                  container.innerHTML = '<div class="empty"><img src="${window.location.origin}/opie-avatar.png" alt="Opie" /><p>Hey! Type or tap the mic to talk.</p></div>';
+                } else {
+                  container.innerHTML = e.data.messages.map(m => 
+                    '<div class="msg ' + m.role + '">' + m.text + '</div>'
+                  ).join('');
+                  container.scrollTop = container.scrollHeight;
+                }
+              } else if (e.data.type === 'status') {
+                document.getElementById('status').textContent = e.data.text;
+                document.getElementById('status').style.color = e.data.color || 'rgba(255,255,255,0.5)';
+              } else if (e.data.type === 'micState') {
+                const btn = document.getElementById('mic-btn');
+                btn.classList.toggle('active', e.data.active);
+              }
+            });
+            
+            document.getElementById('send-btn').onclick = () => {
+              const input = document.getElementById('input');
+              if (input.value.trim()) {
+                window.opener.postMessage({ type: 'send', text: input.value }, '*');
+                input.value = '';
+              }
+            };
+            
+            document.getElementById('input').onkeydown = (e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('send-btn').click();
+              }
+            };
+            
+            document.getElementById('mic-btn').onclick = () => {
+              window.opener.postMessage({ type: 'toggleMic' }, '*');
+            };
+            
+            window.onbeforeunload = () => {
+              window.opener.postMessage({ type: 'popoutClosed' }, '*');
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      popout.document.close();
+      
+      // Sync messages to popout
+      popout.postMessage({ type: 'messages', messages }, '*');
+    }
+  };
+
+  // Listen for messages from popout
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data.type === 'send') {
+        setInput(e.data.text);
+        setTimeout(() => onSend(), 50);
+      } else if (e.data.type === 'toggleMic') {
+        onMicToggle();
+      } else if (e.data.type === 'popoutClosed') {
+        setPoppedOut(false);
+        popoutWindowRef.current = null;
+        setMode('open');
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onSend, onMicToggle, setInput]);
+
+  // Sync messages to popout window
+  useEffect(() => {
+    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
+      popoutWindowRef.current.postMessage({ type: 'messages', messages }, '*');
+    }
+  }, [messages, poppedOut]);
+
+  // Sync mic state to popout
+  useEffect(() => {
+    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
+      popoutWindowRef.current.postMessage({ type: 'micState', active: micOn }, '*');
+      const statusText = micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online';
+      const statusColor = micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.5)';
+      popoutWindowRef.current.postMessage({ type: 'status', text: statusText, color: statusColor }, '*');
+    }
+  }, [micOn, isSpeaking, isLoading, poppedOut]);
   const [isResizing, setIsResizing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -205,23 +442,28 @@ function FloatingChat({
     );
   }
 
-  // Open state - full chat window
+  // Open/Fullscreen state - chat window
+  const isFullscreen = mode === 'fullscreen';
+  
   return (
     <div
       style={{
         position: 'fixed',
-        bottom: '24px',
-        right: '24px',
-        width: `${size.width}px`,
-        height: `${size.height}px`,
+        bottom: isFullscreen ? '0' : '24px',
+        right: isFullscreen ? '0' : '24px',
+        top: isFullscreen ? '0' : 'auto',
+        left: isFullscreen ? '0' : 'auto',
+        width: isFullscreen ? '100%' : `${size.width}px`,
+        height: isFullscreen ? '100%' : `${size.height}px`,
         background: '#0d0d1a',
-        borderRadius: '16px',
-        border: '1px solid rgba(255,255,255,0.1)',
-        boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+        borderRadius: isFullscreen ? '0' : '16px',
+        border: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
+        boxShadow: isFullscreen ? 'none' : '0 10px 40px rgba(0,0,0,0.5)',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 1000,
         overflow: 'hidden',
+        transition: 'all 0.3s ease',
       }}
     >
       {/* Resize Handle */}
@@ -263,7 +505,37 @@ function FloatingChat({
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            onClick={handlePopout}
+            title="Pop out to separate window"
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              color: 'rgba(255,255,255,0.6)',
+              cursor: 'pointer',
+              fontSize: '14px',
+              padding: '6px 10px',
+              borderRadius: '8px',
+            }}
+          >
+            ↗️
+          </button>
+          <button
+            onClick={() => setMode(mode === 'fullscreen' ? 'open' : 'fullscreen')}
+            title={mode === 'fullscreen' ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{
+              background: mode === 'fullscreen' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(255,255,255,0.1)',
+              border: 'none',
+              color: mode === 'fullscreen' ? '#667eea' : 'rgba(255,255,255,0.6)',
+              cursor: 'pointer',
+              fontSize: '14px',
+              padding: '6px 10px',
+              borderRadius: '8px',
+            }}
+          >
+            {mode === 'fullscreen' ? '⊙' : '⛶'}
+          </button>
           <button
             onClick={() => setMode('minimized')}
             title="Minimize"
@@ -272,7 +544,7 @@ function FloatingChat({
               border: 'none',
               color: 'rgba(255,255,255,0.6)',
               cursor: 'pointer',
-              fontSize: '16px',
+              fontSize: '14px',
               padding: '6px 10px',
               borderRadius: '8px',
             }}
@@ -287,7 +559,7 @@ function FloatingChat({
               border: 'none',
               color: 'rgba(255,255,255,0.6)',
               cursor: 'pointer',
-              fontSize: '16px',
+              fontSize: '14px',
               padding: '6px 10px',
               borderRadius: '8px',
             }}
