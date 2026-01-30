@@ -13,8 +13,10 @@ interface ActivityItem {
 
 export async function GET() {
   try {
-    // Try to fetch activity from gateway
-    const data = await gatewayFetch<{ activity?: ActivityItem[] }>('/activity');
+    // Try to fetch activity from gateway with fallback
+    const data = await gatewayFetch<{ activity?: ActivityItem[] }>('/activity', {
+      fallback: { activity: [] }
+    });
     
     return NextResponse.json({
       activity: data.activity || [],

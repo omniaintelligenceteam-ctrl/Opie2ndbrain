@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { gatewayFetch, gatewayHealth, GATEWAY_URL } from '@/lib/gateway';
+import { gatewayFetch, gatewayHealth, GATEWAY_URL, IS_VERCEL } from '@/lib/gateway';
 
 const SERVER_START = Date.now();
 
 interface SystemStatus {
   opie: {
-    status: 'online' | 'thinking' | 'speaking' | 'offline';
+    status: 'online' | 'thinking' | 'speaking' | 'offline' | 'demo';
     lastActivity: string;
     uptime: number;
   };
@@ -43,7 +43,9 @@ interface SystemStatus {
 
 async function getAgentSessions(): Promise<{ active: number; idle: number; total: number }> {
   try {
-    const data = await gatewayFetch<{ sessions?: Array<{ status?: string }> }>('/sessions');
+    const data = await gatewayFetch<{ sessions?: Array<{ status?: string }> }>('/sessions', {
+      fallback: { sessions: [] }
+    });
     const sessions = data.sessions || [];
     const active = sessions.filter((s) => s.status === 'running').length;
     const idle = sessions.filter((s) => s.status === 'idle' || s.status === 'complete').length;
@@ -138,8 +140,12 @@ export async function GET() {
   const uptime = Math.floor((Date.now() - SERVER_START) / 1000);
 
   // Determine dynamic status based on activity
-  let opieStatus: 'online' | 'thinking' | 'speaking' | 'offline' = 'offline';
-  if (gatewayCheck.connected) {
+  let opieStatus: 'online' | 'thinking' | 'speaking' | 'offline' | 'demo' = 'offline';
+  const isDemo = IS_VERCEL && GATEWAY_URL.includes('localhost');
+  
+  if (isDemo) {
+    opieStatus = 'demo'; // Demo mode when gateway unavailable in production
+  } else if (gatewayCheck.connected) {
     if (gatewayStatus.isProcessing || agentStats.active > 0) {
       opieStatus = 'thinking'; // Show as thinking when processing or agents active
     } else {

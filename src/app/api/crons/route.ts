@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { gatewayFetch } from '@/lib/gateway';
+import { gatewayFetch, IS_VERCEL, GATEWAY_URL } from '@/lib/gateway';
 
 interface CronJob {
   id: string;
@@ -18,7 +18,9 @@ interface CronJob {
 
 export async function GET() {
   try {
-    const data = await gatewayFetch<{ crons?: CronJob[] }>('/crons');
+    const data = await gatewayFetch<{ crons?: CronJob[] }>('/crons', {
+      fallback: { crons: [] }
+    });
     return NextResponse.json(data);
   } catch (error) {
     console.error('Failed to fetch crons:', error);
@@ -32,6 +34,16 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Check if gateway is available
+  const gatewayUnavailable = IS_VERCEL && GATEWAY_URL.includes('localhost');
+  
+  if (gatewayUnavailable) {
+    return NextResponse.json({ 
+      error: 'Cannot create crons in demo mode - gateway unavailable',
+      demo: true 
+    }, { status: 503 });
+  }
+  
   try {
     const body = await request.json();
     const data = await gatewayFetch('/crons', {
@@ -41,6 +53,6 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Failed to create cron:', error);
-    return NextResponse.json({ error: 'Failed to create cron' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create cron - gateway unavailable' }, { status: 503 });
   }
 }

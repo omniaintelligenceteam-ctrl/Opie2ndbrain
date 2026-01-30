@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GATEWAY_URL, GATEWAY_TOKEN } from '@/lib/gateway';
+import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
 
 interface GatewaySession {
   sessionId?: string;
@@ -74,6 +74,11 @@ function normalizeStatus(status?: string): 'running' | 'complete' | 'failed' | '
 
 // Try to fetch sessions via WebSocket-style RPC over HTTP (if supported)
 async function tryFetchSessions(): Promise<GatewaySession[]> {
+  // Skip network calls entirely in Vercel with localhost gateway
+  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
+    return [];
+  }
+  
   const methods = [
     // Try direct sessions endpoint
     async () => {
@@ -224,6 +229,16 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Check if gateway is available
+  const gatewayUnavailable = IS_VERCEL && GATEWAY_URL.includes('localhost');
+  
+  if (gatewayUnavailable) {
+    return NextResponse.json({ 
+      error: 'Session details unavailable in demo mode',
+      demo: true 
+    }, { status: 503 });
+  }
+  
   try {
     const body = await request.json();
     const { sessionId } = body;
@@ -253,6 +268,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Failed to fetch session details:', error);
-    return NextResponse.json({ error: 'Failed to fetch session' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch session - gateway unavailable' }, { status: 503 });
   }
 }
