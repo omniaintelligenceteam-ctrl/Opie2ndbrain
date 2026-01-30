@@ -16,7 +16,7 @@ import WorkspaceBrowser from './WorkspaceBrowser';
 import CalendarWidget from './CalendarWidget';
 import EmailWidget from './EmailWidget';
 import QuickActionsPanel from './QuickActionsPanel';
-import AnalyticsDashboard from './AnalyticsDashboard';
+// AnalyticsDashboard removed - was showing placeholder data
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
@@ -664,12 +664,6 @@ export default function OpieKanban(): React.ReactElement {
               </div>
             </div>
             
-            {/* Analytics Section (Optional, collapsed on mobile) */}
-            {!isMobile && (
-              <div style={{ marginTop: '24px' }}>
-                <AnalyticsDashboard />
-              </div>
-            )}
           </div>
         )}
 

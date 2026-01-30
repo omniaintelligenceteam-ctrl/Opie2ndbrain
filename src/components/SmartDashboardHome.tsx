@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   useSystemStatus, 
-  useDashboardMetrics, 
   useSmartGreeting,
   useRecentMemories,
   useConnectionStatus,
@@ -226,7 +225,6 @@ export default function SmartDashboardHome({
 }: SmartDashboardHomeProps) {
   const { greeting, suggestion } = useSmartGreeting(userName);
   const { status, loading: statusLoading } = useSystemStatus(5000);
-  const { metrics, loading: metricsLoading } = useDashboardMetrics(30000);
   const { memories, loading: memoriesLoading } = useRecentMemories(5);
   const { isOnline, latency } = useConnectionStatus();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -330,13 +328,13 @@ export default function SmartDashboardHome({
         <ConnectionPill label="Network" connected={isOnline} />
       </div>
 
-      {/* Metrics Grid */}
+      {/* Metrics Grid - Real data only */}
       <div style={styles.metricsGrid}>
         <MetricCard
           icon="🤖"
           label="Active Agents"
           value={status?.agents?.active ?? 0}
-          subtext={`${status?.agents?.total ?? 0} total agents`}
+          subtext={`${status?.agents?.total ?? 0} total sessions`}
           color="#22c55e"
           onClick={() => onNavigate?.('agents')}
         />
@@ -344,24 +342,9 @@ export default function SmartDashboardHome({
           icon="⚡"
           label="Running Tasks"
           value={status?.tasks?.running ?? 0}
-          subtext={`${status?.tasks?.completed ?? 0} completed today`}
+          subtext={status?.tasks?.pending ? `${status.tasks.pending} pending` : 'No pending tasks'}
           color="#f59e0b"
           onClick={() => onNavigate?.('tasks')}
-        />
-        <MetricCard
-          icon="💬"
-          label="Sessions Today"
-          value={metrics?.sessions?.today ?? 0}
-          subtext={`${formatNumber(metrics?.tokens?.today ?? 0)} tokens used`}
-          color="#6366f1"
-          onClick={() => onNavigate?.('analytics')}
-        />
-        <MetricCard
-          icon="✅"
-          label="Success Rate"
-          value={`${metrics?.tasks?.successRate?.toFixed(1) ?? '—'}%`}
-          subtext={`Avg ${metrics?.tasks?.avgDuration ?? 0}s per task`}
-          color="#10b981"
         />
       </div>
 
@@ -456,31 +439,6 @@ export default function SmartDashboardHome({
         </div>
       </div>
 
-      {/* Performance Summary */}
-      <div style={styles.performanceSection}>
-        <h3 style={styles.sectionTitle}>
-          <span style={styles.sectionIcon}>📈</span>
-          Performance Overview
-        </h3>
-        <div style={styles.performanceGrid}>
-          <div style={styles.perfItem}>
-            <span style={styles.perfLabel}>Most Active</span>
-            <span style={styles.perfValue}>{metrics?.agents?.mostActive ?? 'Main Agent'}</span>
-          </div>
-          <div style={styles.perfItem}>
-            <span style={styles.perfLabel}>Tasks/Agent</span>
-            <span style={styles.perfValue}>{metrics?.agents?.tasksPerAgent ?? '—'}</span>
-          </div>
-          <div style={styles.perfItem}>
-            <span style={styles.perfLabel}>Efficiency</span>
-            <span style={styles.perfValue}>{metrics?.agents?.efficiency?.toFixed(0) ?? '—'}%</span>
-          </div>
-          <div style={styles.perfItem}>
-            <span style={styles.perfLabel}>Conversations</span>
-            <span style={styles.perfValue}>{metrics?.conversations?.today ?? 0}</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -785,38 +743,5 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.875rem',
     textAlign: 'center',
     padding: '40px 20px',
-  },
-
-  // Performance Section
-  performanceSection: {
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
-    borderRadius: '20px',
-    padding: '24px',
-    border: '1px solid rgba(255,255,255,0.05)',
-  },
-  performanceGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-    gap: '16px',
-  },
-  perfItem: {
-    textAlign: 'center',
-    padding: '16px',
-    background: 'rgba(255,255,255,0.02)',
-    borderRadius: '12px',
-  },
-  perfLabel: {
-    display: 'block',
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: '0.75rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '8px',
-  },
-  perfValue: {
-    color: '#fff',
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums',
   },
 };
