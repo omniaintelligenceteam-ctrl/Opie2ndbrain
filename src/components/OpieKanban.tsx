@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import AgentsPanel from './AgentsPanel';
 import SkillsPanel from './SkillsPanel';
 import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
@@ -10,13 +10,22 @@ import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import { useKeyboardShortcuts, ViewId } from '../hooks/useKeyboardShortcuts';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
-import { useBottomNav } from '../hooks/useMobileGestures';
+import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
 import MemoryPanel from './MemoryPanel';
 import WorkspaceBrowser from './WorkspaceBrowser';
 import CalendarWidget from './CalendarWidget';
 import EmailWidget from './EmailWidget';
 import QuickActionsPanel from './QuickActionsPanel';
 import AnalyticsDashboard from './AnalyticsDashboard';
+import MobileNavigation, { MobileHeader } from './MobileNavigation';
+import MobileChat from './MobileChat';
+import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
+import FloatingChat, { ChatMessage } from './FloatingChat';
+// Real-time dashboard components
+import SmartDashboardHome from './SmartDashboardHome';
+import { NotificationBell, NotificationProvider } from './NotificationCenter';
+import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
+import { useNotifications, useToast } from '../hooks/useRealTimeData';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -72,688 +81,13 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
-// Floating Chat Component with Voice + Minimize + Fullscreen + Popout
-function FloatingChat({ 
-  messages, 
-  input, 
-  setInput, 
-  isLoading, 
-  onSend,
-  micOn,
-  onMicToggle,
-  isSpeaking,
-  transcript,
-}: {
-  messages: {role: string; text: string}[];
-  input: string;
-  setInput: (val: string) => void;
-  isLoading: boolean;
-  onSend: () => void;
-  micOn: boolean;
-  onMicToggle: () => void;
-  isSpeaking: boolean;
-  transcript: string;
-}) {
-  const [mode, setMode] = useState<'closed' | 'minimized' | 'open' | 'fullscreen'>('closed');
-  const [size, setSize] = useState({ width: 380, height: 500 });
-  const [poppedOut, setPoppedOut] = useState(false);
-  const popoutWindowRef = useRef<Window | null>(null);
-
-  // Handle popout window
-  const handlePopout = () => {
-    const width = 420;
-    const height = 600;
-    const left = window.screenX + window.outerWidth - width - 50;
-    const top = window.screenY + 50;
-    
-    const popout = window.open(
-      '',
-      'opie-chat',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`
-    );
-    
-    if (popout) {
-      popoutWindowRef.current = popout;
-      setPoppedOut(true);
-      setMode('closed');
-      
-      // Write the popout HTML
-      popout.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Opie Voice Chat</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              background: #0d0d1a; 
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-              height: 100vh;
-              overflow: hidden;
-            }
-            #chat-root { height: 100%; display: flex; flex-direction: column; }
-            .header {
-              padding: 16px;
-              border-bottom: 1px solid rgba(255,255,255,0.1);
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              background: rgba(255,255,255,0.02);
-            }
-            .header img { width: 40px; height: 40px; border-radius: 50%; }
-            .header .info { flex: 1; }
-            .header .name { color: #fff; font-weight: 600; font-size: 1.1rem; }
-            .header .status { color: rgba(255,255,255,0.5); font-size: 0.8rem; }
-            .messages {
-              flex: 1;
-              overflow-y: auto;
-              padding: 16px;
-              display: flex;
-              flex-direction: column;
-              gap: 12px;
-            }
-            .msg {
-              max-width: 85%;
-              padding: 12px 16px;
-              border-radius: 16px;
-              color: #fff;
-              font-size: 0.95rem;
-              line-height: 1.5;
-            }
-            .msg.user {
-              align-self: flex-end;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              border-radius: 16px 16px 4px 16px;
-            }
-            .msg.assistant {
-              align-self: flex-start;
-              background: rgba(255,255,255,0.08);
-              border-radius: 16px 16px 16px 4px;
-            }
-            .input-area {
-              padding: 16px;
-              border-top: 1px solid rgba(255,255,255,0.1);
-              display: flex;
-              gap: 10px;
-              align-items: center;
-            }
-            .mic-btn {
-              width: 50px;
-              height: 50px;
-              border-radius: 50%;
-              border: none;
-              background: #ef4444;
-              color: #fff;
-              font-size: 22px;
-              cursor: pointer;
-              transition: all 0.2s;
-            }
-            .mic-btn.active { background: #22c55e !important; }
-            .mic-btn:hover { transform: scale(1.05); }
-            textarea {
-              flex: 1;
-              padding: 14px;
-              background: rgba(255,255,255,0.05);
-              border: 1px solid rgba(255,255,255,0.1);
-              border-radius: 12px;
-              color: #fff;
-              font-size: 0.95rem;
-              resize: none;
-              outline: none;
-              min-height: 50px;
-            }
-            textarea::placeholder { color: rgba(255,255,255,0.3); }
-            .send-btn {
-              padding: 14px 24px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              border: none;
-              border-radius: 12px;
-              color: #fff;
-              font-weight: 600;
-              cursor: pointer;
-              transition: all 0.2s;
-            }
-            .send-btn:hover { transform: scale(1.02); }
-            .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-            .empty {
-              text-align: center;
-              color: rgba(255,255,255,0.4);
-              padding: 60px 20px;
-            }
-            .empty img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 20px; opacity: 0.8; }
-          </style>
-        </head>
-        <body>
-          <div id="chat-root">
-            <div class="header">
-              <img src="${window.location.origin}/opie-avatar.png" alt="Opie" />
-              <div class="info">
-                <div class="name">Opie ⚡</div>
-                <div class="status" id="status">Online</div>
-              </div>
-            </div>
-            <div class="messages" id="messages">
-              <div class="empty">
-                <img src="${window.location.origin}/opie-avatar.png" alt="Opie" />
-                <p>Popout chat ready!<br/>Messages sync with main window.</p>
-              </div>
-            </div>
-            <div class="input-area">
-              <button class="mic-btn" id="mic-btn">🎤</button>
-              <textarea id="input" placeholder="Type a message..." rows="1"></textarea>
-              <button class="send-btn" id="send-btn">Send</button>
-            </div>
-          </div>
-          <script>
-            // Communicate with parent window
-            window.addEventListener('message', (e) => {
-              if (e.data.type === 'messages') {
-                const container = document.getElementById('messages');
-                if (e.data.messages.length === 0) {
-                  container.innerHTML = '<div class="empty"><img src="${window.location.origin}/opie-avatar.png" alt="Opie" /><p>Hey! Type or tap the mic to talk.</p></div>';
-                } else {
-                  container.innerHTML = e.data.messages.map(m => 
-                    '<div class="msg ' + m.role + '">' + m.text + '</div>'
-                  ).join('');
-                  container.scrollTop = container.scrollHeight;
-                }
-              } else if (e.data.type === 'status') {
-                document.getElementById('status').textContent = e.data.text;
-                document.getElementById('status').style.color = e.data.color || 'rgba(255,255,255,0.5)';
-              } else if (e.data.type === 'micState') {
-                const btn = document.getElementById('mic-btn');
-                btn.classList.toggle('active', e.data.active);
-              } else if (e.data.type === 'transcript') {
-                const container = document.getElementById('messages');
-                let transcriptEl = document.getElementById('live-transcript');
-                if (e.data.text) {
-                  if (!transcriptEl) {
-                    transcriptEl = document.createElement('div');
-                    transcriptEl.id = 'live-transcript';
-                    transcriptEl.className = 'msg user';
-                    transcriptEl.style.opacity = '0.6';
-                    transcriptEl.style.fontStyle = 'italic';
-                    container.appendChild(transcriptEl);
-                  }
-                  transcriptEl.textContent = e.data.text + '...';
-                  container.scrollTop = container.scrollHeight;
-                } else if (transcriptEl) {
-                  transcriptEl.remove();
-                }
-              }
-            });
-            
-            document.getElementById('send-btn').onclick = () => {
-              const input = document.getElementById('input');
-              if (input.value.trim()) {
-                window.opener.postMessage({ type: 'send', text: input.value }, '*');
-                input.value = '';
-              }
-            };
-            
-            document.getElementById('input').onkeydown = (e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                document.getElementById('send-btn').click();
-              }
-            };
-            
-            document.getElementById('mic-btn').onclick = () => {
-              window.opener.postMessage({ type: 'toggleMic' }, '*');
-            };
-            
-            window.onbeforeunload = () => {
-              window.opener.postMessage({ type: 'popoutClosed' }, '*');
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      popout.document.close();
-      
-      // Sync initial state to popout immediately
-      setTimeout(() => {
-        popout.postMessage({ type: 'messages', messages }, '*');
-        popout.postMessage({ type: 'micState', active: micOn }, '*');
-        const statusText = micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online';
-        const statusColor = micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.5)';
-        popout.postMessage({ type: 'status', text: statusText, color: statusColor }, '*');
-      }, 100);
-    }
-  };
-
-  // Listen for messages from popout
-  useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
-      if (e.data.type === 'send') {
-        setInput(e.data.text);
-        setTimeout(() => onSend(), 50);
-      } else if (e.data.type === 'toggleMic') {
-        onMicToggle();
-      } else if (e.data.type === 'popoutClosed') {
-        setPoppedOut(false);
-        popoutWindowRef.current = null;
-        setMode('open');
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [onSend, onMicToggle, setInput]);
-
-  // Sync messages to popout window
-  useEffect(() => {
-    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
-      popoutWindowRef.current.postMessage({ type: 'messages', messages }, '*');
-    }
-  }, [messages, poppedOut]);
-
-  // Sync mic state to popout
-  useEffect(() => {
-    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
-      popoutWindowRef.current.postMessage({ type: 'micState', active: micOn }, '*');
-      const statusText = micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online';
-      const statusColor = micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.5)';
-      popoutWindowRef.current.postMessage({ type: 'status', text: statusText, color: statusColor }, '*');
-    }
-  }, [micOn, isSpeaking, isLoading, poppedOut]);
-
-  // Sync transcript to popout
-  useEffect(() => {
-    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
-      popoutWindowRef.current.postMessage({ type: 'transcript', text: transcript }, '*');
-    }
-  }, [transcript, poppedOut]);
-  const [isResizing, setIsResizing] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (chatEndRef.current && mode === 'open') {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, mode]);
-
-  const handleResize = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    setSize(prev => ({
-      width: Math.max(300, Math.min(600, prev.width - e.movementX)),
-      height: Math.max(400, Math.min(800, prev.height - e.movementY)),
-    }));
-  }, [isResizing]);
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', handleResize);
-      window.addEventListener('mouseup', () => setIsResizing(false));
-      return () => {
-        window.removeEventListener('mousemove', handleResize);
-        window.removeEventListener('mouseup', () => setIsResizing(false));
-      };
-    }
-  }, [isResizing, handleResize]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
-    }
-  };
-
-  // Closed state - floating button
-  if (mode === 'closed') {
-    return (
-      <button
-        onClick={() => setMode('open')}
-        style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          width: '60px',
-          height: '60px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '24px',
-          zIndex: 1000,
-          transition: 'transform 0.2s, box-shadow 0.2s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.1)';
-          e.currentTarget.style.boxShadow = '0 6px 30px rgba(102, 126, 234, 0.6)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(102, 126, 234, 0.4)';
-        }}
-      >
-        ⚡
-      </button>
-    );
-  }
-
-  // Minimized state - small tab
-  if (mode === 'minimized') {
-    return (
-      <button
-        onClick={() => setMode('open')}
-        style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          padding: '12px 20px',
-          borderRadius: '24px',
-          background: micOn 
-            ? '#22c55e' 
-            : '#ef4444'
-              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          border: 'none',
-          cursor: 'pointer',
-          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          zIndex: 1000,
-          transition: 'all 0.3s ease',
-        }}
-      >
-        <img 
-          src="/opie-avatar.png" 
-          alt="Opie" 
-          style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-        />
-        <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>
-          {micOn ? '🎤 Listening...' : isSpeaking ? '🔊 Speaking' : 'Opie'}
-        </span>
-        {messages.length > 0 && (
-          <span style={{
-            background: 'rgba(255,255,255,0.2)',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            fontSize: '0.75rem',
-            color: '#fff',
-          }}>
-            {messages.length}
-          </span>
-        )}
-      </button>
-    );
-  }
-
-  // Open/Fullscreen state - chat window
-  const isFullscreen = mode === 'fullscreen';
-  
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: isFullscreen ? '0' : '24px',
-        right: isFullscreen ? '0' : '24px',
-        top: isFullscreen ? '0' : 'auto',
-        left: isFullscreen ? '0' : 'auto',
-        width: isFullscreen ? '100%' : `${size.width}px`,
-        height: isFullscreen ? '100%' : `${size.height}px`,
-        background: '#0d0d1a',
-        borderRadius: isFullscreen ? '0' : '16px',
-        border: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
-        boxShadow: isFullscreen ? 'none' : '0 10px 40px rgba(0,0,0,0.5)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 1000,
-        overflow: 'hidden',
-        transition: 'all 0.3s ease',
-      }}
-    >
-      {/* Resize Handle */}
-      <div
-        onMouseDown={() => setIsResizing(true)}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '20px',
-          height: '20px',
-          cursor: 'nw-resize',
-          zIndex: 10,
-        }}
-      />
-      
-      {/* Header */}
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'rgba(255,255,255,0.02)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img 
-            src="/opie-avatar.png" 
-            alt="Opie" 
-            style={{ width: '32px', height: '32px', borderRadius: '50%' }}
-          />
-          <div>
-            <span style={{ color: '#fff', fontWeight: 600, display: 'block' }}>Opie</span>
-            <span style={{ 
-              color: micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.4)', 
-              fontSize: '0.75rem' 
-            }}>
-              {micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online'}
-            </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button
-            onClick={handlePopout}
-            title="Pop out to separate window"
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              color: 'rgba(255,255,255,0.6)',
-              cursor: 'pointer',
-              fontSize: '14px',
-              padding: '6px 10px',
-              borderRadius: '8px',
-            }}
-          >
-            ↗️
-          </button>
-          <button
-            onClick={() => setMode(mode === 'fullscreen' ? 'open' : 'fullscreen')}
-            title={mode === 'fullscreen' ? 'Exit fullscreen' : 'Fullscreen'}
-            style={{
-              background: mode === 'fullscreen' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(255,255,255,0.1)',
-              border: 'none',
-              color: mode === 'fullscreen' ? '#667eea' : 'rgba(255,255,255,0.6)',
-              cursor: 'pointer',
-              fontSize: '14px',
-              padding: '6px 10px',
-              borderRadius: '8px',
-            }}
-          >
-            {mode === 'fullscreen' ? '⊙' : '⛶'}
-          </button>
-          <button
-            onClick={() => setMode('minimized')}
-            title="Minimize"
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              color: 'rgba(255,255,255,0.6)',
-              cursor: 'pointer',
-              fontSize: '14px',
-              padding: '6px 10px',
-              borderRadius: '8px',
-            }}
-          >
-            ─
-          </button>
-          <button
-            onClick={() => setMode('closed')}
-            title="Close"
-            style={{
-              background: 'rgba(239,68,68,0.2)',
-              border: 'none',
-              color: '#ef4444',
-              cursor: 'pointer',
-              fontSize: '16px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-      }}>
-        {messages.length === 0 && (
-          <div style={{
-            textAlign: 'center',
-            color: 'rgba(255,255,255,0.4)',
-            padding: '40px 20px',
-          }}>
-            <img 
-              src="/opie-avatar.png" 
-              alt="Opie" 
-              style={{ width: '64px', height: '64px', borderRadius: '50%', marginBottom: '16px', opacity: 0.8 }}
-            />
-            <p style={{ margin: 0 }}>Hey! Type or tap the mic to talk.</p>
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            style={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
-              padding: '12px 16px',
-              borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-              background: msg.role === 'user' 
-                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                : 'rgba(255,255,255,0.08)',
-              color: '#fff',
-              fontSize: '0.9rem',
-              lineHeight: 1.5,
-            }}
-          >
-            {msg.text}
-          </div>
-        ))}
-        {transcript && (
-          <div style={{
-            alignSelf: 'flex-end',
-            maxWidth: '85%',
-            padding: '12px 16px',
-            borderRadius: '16px 16px 4px 16px',
-            background: 'rgba(102, 126, 234, 0.3)',
-            color: 'rgba(255,255,255,0.7)',
-            fontSize: '0.9rem',
-            fontStyle: 'italic',
-          }}>
-            {transcript}...
-          </div>
-        )}
-        {isLoading && (
-          <div style={{
-            alignSelf: 'flex-start',
-            padding: '12px 16px',
-            borderRadius: '16px 16px 16px 4px',
-            background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.5)',
-          }}>
-            Thinking...
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Input Area */}
-      <div style={{
-        padding: '12px 16px',
-        borderTop: '1px solid rgba(255,255,255,0.1)',
-        display: 'flex',
-        gap: '10px',
-        alignItems: 'flex-end',
-      }}>
-        {/* Mic Button */}
-        <button
-          onClick={onMicToggle}
-          style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            border: 'none',
-            background: micOn 
-              ? '#22c55e' 
-              : '#ef4444',
-            color: '#fff',
-            fontSize: '18px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'all 0.2s ease',
-          }}
-        >
-          🎤
-        </button>
-        
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          style={{
-            flex: 1,
-            padding: '12px',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
-            color: '#fff',
-            fontSize: '0.9rem',
-            resize: 'none',
-            outline: 'none',
-            minHeight: '44px',
-            maxHeight: '120px',
-          }}
-          rows={1}
-        />
-        <button
-          onClick={onSend}
-          disabled={isLoading || !input.trim()}
-          style={{
-            padding: '12px 20px',
-            background: input.trim() ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'rgba(255,255,255,0.1)',
-            border: 'none',
-            borderRadius: '12px',
-            color: '#fff',
-            fontWeight: 600,
-            cursor: input.trim() ? 'pointer' : 'not-allowed',
-            opacity: input.trim() ? 1 : 0.5,
-            height: '44px',
-          }}
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
+// Helper to generate message IDs
+function generateMessageId(): string {
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export default function OpieKanban(): React.ReactElement {
-  const [messages, setMessages] = useState<{role: string; text: string}[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [micOn, setMicOn] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -762,8 +96,15 @@ export default function OpieKanban(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string>('');
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSheetContent, setMobileSheetContent] = useState<'agents' | 'task' | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Responsive state
+  const responsive = useResponsive();
+  const isMobile = responsive.isMobile;
+  const isTablet = responsive.isTablet;
+  const { triggerHaptic } = useHaptic();
   const [activeAgents, setActiveAgents] = useState<string[]>(['content', 'outreach']);
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -805,18 +146,16 @@ export default function OpieKanban(): React.ReactElement {
   useEffect(() => {
     setActiveView(getSavedView() as ViewId);
     setSidebarExpanded(getSidebarState());
-    
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
   const handleViewChange = useCallback((view: ViewId) => {
     setActiveView(view);
     saveView(view);
-    if (isMobile) setMobileMenuOpen(false);
-  }, [isMobile]);
+    if (isMobile) {
+      setMobileMenuOpen(false);
+      triggerHaptic('selection');
+    }
+  }, [isMobile, triggerHaptic]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -949,13 +288,33 @@ export default function OpieKanban(): React.ReactElement {
     }
   };
 
-  const handleSend = async (text: string) => {
-    if (!text.trim() || isLoading) return;
-    const userMsg = text.trim();
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+  const handleSend = async (text?: string) => {
+    const messageText = text || input;
+    if (!messageText.trim() || isLoading) return;
+    const userMsg = messageText.trim();
+    
+    // Create user message with proper structure
+    const userMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: 'user',
+      text: userMsg,
+      timestamp: new Date(),
+      status: 'sending',
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    
+    // Update user message status to sent
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => 
+        m.id === userMessage.id ? { ...m, status: 'sent' as const } : m
+      ));
+    }, 300);
+    
     try { recognitionRef.current?.stop(); } catch(e) {}
+    
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -964,11 +323,44 @@ export default function OpieKanban(): React.ReactElement {
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
-      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+      
+      // Update user message to delivered
+      setMessages(prev => prev.map(m => 
+        m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
+      ));
+      
+      // Add assistant response
+      const assistantMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: reply,
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
       setIsLoading(false);
+      
+      // Mark user message as read once assistant responds
+      setMessages(prev => prev.map(m => 
+        m.id === userMessage.id ? { ...m, status: 'read' as const } : m
+      ));
+      
       await speak(reply);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Error' }]);
+      // Add error response
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: 'Sorry, something went wrong. Please try again.',
+        timestamp: new Date(),
+      };
+      
+      // Mark user message as error
+      setMessages(prev => prev.map(m => 
+        m.id === userMessage.id ? { ...m, status: 'error' as const } : m
+      ));
+      
+      setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
       setTimeout(() => startRecognition(), 500);
     }
@@ -1133,6 +525,20 @@ export default function OpieKanban(): React.ReactElement {
         </div>
       )}
 
+      {/* Notification Bell */}
+      {sidebarExpanded && (
+        <div style={{ padding: '12px 16px' }}>
+          <NotificationBell
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkAsRead={markAsRead}
+            onMarkAllAsRead={markAllAsRead}
+            onClear={clearNotification}
+            onClearAll={clearAll}
+          />
+        </div>
+      )}
+
       {/* Footer */}
       <div style={styles.sidebarFooter}>
         {sidebarExpanded ? (
@@ -1144,21 +550,14 @@ export default function OpieKanban(): React.ReactElement {
     </aside>
   );
 
-  // Mobile Header
-  const MobileHeader = () => (
-    <div style={styles.mobileHeader}>
-      <button onClick={() => setMobileMenuOpen(true)} style={styles.hamburger}>
-        ☰
-      </button>
-      <div style={styles.mobileTitle}>
-        <span style={styles.mobileLogo}>⚡</span>
-        <span>Opie</span>
-      </div>
-      <div style={{
-        ...styles.mobileStatus,
-        background: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e',
-      }} />
-    </div>
+  // Mobile Header - uses imported MobileHeader component
+  const MobileHeaderComponent = () => (
+    <MobileHeader
+      title="Opie"
+      subtitle={activeView !== 'dashboard' ? NAV_ITEMS.find(n => n.id === activeView)?.label : undefined}
+      status={micOn ? 'listening' : isSpeaking ? 'speaking' : isLoading ? 'thinking' : 'online'}
+      onMenuClick={() => setMobileMenuOpen(true)}
+    />
   );
 
   // Mobile Overlay
@@ -1168,88 +567,121 @@ export default function OpieKanban(): React.ReactElement {
     ) : null
   );
 
+  // Notification hooks for sidebar
+  const { 
+    notifications, 
+    unreadCount, 
+    markAsRead, 
+    markAllAsRead, 
+    clearNotification, 
+    clearAll 
+  } = useNotifications();
+
   return (
-    <div style={styles.container}>
-      {isMobile && <MobileHeader />}
-      {isMobile && <MobileOverlay />}
-      <Sidebar />
+    <NotificationProvider>
+      <div style={styles.container}>
+        {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
+        {isMobile && <MobileOverlay />}
+        <Sidebar />
       
       {/* Main Content */}
       <main style={{
         ...styles.main,
         marginLeft: isMobile ? 0 : (sidebarExpanded ? '240px' : '72px'),
-        paddingTop: isMobile ? '60px' : 0,
+        paddingTop: isMobile && activeView !== 'voice' ? '0' : 0,
+        minHeight: isMobile ? '100dvh' : '100vh',
       }}>
-        {/* Dashboard View */}
+        {/* Dashboard View - Smart Real-Time Dashboard */}
         {activeView === 'dashboard' && (
-          <div style={styles.viewContainer}>
-            <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Dashboard</h1>
-              <p style={styles.viewSubtitle}>Overview of your agent army operations</p>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            {/* Smart Dashboard Home - Greeting, Status, Metrics */}
+            <SmartDashboardHome 
+              userName="Wes"
+              onNavigate={(view) => handleViewChange(view as ViewId)}
+              onQuickAction={(action) => {
+                if (action === 'deploy') handleViewChange('agents');
+              }}
+            />
+            
+            {/* Two Column Layout: Activity + Widgets */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile || isTablet ? '1fr' : '1fr 400px',
+              gap: '24px',
+              marginTop: '24px',
+            }}>
+              {/* Activity Feed */}
+              <div>
+                {isMobile ? (
+                  <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
+                    <ActivityFeed 
+                      maxItems={20}
+                      pollInterval={15000}
+                      isThinking={isLoading}
+                    />
+                  </CollapsibleSection>
+                ) : (
+                  <ActivityFeed 
+                    maxItems={50}
+                    pollInterval={10000}
+                    isThinking={isLoading}
+                  />
+                )}
+              </div>
+              
+              {/* Right Column: Calendar, Email, System Health */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {isMobile ? (
+                  <>
+                    <CollapsibleSection title="System Health" icon="🩺">
+                      <SystemHealthPanel />
+                    </CollapsibleSection>
+                    <CollapsibleSection title="Calendar" icon="📅">
+                      <CalendarWidget />
+                    </CollapsibleSection>
+                    <CollapsibleSection title="Email" icon="📧">
+                      <EmailWidget />
+                    </CollapsibleSection>
+                  </>
+                ) : (
+                  <>
+                    <SystemHealthPanel />
+                    <CalendarWidget />
+                    <EmailWidget />
+                  </>
+                )}
+              </div>
             </div>
             
-            {/* Quick Actions + Orchestration Row */}
-            <div style={styles.dashboardTopRow}>
-              <div style={styles.quickActionsWrapper}>
-                <QuickActionsPanel 
-                  onSendMessage={(message) => handleSend(message)}
-                  onSpawnAgent={() => handleViewChange('agents')}
-                />
+            {/* Analytics Section (Optional, collapsed on mobile) */}
+            {!isMobile && (
+              <div style={{ marginTop: '24px' }}>
+                <AnalyticsDashboard />
               </div>
-              <div style={styles.orchestrationWrapper}>
-                <OrchestrationStatus activeAgents={activeAgents} />
-              </div>
-            </div>
-
-            {/* Analytics Section */}
-            <div style={styles.analyticsSection}>
-              <AnalyticsDashboard />
-            </div>
-            
-            <div style={styles.dashboardGrid}>
-              <div style={styles.kanbanSection}>
-                <h3 style={styles.sectionTitle}>📋 Project Board</h3>
-                <div style={styles.kanbanGrid}>
-                  {columns.map(col => (
-                    <div key={col.id} style={{ ...styles.kanbanColumn, borderTopColor: col.color }}>
-                      <div style={styles.columnHeader}>
-                        <span>{col.title}</span>
-                        <span style={styles.columnCount}>{col.tasks.length}</span>
-                      </div>
-                      <div style={styles.columnTasks}>
-                        {col.tasks.map((t, i) => (
-                          <div key={i} style={styles.taskCard}>{t}</div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Calendar & Email Widgets Row */}
-            <div style={styles.widgetsRow}>
-              <CalendarWidget />
-              <EmailWidget />
-            </div>
-
-            {/* Live Activity Feed */}
-            <div style={styles.activityFeedWrapper}>
-              <ActivityFeed 
-                maxItems={50}
-                pollInterval={10000}
-                isThinking={isLoading}
-              />
-            </div>
+            )}
           </div>
         )}
 
         {/* Agents View */}
         {activeView === 'agents' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Agent Army</h1>
-              <p style={styles.viewSubtitle}>Deploy and manage your AI agents</p>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Agent Army
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Deploy AI agents' : 'Deploy and manage your AI agents'}
+              </p>
             </div>
             <AgentsPanel onDeploy={handleDeployAgent} activeAgents={activeAgents} />
           </div>
@@ -1257,9 +689,16 @@ export default function OpieKanban(): React.ReactElement {
 
         {/* Skills View */}
         {activeView === 'skills' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Skill Catalog</h1>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Skill Catalog
+              </h1>
               <p style={styles.viewSubtitle}>Browse available capabilities</p>
             </div>
             <SkillsPanel />
@@ -1268,24 +707,63 @@ export default function OpieKanban(): React.ReactElement {
 
         {/* Tasks View */}
         {activeView === 'tasks' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Active Tasks</h1>
-              <p style={styles.viewSubtitle}>Monitor running operations</p>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Active Tasks
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Running operations' : 'Monitor running operations'}
+              </p>
             </div>
-            <div style={styles.tasksGrid}>
-              <ActiveTasksPanel tasks={tasks} />
-              <OrchestrationStatus activeAgents={activeAgents} />
+            <div style={{
+              ...styles.tasksGrid,
+              gridTemplateColumns: isMobile || isTablet ? '1fr' : '1fr 380px',
+              gap: isMobile ? '16px' : '24px',
+            }}>
+              <ActiveTasksPanel 
+                tasks={tasks} 
+                onTaskClick={isMobile ? (taskId) => {
+                  const task = tasks.find(t => t.id === taskId);
+                  if (task) setSelectedTask(task);
+                  setMobileSheetContent('task');
+                  triggerHaptic('selection');
+                } : undefined}
+              />
+              {!isMobile && <OrchestrationStatus activeAgents={activeAgents} />}
             </div>
+            
+            {/* Mobile: Show orchestration status in collapsible */}
+            {isMobile && (
+              <div style={{ marginTop: '16px' }}>
+                <CollapsibleSection title="System Status" icon="📡" badge={activeAgents.length}>
+                  <OrchestrationStatus activeAgents={activeAgents} />
+                </CollapsibleSection>
+              </div>
+            )}
           </div>
         )}
 
         {/* Crons View */}
         {activeView === 'crons' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Scheduled Jobs</h1>
-              <p style={styles.viewSubtitle}>Manage automated cron tasks</p>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Scheduled Jobs
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Automated tasks' : 'Manage automated cron tasks'}
+              </p>
             </div>
             <CronsPanel 
               pollInterval={30000}
@@ -1296,82 +774,132 @@ export default function OpieKanban(): React.ReactElement {
 
         {/* Voice View */}
         {activeView === 'voice' && (
-          <div style={styles.voiceContainer}>
-            <div style={styles.chatMessages}>
-              {messages.length === 0 && (
-                <div style={styles.emptyChat}>
-                  <div style={styles.emptyChatIcon}>🎤</div>
-                  <h3 style={styles.emptyChatTitle}>Voice Chat with Opie</h3>
-                  <p style={styles.emptyChatText}>Turn on the mic or type below to start</p>
-                </div>
+          isMobile ? (
+            <MobileChat
+              messages={messages}
+              input={input}
+              setInput={setInput}
+              isLoading={isLoading}
+              onSend={() => handleSend(input)}
+              micOn={micOn}
+              onMicToggle={toggleMic}
+              isSpeaking={isSpeaking}
+              transcript={transcript}
+              onBack={() => handleViewChange('dashboard')}
+            />
+          ) : (
+            <div style={styles.voiceContainer}>
+              <div style={styles.chatMessages}>
+                {messages.length === 0 && (
+                  <div style={styles.emptyChat}>
+                    <div style={styles.emptyChatIcon}>🎤</div>
+                    <h3 style={styles.emptyChatTitle}>Voice Chat with Opie</h3>
+                    <p style={styles.emptyChatText}>Turn on the mic or type below to start</p>
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <div 
+                    key={i} 
+                    style={{
+                      ...styles.chatBubble,
+                      ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
+                    }}
+                  >
+                    {m.text}
+                  </div>
+                ))}
+              </div>
+              
+              {transcript && (
+                <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
               )}
-              {messages.map((m, i) => (
-                <div 
-                  key={i} 
+              
+              <div style={styles.voiceInput}>
+                <button 
+                  onClick={toggleMic} 
                   style={{
-                    ...styles.chatBubble,
-                    ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
+                    ...styles.micButton,
+                    background: micOn ? '#22c55e' : '#ef4444',
                   }}
                 >
-                  {m.text}
-                </div>
-              ))}
+                  {micOn ? '🎤 Listening...' : '🎤 Start Mic'}
+                </button>
+                <input 
+                  value={input} 
+                  onChange={e => setInput(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} 
+                  placeholder="Type a message..." 
+                  style={styles.textInput} 
+                />
+                <button 
+                  onClick={() => handleSend(input)} 
+                  style={styles.sendButton}
+                  disabled={isLoading}
+                >
+                  {isLoading ? '...' : 'Send'}
+                </button>
+              </div>
             </div>
-            
-            {transcript && (
-              <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
-            )}
-            
-            <div style={styles.voiceInput}>
-              <button 
-                onClick={toggleMic} 
-                style={{
-                  ...styles.micButton,
-                  background: micOn ? '#22c55e' : '#ef4444',
-                }}
-              >
-                {micOn ? '🎤 Listening...' : '🎤 Start Mic'}
-              </button>
-              <input 
-                value={input} 
-                onChange={e => setInput(e.target.value)} 
-                onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} 
-                placeholder="Type a message..." 
-                style={styles.textInput} 
-              />
-              <button 
-                onClick={() => handleSend(input)} 
-                style={styles.sendButton}
-                disabled={isLoading}
-              >
-                {isLoading ? '...' : 'Send'}
-              </button>
-            </div>
-          </div>
+          )
         )}
 
         {/* Memory View */}
         {activeView === 'memory' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Memory Bank</h1>
-              <p style={styles.viewSubtitle}>Browse memories, daily notes, and workspace files</p>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Memory Bank
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Memories & files' : 'Browse memories, daily notes, and workspace files'}
+              </p>
             </div>
-            <div style={styles.memoryGrid}>
-              <MemoryPanel />
-              <WorkspaceBrowser />
-            </div>
+            {isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <CollapsibleSection title="Memory" icon="🧠" defaultOpen>
+                  <MemoryPanel />
+                </CollapsibleSection>
+                <CollapsibleSection title="Workspace Files" icon="📁">
+                  <WorkspaceBrowser />
+                </CollapsibleSection>
+              </div>
+            ) : (
+              <div style={{
+                ...styles.memoryGrid,
+                gridTemplateColumns: isTablet ? '1fr' : '1fr 1fr',
+                gap: isTablet ? '16px' : '24px',
+              }}>
+                <MemoryPanel />
+                <WorkspaceBrowser />
+              </div>
+            )}
           </div>
         )}
 
         {/* Settings View */}
         {activeView === 'settings' && (
-          <div style={styles.viewContainer}>
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
             <div style={styles.viewHeader}>
-              <h1 style={styles.viewTitle}>Settings</h1>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Settings
+              </h1>
               <p style={styles.viewSubtitle}>Configure your Opie instance</p>
             </div>
-            <div style={styles.settingsGrid}>
+            <div style={{
+              ...styles.settingsGrid,
+              gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
+              gap: isMobile ? '16px' : '20px',
+            }}>
               <div style={styles.settingsCard}>
                 <h4 style={styles.settingsCardTitle}>🎨 Appearance</h4>
                 <div style={styles.settingItem}>
@@ -1487,7 +1015,7 @@ export default function OpieKanban(): React.ReactElement {
         input={input}
         setInput={setInput}
         isLoading={isLoading}
-        onSend={() => handleSend(input)}
+        onSend={handleSend}
         micOn={micOn}
         onMicToggle={toggleMic}
         isSpeaking={isSpeaking}
@@ -1512,57 +1040,66 @@ export default function OpieKanban(): React.ReactElement {
       />
 
       {/* Mobile Bottom Navigation */}
-      {isMobile && (
-        <nav 
-          className={`bottom-nav ${bottomNavVisible ? '' : 'hidden'}`}
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: 'var(--bg-secondary, #0d0d15)',
-            borderTop: '1px solid var(--border, rgba(255,255,255,0.08))',
-            display: 'flex',
-            justifyContent: 'space-around',
-            padding: '8px 0',
-            paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
-            zIndex: 100,
-            transition: 'transform 0.3s ease',
-            transform: bottomNavVisible ? 'translateY(0)' : 'translateY(100%)',
-          }}
-        >
-          {[
-            { id: 'dashboard', icon: '📊', label: 'Home' },
-            { id: 'agents', icon: '🤖', label: 'Agents' },
-            { id: 'tasks', icon: '📋', label: 'Tasks' },
-            { id: 'voice', icon: '🎤', label: 'Voice' },
-            { id: 'settings', icon: '⚙️', label: 'Settings' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleViewChange(item.id as ViewId)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '8px 16px',
-                background: 'transparent',
-                border: 'none',
-                color: activeView === item.id ? 'var(--accent, #667eea)' : 'var(--text-muted, rgba(255,255,255,0.5))',
-                fontSize: '0.7rem',
-                minHeight: '44px',
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ fontSize: '20px' }}>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+      {isMobile && activeView !== 'voice' && (
+        <MobileNavigation
+          activeView={activeView}
+          onNavigate={handleViewChange}
+          agentCount={activeAgents.length}
+          taskCount={runningTasksCount}
+          isVisible={bottomNavVisible}
+        />
       )}
 
+      {/* Mobile FAB for quick actions */}
+      {isMobile && activeView === 'dashboard' && (
+        <FloatingActionButton
+          icon="⚡"
+          onClick={() => handleViewChange('voice')}
+          color="primary"
+          label="Quick Chat"
+        />
+      )}
+
+      {/* Mobile Bottom Sheets */}
+      <BottomSheet
+        isOpen={mobileSheetContent === 'task' && selectedTask !== null}
+        onClose={() => { setMobileSheetContent(null); setSelectedTask(null); }}
+        title={selectedTask?.label || 'Task Details'}
+        subtitle={selectedTask?.agentName}
+        height="half"
+      >
+        {selectedTask && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '32px' }}>{selectedTask.agentEmoji}</span>
+              <div>
+                <div style={{ color: '#fff', fontWeight: 600 }}>{selectedTask.agentName}</div>
+                <div style={{ 
+                  color: selectedTask.status === 'running' ? '#f59e0b' : '#22c55e',
+                  fontSize: '0.85rem' 
+                }}>
+                  {selectedTask.status === 'running' ? '⏳ Running' : '✓ Complete'}
+                </div>
+              </div>
+            </div>
+            {selectedTask.output && (
+              <div style={{ 
+                padding: '16px', 
+                background: 'rgba(255,255,255,0.05)', 
+                borderRadius: '12px',
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: '0.9rem',
+                lineHeight: 1.6,
+              }}>
+                {selectedTask.output}
+              </div>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
       <style>{`
+        /* Premium Animation Keyframes */
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 0.5; }
           50% { transform: scale(1.1); opacity: 0.8; }
@@ -1571,150 +1108,363 @@ export default function OpieKanban(): React.ReactElement {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
         }
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        @keyframes slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes glowPulse {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+          }
+          50% {
+            box-shadow: 0 0 40px rgba(102, 126, 234, 0.5);
+          }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes gradientFlow {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes pulseRing {
+          0% {
+            transform: scale(1);
+            opacity: 0.6;
+          }
+          100% {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        
+        /* Premium Hover Effects */
+        .hover-lift:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        
+        /* Skeleton Loading */
+        .skeleton {
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.03) 0%,
+            rgba(255, 255, 255, 0.08) 50%,
+            rgba(255, 255, 255, 0.03) 100%
+          );
+          background-size: 200% 100%;
+          animation: shimmer 1.5s ease infinite;
+          border-radius: 8px;
+        }
+        
+        /* Status Dot with Glow */
+        .status-dot-online {
+          background: #22c55e;
+          box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+          position: relative;
+        }
+        .status-dot-online::after {
+          content: '';
+          position: absolute;
+          inset: -3px;
+          border-radius: inherit;
+          background: #22c55e;
+          animation: pulseRing 2s ease-out infinite;
+        }
+        
+        /* Premium Card Hover */
+        .premium-card-hover {
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .premium-card-hover:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+          border-color: rgba(255,255,255,0.1);
+        }
+        
+        /* Animated Gradient Border */
+        .gradient-border {
+          position: relative;
+        }
+        .gradient-border::before {
+          content: '';
+          position: absolute;
+          inset: -1px;
+          border-radius: inherit;
+          padding: 1px;
+          background: linear-gradient(
+            135deg,
+            rgba(102, 126, 234, 0.4),
+            rgba(168, 85, 247, 0.4),
+            rgba(6, 182, 212, 0.4),
+            rgba(102, 126, 234, 0.4)
+          );
+          background-size: 300% 300%;
+          animation: gradientFlow 8s ease infinite;
+          -webkit-mask: 
+            linear-gradient(#fff 0 0) content-box, 
+            linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0;
+          transition: opacity 0.3s ease;
+        }
+        .gradient-border:hover::before {
+          opacity: 1;
+        }
+        
+        /* Custom scrollbar for premium feel */
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.15);
+        }
+        
+        /* Text gradient utility */
+        .text-gradient {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        
+        /* Focus ring */
+        *:focus-visible {
+          outline: 2px solid rgba(102, 126, 234, 0.8);
+          outline-offset: 2px;
+        }
       `}</style>
-    </div>
+      </div>
+    </NotificationProvider>
   );
 }
+
+/* ==========================================================================
+   PREMIUM STYLES - Enterprise-Grade Visual Design
+   ========================================================================== */
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     display: 'flex',
     minHeight: '100vh',
-    background: '#0f0f1a',
+    background: '#0a0a14',
+    position: 'relative',
   },
 
-  // Sidebar
+  // ==========================================================================
+  // SIDEBAR - Premium Glass Morphism
+  // ==========================================================================
   sidebar: {
     position: 'fixed',
     top: 0,
     left: 0,
     height: '100vh',
-    background: '#0d0d15',
-    borderRight: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(13, 13, 21, 0.95)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    borderRight: '1px solid rgba(255,255,255,0.06)',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'all 0.3s ease',
+    transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
     zIndex: 100,
+    boxShadow: '4px 0 30px rgba(0,0,0,0.3)',
   },
   sidebarHeader: {
-    padding: '20px 16px',
+    padding: '24px 20px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+    position: 'relative',
   },
   logoContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '14px',
   },
   logo: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    width: '44px',
+    height: '44px',
+    borderRadius: '14px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '20px',
+    fontSize: '22px',
+    boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+    transition: 'all 0.3s ease',
   },
   brandName: {
     color: '#fff',
-    fontSize: '1.25rem',
+    fontSize: '1.35rem',
     fontWeight: 700,
+    letterSpacing: '-0.02em',
+    background: 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
   },
   collapseBtn: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '6px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
     border: 'none',
-    background: 'rgba(255,255,255,0.05)',
+    background: 'rgba(255,255,255,0.04)',
     color: 'rgba(255,255,255,0.5)',
     cursor: 'pointer',
-    fontSize: '10px',
+    fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.2s ease',
   },
   statusBar: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '12px 20px',
-    background: 'rgba(255,255,255,0.02)',
+    gap: '10px',
+    padding: '14px 24px',
+    background: 'linear-gradient(90deg, rgba(102,126,234,0.05) 0%, transparent 100%)',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
   },
   statusDot: {
-    width: '8px',
-    height: '8px',
+    width: '10px',
+    height: '10px',
     borderRadius: '50%',
+    position: 'relative',
+    boxShadow: '0 0 10px currentColor',
   },
   statusText: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: '0.8rem',
+    fontWeight: 500,
+    letterSpacing: '0.02em',
   },
   nav: {
     flex: 1,
-    padding: '16px 12px',
+    padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '6px',
+    overflowY: 'auto',
   },
   navItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px 14px',
-    borderRadius: '10px',
+    gap: '14px',
+    padding: '14px 16px',
+    borderRadius: '12px',
     border: 'none',
     background: 'transparent',
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '0.9rem',
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: '0.925rem',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
     position: 'relative',
     textAlign: 'left',
     width: '100%',
+    fontWeight: 500,
+    letterSpacing: '-0.01em',
   },
   navItemActive: {
-    background: 'rgba(102,126,234,0.15)',
+    background: 'linear-gradient(135deg, rgba(102,126,234,0.18) 0%, rgba(118,75,162,0.12) 100%)',
     color: '#fff',
+    boxShadow: 'inset 0 0 0 1px rgba(102,126,234,0.2), 0 2px 12px rgba(102,126,234,0.1)',
   },
   navIcon: {
-    fontSize: '1.2rem',
-    width: '24px',
+    fontSize: '1.25rem',
+    width: '26px',
     textAlign: 'center',
+    transition: 'transform 0.2s ease',
   },
   navLabel: {
     flex: 1,
     fontWeight: 500,
   },
   navBadge: {
-    padding: '2px 8px',
-    borderRadius: '10px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
+    padding: '3px 10px',
+    borderRadius: '20px',
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    letterSpacing: '0.02em',
   },
   navBadgeCollapsed: {
     position: 'absolute',
-    top: '6px',
-    right: '6px',
-    background: '#f59e0b',
+    top: '8px',
+    right: '8px',
+    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
     color: '#000',
     fontSize: '0.6rem',
     fontWeight: 700,
-    padding: '2px 5px',
-    borderRadius: '8px',
-    minWidth: '16px',
+    padding: '3px 6px',
+    borderRadius: '10px',
+    minWidth: '18px',
     textAlign: 'center',
+    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
   },
   quickStats: {
-    padding: '16px',
-    margin: '0 12px',
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '12px',
+    padding: '18px',
+    margin: '0 14px 14px',
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+    borderRadius: '14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '12px',
+    border: '1px solid rgba(255,255,255,0.05)',
+    position: 'relative',
+    overflow: 'hidden',
   },
   statRow: {
     display: 'flex',
@@ -1722,65 +1472,85 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
   },
   statLabel: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.45)',
     fontSize: '0.8rem',
+    fontWeight: 500,
+    letterSpacing: '0.01em',
   },
   statValue: {
     fontWeight: 700,
-    fontSize: '0.9rem',
+    fontSize: '0.95rem',
+    fontVariantNumeric: 'tabular-nums',
   },
   sidebarFooter: {
-    padding: '16px',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
+    padding: '18px 20px',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
     textAlign: 'center',
+    background: 'linear-gradient(180deg, transparent 0%, rgba(102,126,234,0.03) 100%)',
   },
   footerText: {
-    color: 'rgba(255,255,255,0.3)',
+    color: 'rgba(255,255,255,0.25)',
     fontSize: '0.75rem',
+    fontWeight: 500,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
   },
   footerIcon: {
-    fontSize: '16px',
+    fontSize: '18px',
     opacity: 0.5,
   },
 
-  // Mobile
+  // ==========================================================================
+  // MOBILE - Premium Responsive
+  // ==========================================================================
   mobileHeader: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
-    height: '60px',
-    background: '#0d0d15',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    height: '64px',
+    background: 'rgba(13, 13, 21, 0.95)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 16px',
+    padding: '0 20px',
     zIndex: 50,
   },
   hamburger: {
-    width: '40px',
-    height: '40px',
-    background: 'transparent',
+    width: '44px',
+    height: '44px',
+    background: 'rgba(255,255,255,0.04)',
     border: 'none',
+    borderRadius: '12px',
     color: '#fff',
-    fontSize: '24px',
+    fontSize: '22px',
     cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
   },
   mobileTitle: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
     color: '#fff',
-    fontWeight: 600,
+    fontWeight: 700,
+    fontSize: '1.1rem',
+    letterSpacing: '-0.02em',
   },
   mobileLogo: {
-    fontSize: '20px',
+    fontSize: '22px',
+    filter: 'drop-shadow(0 0 10px rgba(102,126,234,0.5))',
   },
   mobileStatus: {
-    width: '10px',
-    height: '10px',
+    width: '12px',
+    height: '12px',
     borderRadius: '50%',
+    boxShadow: '0 0 12px currentColor',
   },
   mobileOverlay: {
     position: 'fixed',
@@ -1788,41 +1558,58 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0,0,0,0.6)',
+    background: 'rgba(0,0,0,0.7)',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
     zIndex: 99,
   },
 
-  // Main Content
+  // ==========================================================================
+  // MAIN CONTENT - Premium Layout
+  // ==========================================================================
   main: {
     flex: 1,
     minHeight: '100vh',
-    transition: 'margin-left 0.3s ease',
+    transition: 'margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+    background: 'linear-gradient(180deg, #0a0a14 0%, #0d0d18 100%)',
+    position: 'relative',
   },
   viewContainer: {
-    padding: '32px',
-    maxWidth: '1400px',
+    padding: '40px',
+    maxWidth: '1480px',
+    animation: 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
   },
   viewHeader: {
-    marginBottom: '28px',
+    marginBottom: '36px',
   },
   viewTitle: {
     color: '#fff',
-    fontSize: '1.75rem',
+    fontSize: '2rem',
     fontWeight: 700,
-    margin: '0 0 6px 0',
+    margin: '0 0 8px 0',
+    letterSpacing: '-0.03em',
+    lineHeight: 1.2,
+    background: 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.85) 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
   },
   viewSubtitle: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.95rem',
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: '1rem',
     margin: 0,
+    fontWeight: 400,
+    letterSpacing: '-0.01em',
   },
 
-  // Dashboard
+  // ==========================================================================
+  // DASHBOARD - Premium Cards & Grid
+  // ==========================================================================
   dashboardTopRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 380px',
-    gap: '24px',
-    marginBottom: '24px',
+    gridTemplateColumns: '1fr 400px',
+    gap: '28px',
+    marginBottom: '28px',
   },
   quickActionsWrapper: {
     minWidth: 0,
@@ -1831,128 +1618,167 @@ const styles: { [key: string]: React.CSSProperties } = {
     minWidth: 0,
   },
   analyticsSection: {
-    marginBottom: '24px',
+    marginBottom: '28px',
   },
   dashboardGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr',
-    gap: '24px',
-    marginBottom: '24px',
+    gap: '28px',
+    marginBottom: '28px',
   },
   kanbanSection: {
-    background: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(20, 20, 35, 0.6)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderRadius: '20px',
+    padding: '24px',
+    border: '1px solid rgba(255,255,255,0.06)',
+    position: 'relative',
+    overflow: 'hidden',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: '1rem',
+    fontSize: '1.1rem',
     fontWeight: 600,
-    margin: '0 0 16px 0',
+    margin: '0 0 20px 0',
+    letterSpacing: '-0.02em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
   },
   kanbanGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '14px',
+    gap: '18px',
   },
   kanbanColumn: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '16px',
     borderTop: '3px solid',
     overflow: 'hidden',
+    transition: 'all 0.3s ease',
+    border: '1px solid rgba(255,255,255,0.04)',
+    borderTopWidth: '3px',
   },
   columnHeader: {
-    padding: '12px 14px',
+    padding: '16px 18px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     color: '#fff',
     fontWeight: 600,
-    fontSize: '0.85rem',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    fontSize: '0.9rem',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    letterSpacing: '-0.01em',
   },
   columnCount: {
-    background: 'rgba(255,255,255,0.1)',
-    padding: '2px 8px',
-    borderRadius: '10px',
+    background: 'rgba(255,255,255,0.08)',
+    padding: '4px 10px',
+    borderRadius: '20px',
     fontSize: '0.75rem',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
   },
   columnTasks: {
-    padding: '12px',
+    padding: '14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
   taskCard: {
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: '8px',
-    padding: '10px 12px',
+    background: 'rgba(255,255,255,0.04)',
+    borderRadius: '12px',
+    padding: '14px 16px',
     color: 'rgba(255,255,255,0.85)',
-    fontSize: '0.8rem',
+    fontSize: '0.85rem',
+    border: '1px solid rgba(255,255,255,0.04)',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer',
+    fontWeight: 500,
+    lineHeight: 1.5,
   },
   orchestrationSection: {},
   widgetsRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '24px',
-    marginBottom: '24px',
+    gap: '28px',
+    marginBottom: '28px',
   },
   activityFeedWrapper: {
-    marginTop: '24px',
+    marginTop: '28px',
   },
   recentActivity: {
-    background: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(20, 20, 35, 0.6)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderRadius: '20px',
+    padding: '24px',
+    border: '1px solid rgba(255,255,255,0.06)',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
   },
   activityList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
   activityItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '12px 16px',
+    gap: '14px',
+    padding: '14px 18px',
     background: 'rgba(255,255,255,0.03)',
-    borderRadius: '10px',
+    borderRadius: '14px',
+    transition: 'all 0.2s ease',
+    border: '1px solid transparent',
   },
   activityEmoji: {
-    fontSize: '20px',
+    fontSize: '22px',
+    width: '36px',
+    height: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(255,255,255,0.04)',
+    borderRadius: '10px',
   },
   activityText: {
     flex: 1,
     color: 'rgba(255,255,255,0.8)',
-    fontSize: '0.85rem',
+    fontSize: '0.9rem',
+    fontWeight: 500,
   },
   activityStatus: {
     fontSize: '0.75rem',
-    fontWeight: 500,
+    fontWeight: 600,
+    letterSpacing: '0.02em',
   },
 
-  // Tasks Grid
+  // ==========================================================================
+  // TASKS GRID
+  // ==========================================================================
   tasksGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 380px',
-    gap: '24px',
+    gridTemplateColumns: '1fr 400px',
+    gap: '28px',
   },
 
-  // Voice
+  // ==========================================================================
+  // VOICE CHAT - Premium Chat UI
+  // ==========================================================================
   voiceContainer: {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
+    background: 'linear-gradient(180deg, #0a0a14 0%, #0d0d18 100%)',
   },
   chatMessages: {
     flex: 1,
     overflowY: 'auto',
-    padding: '32px',
+    padding: '40px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '16px',
   },
   emptyChat: {
     flex: 1,
@@ -1961,141 +1787,178 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.35)',
   },
   emptyChatIcon: {
-    fontSize: '72px',
-    marginBottom: '20px',
+    fontSize: '80px',
+    marginBottom: '24px',
+    filter: 'drop-shadow(0 0 30px rgba(102,126,234,0.4))',
+    animation: 'float 3s ease-in-out infinite',
   },
   emptyChatTitle: {
     color: '#fff',
-    fontSize: '1.5rem',
-    fontWeight: 600,
-    margin: '0 0 8px 0',
+    fontSize: '1.75rem',
+    fontWeight: 700,
+    margin: '0 0 10px 0',
+    letterSpacing: '-0.03em',
   },
   emptyChatText: {
     fontSize: '1rem',
     margin: 0,
+    color: 'rgba(255,255,255,0.45)',
   },
   chatBubble: {
-    padding: '14px 18px',
-    borderRadius: '18px',
-    maxWidth: '65%',
+    padding: '16px 20px',
+    borderRadius: '20px',
+    maxWidth: '70%',
     fontSize: '0.95rem',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
+    fontWeight: 450,
+    boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
   },
   chatBubbleUser: {
     alignSelf: 'flex-end',
-    background: '#667eea',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: '#fff',
-    borderBottomRightRadius: '4px',
+    borderBottomRightRadius: '6px',
+    boxShadow: '0 4px 20px rgba(102, 126, 234, 0.35)',
   },
   chatBubbleAssistant: {
     alignSelf: 'flex-start',
-    background: '#1e1e2e',
+    background: 'rgba(255,255,255,0.06)',
     color: '#fff',
-    borderBottomLeftRadius: '4px',
+    borderBottomLeftRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.06)',
   },
   transcript: {
-    padding: '14px 32px',
-    background: 'rgba(102,126,234,0.1)',
+    padding: '16px 40px',
+    background: 'linear-gradient(90deg, rgba(102,126,234,0.12) 0%, rgba(102,126,234,0.06) 100%)',
     color: '#667eea',
     fontSize: '0.9rem',
+    fontWeight: 500,
+    fontStyle: 'italic',
+    borderTop: '1px solid rgba(102,126,234,0.15)',
   },
   voiceInput: {
-    padding: '20px 32px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
+    padding: '24px 40px',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
     display: 'flex',
-    gap: '12px',
-    background: '#0d0d15',
+    gap: '14px',
+    background: 'rgba(13, 13, 21, 0.95)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    alignItems: 'center',
   },
   micButton: {
-    padding: '16px 28px',
-    borderRadius: '14px',
+    padding: '18px 30px',
+    borderRadius: '16px',
     border: 'none',
     cursor: 'pointer',
     fontWeight: 600,
     color: '#fff',
     fontSize: '0.95rem',
     whiteSpace: 'nowrap',
+    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
   },
   textInput: {
     flex: 1,
-    padding: '16px 20px',
-    background: '#1a1a2e',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '14px',
+    padding: '18px 22px',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: '16px',
     color: '#fff',
     fontSize: '0.95rem',
     outline: 'none',
+    transition: 'all 0.2s ease',
+    fontWeight: 450,
   },
   sendButton: {
-    padding: '16px 32px',
-    background: '#667eea',
+    padding: '18px 36px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     border: 'none',
-    borderRadius: '14px',
+    borderRadius: '16px',
     color: '#fff',
     fontWeight: 600,
     fontSize: '0.95rem',
     cursor: 'pointer',
+    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+    boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
   },
 
-  // Memory Browser
+  // ==========================================================================
+  // MEMORY BROWSER
+  // ==========================================================================
   memoryGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '24px',
+    gap: '28px',
   },
 
-  // Settings
+  // ==========================================================================
+  // SETTINGS - Premium Cards
+  // ==========================================================================
   settingsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '20px',
+    gap: '24px',
   },
   settingsCard: {
-    background: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '24px',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(20, 20, 35, 0.6)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderRadius: '20px',
+    padding: '28px',
+    border: '1px solid rgba(255,255,255,0.06)',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
+    position: 'relative',
+    overflow: 'hidden',
+    transition: 'all 0.3s ease',
   },
   settingsCardTitle: {
     color: '#fff',
-    fontSize: '1rem',
+    fontSize: '1.1rem',
     fontWeight: 600,
-    margin: '0 0 20px 0',
+    margin: '0 0 24px 0',
+    letterSpacing: '-0.02em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
   },
   settingItem: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 0',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    padding: '16px 0',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
     color: 'rgba(255,255,255,0.7)',
     fontSize: '0.9rem',
+    fontWeight: 500,
   },
   settingValue: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.45)',
     fontWeight: 500,
   },
   settingToggle: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: 'none',
-    background: 'rgba(255,255,255,0.08)',
+    padding: '10px 18px',
+    borderRadius: '10px',
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.04)',
     color: 'rgba(255,255,255,0.8)',
     fontSize: '0.85rem',
-    fontWeight: 500,
+    fontWeight: 600,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    minHeight: '36px',
+    minHeight: '40px',
   },
   kbdKey: {
-    padding: '4px 10px',
-    background: 'rgba(255,255,255,0.08)',
-    borderRadius: '6px',
+    padding: '6px 12px',
+    background: 'rgba(255,255,255,0.06)',
+    borderRadius: '8px',
     fontSize: '0.8rem',
-    color: 'rgba(255,255,255,0.6)',
-    fontFamily: 'monospace',
+    color: 'rgba(255,255,255,0.55)',
+    fontFamily: '"JetBrains Mono", "SF Mono", monospace',
+    fontWeight: 500,
+    border: '1px solid rgba(255,255,255,0.08)',
   },
 };
