@@ -3,8 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 const GATEWAY_URL = process.env.OPIE_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
 const GATEWAY_TOKEN = process.env.OPIE_GATEWAY_TOKEN;
 
+const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
+- 2-3 sentences MAX. Be concise.
+- NO formatting: no tables, no bullets, no markdown, no lists.
+- Speak naturally like you're talking, not reading.
+- Don't dump information. Answer directly.
+- If asked something complex, give the short answer first, then offer to elaborate.
+
+User said: `;
+
 export async function POST(req: NextRequest) {
-  const { message } = await req.json();
+  const { message, sessionId } = await req.json();
   
   if (!message) {
     return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
@@ -25,7 +34,8 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: 'moltbot:main',
-        input: message,
+        input: VOICE_INSTRUCTIONS + message,
+        user: sessionId || '2ndbrain-default',
         stream: false
       }),
     });
