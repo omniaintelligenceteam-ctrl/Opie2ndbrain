@@ -60,30 +60,38 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
-// Floating Chat Component
+// Floating Chat Component with Voice + Minimize
 function FloatingChat({ 
   messages, 
   input, 
   setInput, 
   isLoading, 
-  onSend 
+  onSend,
+  micOn,
+  onMicToggle,
+  isSpeaking,
+  transcript,
 }: {
   messages: {role: string; text: string}[];
   input: string;
   setInput: (val: string) => void;
   isLoading: boolean;
   onSend: () => void;
+  micOn: boolean;
+  onMicToggle: () => void;
+  isSpeaking: boolean;
+  transcript: string;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [mode, setMode] = useState<'closed' | 'minimized' | 'open'>('closed');
   const [size, setSize] = useState({ width: 380, height: 500 });
   const [isResizing, setIsResizing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
-    if (chatEndRef.current && isOpen) {
+    if (chatEndRef.current && mode === 'open') {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isOpen]);
+  }, [messages, mode]);
 
   const handleResize = useCallback((e: MouseEvent) => {
     if (!isResizing) return;
@@ -111,10 +119,11 @@ function FloatingChat({
     }
   };
 
-  if (!isOpen) {
+  // Closed state - floating button
+  if (mode === 'closed') {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => setMode('open')}
         style={{
           position: 'fixed',
           bottom: '24px',
@@ -142,11 +151,61 @@ function FloatingChat({
           e.currentTarget.style.boxShadow = '0 4px 20px rgba(102, 126, 234, 0.4)';
         }}
       >
-        💬
+        ⚡
       </button>
     );
   }
 
+  // Minimized state - small tab
+  if (mode === 'minimized') {
+    return (
+      <button
+        onClick={() => setMode('open')}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '24px',
+          background: micOn 
+            ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' 
+            : isSpeaking 
+              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          border: 'none',
+          cursor: 'pointer',
+          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 1000,
+          transition: 'all 0.3s ease',
+        }}
+      >
+        <img 
+          src="/opie-avatar.png" 
+          alt="Opie" 
+          style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+        />
+        <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>
+          {micOn ? '🎤 Listening...' : isSpeaking ? '🔊 Speaking' : 'Opie'}
+        </span>
+        {messages.length > 0 && (
+          <span style={{
+            background: 'rgba(255,255,255,0.2)',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.75rem',
+            color: '#fff',
+          }}>
+            {messages.length}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // Open state - full chat window
   return (
     <div
       style={{
@@ -181,7 +240,7 @@ function FloatingChat({
       
       {/* Header */}
       <div style={{
-        padding: '16px',
+        padding: '12px 16px',
         borderBottom: '1px solid rgba(255,255,255,0.1)',
         display: 'flex',
         justifyContent: 'space-between',
@@ -189,22 +248,53 @@ function FloatingChat({
         background: 'rgba(255,255,255,0.02)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '20px' }}>⚡</span>
-          <span style={{ color: '#fff', fontWeight: 600 }}>Chat with Opie</span>
+          <img 
+            src="/opie-avatar.png" 
+            alt="Opie" 
+            style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+          />
+          <div>
+            <span style={{ color: '#fff', fontWeight: 600, display: 'block' }}>Opie</span>
+            <span style={{ 
+              color: micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.4)', 
+              fontSize: '0.75rem' 
+            }}>
+              {micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online'}
+            </span>
+          </div>
         </div>
-        <button
-          onClick={() => setIsOpen(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(255,255,255,0.5)',
-            cursor: 'pointer',
-            fontSize: '20px',
-            padding: '4px',
-          }}
-        >
-          ✕
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setMode('minimized')}
+            title="Minimize"
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              color: 'rgba(255,255,255,0.6)',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '6px 10px',
+              borderRadius: '8px',
+            }}
+          >
+            ─
+          </button>
+          <button
+            onClick={() => setMode('closed')}
+            title="Close"
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              color: 'rgba(255,255,255,0.6)',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '6px 10px',
+              borderRadius: '8px',
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -222,8 +312,12 @@ function FloatingChat({
             color: 'rgba(255,255,255,0.4)',
             padding: '40px 20px',
           }}>
-            <span style={{ fontSize: '32px', display: 'block', marginBottom: '12px' }}>⚡</span>
-            <p>Hey! Ask me anything.</p>
+            <img 
+              src="/opie-avatar.png" 
+              alt="Opie" 
+              style={{ width: '64px', height: '64px', borderRadius: '50%', marginBottom: '16px', opacity: 0.8 }}
+            />
+            <p style={{ margin: 0 }}>Hey! Type or tap the mic to talk.</p>
           </div>
         )}
         {messages.map((msg, i) => (
@@ -245,6 +339,20 @@ function FloatingChat({
             {msg.text}
           </div>
         ))}
+        {transcript && (
+          <div style={{
+            alignSelf: 'flex-end',
+            maxWidth: '85%',
+            padding: '12px 16px',
+            borderRadius: '16px 16px 4px 16px',
+            background: 'rgba(102, 126, 234, 0.3)',
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '0.9rem',
+            fontStyle: 'italic',
+          }}>
+            {transcript}...
+          </div>
+        )}
         {isLoading && (
           <div style={{
             alignSelf: 'flex-start',
@@ -259,13 +367,35 @@ function FloatingChat({
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input Area */}
       <div style={{
-        padding: '16px',
+        padding: '12px 16px',
         borderTop: '1px solid rgba(255,255,255,0.1)',
         display: 'flex',
         gap: '10px',
+        alignItems: 'flex-end',
       }}>
+        {/* Mic Button */}
+        <button
+          onClick={onMicToggle}
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            border: 'none',
+            background: micOn 
+              ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' 
+              : 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            fontSize: '18px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          🎤
+        </button>
+        
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -298,6 +428,7 @@ function FloatingChat({
             fontWeight: 600,
             cursor: input.trim() ? 'pointer' : 'not-allowed',
             opacity: input.trim() ? 1 : 0.5,
+            height: '44px',
           }}
         >
           Send
@@ -937,6 +1068,10 @@ export default function OpieKanban(): React.ReactElement {
         setInput={setInput}
         isLoading={isLoading}
         onSend={() => handleSend(input)}
+        micOn={micOn}
+        onMicToggle={toggleMic}
+        isSpeaking={isSpeaking}
+        transcript={transcript}
       />
 
       <style>{`
