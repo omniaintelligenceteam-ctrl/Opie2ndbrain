@@ -841,14 +841,18 @@ export default function OpieKanban(): React.ReactElement {
     saveSidebarState(newState);
   };
 
+  const isSpeakingRef = useRef(false);
+  const isLoadingRef = useRef(false);
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
   useEffect(() => { setSessionId(getSessionId()); }, []);
 
   const startRecognition = useCallback(() => {
-    if (recognitionRef.current && micOnRef.current && !isSpeaking) {
+    if (recognitionRef.current && micOnRef.current && !isSpeakingRef.current) {
       try { recognitionRef.current.start(); } catch(e) {}
     }
-  }, [isSpeaking]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -867,7 +871,8 @@ export default function OpieKanban(): React.ReactElement {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
-      if (isSpeaking || isLoading) return;
+      // Use refs to get current values, not stale closure values
+      if (isSpeakingRef.current || isLoadingRef.current) return;
       let final = '';
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
