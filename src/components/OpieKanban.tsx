@@ -447,9 +447,8 @@ function FloatingChat({
           padding: '12px 20px',
           borderRadius: '24px',
           background: micOn 
-            ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' 
-            : isSpeaking 
-              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+            ? '#22c55e' 
+            : '#ef4444'
               : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           border: 'none',
           cursor: 'pointer',
