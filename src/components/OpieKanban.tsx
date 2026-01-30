@@ -227,7 +227,7 @@ export default function OpieKanban(): React.ReactElement {
   };
 
   const handleDeployAgent = (agentId: string, taskLabel: string) => {
-    setActiveAgents(prev => [...new Set([...prev, agentId])]);
+    setActiveAgents(prev => prev.includes(agentId) ? prev : [...prev, agentId]);
     
     const agentInfo: { [key: string]: { name: string; emoji: string } } = {
       research: { name: 'Research Agent', emoji: '🔍' },
