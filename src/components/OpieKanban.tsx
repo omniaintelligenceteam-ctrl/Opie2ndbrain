@@ -182,13 +182,13 @@ function FloatingChat({
               height: 50px;
               border-radius: 50%;
               border: none;
-              background: rgba(255,255,255,0.1);
+              background: #ef4444;
               color: #fff;
               font-size: 22px;
               cursor: pointer;
               transition: all 0.2s;
             }
-            .mic-btn.active { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+            .mic-btn.active { background: #22c55e !important; }
             .mic-btn:hover { transform: scale(1.05); }
             textarea {
               flex: 1;
@@ -311,8 +311,14 @@ function FloatingChat({
       `);
       popout.document.close();
       
-      // Sync messages to popout
-      popout.postMessage({ type: 'messages', messages }, '*');
+      // Sync initial state to popout immediately
+      setTimeout(() => {
+        popout.postMessage({ type: 'messages', messages }, '*');
+        popout.postMessage({ type: 'micState', active: micOn }, '*');
+        const statusText = micOn ? '🎤 Listening' : isSpeaking ? '🔊 Speaking' : isLoading ? 'Thinking...' : 'Online';
+        const statusColor = micOn ? '#22c55e' : isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : 'rgba(255,255,255,0.5)';
+        popout.postMessage({ type: 'status', text: statusText, color: statusColor }, '*');
+      }, 100);
     }
   };
 
@@ -693,8 +699,8 @@ function FloatingChat({
             borderRadius: '50%',
             border: 'none',
             background: micOn 
-              ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' 
-              : 'rgba(255,255,255,0.1)',
+              ? '#22c55e' 
+              : '#ef4444',
             color: '#fff',
             fontSize: '18px',
             cursor: 'pointer',
