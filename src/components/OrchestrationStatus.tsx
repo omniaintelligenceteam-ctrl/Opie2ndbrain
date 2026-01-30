@@ -44,6 +44,7 @@ export default function OrchestrationStatus({
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentNodeState | null>(null);
   const [animationPhase, setAnimationPhase] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
 
   const { 
     nodes, 
@@ -56,6 +57,18 @@ export default function OrchestrationStatus({
   } = useAgentSessions(pollInterval);
 
   const effectiveActiveAgents = overrideActiveAgents || activeAgentIds;
+
+  // Demo mode for showing the orchestration when no real agents
+  useEffect(() => {
+    if (activeCount === 0 && !loading) {
+      setDemoMode(true);
+      // Auto-disable demo after 10 seconds
+      const timer = setTimeout(() => setDemoMode(false), 10000);
+      return () => clearTimeout(timer);
+    } else {
+      setDemoMode(false);
+    }
+  }, [activeCount, loading]);
 
   // Animation loop for flowing effects
   useEffect(() => {
@@ -112,19 +125,36 @@ export default function OrchestrationStatus({
       <div style={styles.ambientGlow} />
       <div style={styles.gridPattern} />
       
-      {/* Header */}
+      {/* Enhanced Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <div style={styles.headerIconWrapper}>
-            <span style={styles.headerIcon}>⚡</span>
+            <span style={styles.headerIcon}>🌌</span>
             <div style={styles.headerIconGlow} />
           </div>
           <div>
-            <h2 style={styles.title}>Agent Orchestration</h2>
-            <p style={styles.subtitle}>Real-time agent network status</p>
+            <h2 style={styles.title}>Agent Orchestration Network</h2>
+            <p style={styles.subtitle}>
+              {demoMode ? '✨ Live visualization ready - deploy agents to see activity' : 'Real-time distributed agent coordination'}
+            </p>
           </div>
         </div>
         <div style={styles.headerRight}>
+          {demoMode && (
+            <div style={{
+              ...styles.statusPill,
+              background: 'linear-gradient(135deg, rgba(102,126,234,0.2), rgba(139,92,246,0.1))',
+              borderColor: `${COLORS.primary}40`,
+            }}>
+              <span style={styles.statusDot} />
+              <span style={{
+                ...styles.statusText,
+                color: COLORS.primary,
+              }}>
+                Demo Mode
+              </span>
+            </div>
+          )}
           <div style={{
             ...styles.statusPill,
             background: workingCount > 0 
@@ -251,7 +281,7 @@ export default function OrchestrationStatus({
           })}
         </svg>
 
-        {/* Central Opie Orb */}
+        {/* Enhanced Central Opie Orb */}
         <div style={styles.centralOrbContainer}>
           {/* Outer glow rings */}
           <div style={{
@@ -270,24 +300,100 @@ export default function OrchestrationStatus({
             opacity: 0.05 + Math.sin(animationPhase / 20) * 0.03,
           }} />
           
+          {/* Demo mode extra rings */}
+          {demoMode && (
+            <>
+              <div style={{
+                ...styles.orbRing,
+                width: '160px',
+                height: '160px',
+                top: '-40px',
+                left: '-40px',
+                borderColor: `${COLORS.accent}40`,
+                animation: 'ring-pulse 4s ease-out infinite',
+                animationDelay: '1.5s',
+              }} />
+              <div style={{
+                ...styles.orbRing,
+                width: '180px',
+                height: '180px',
+                top: '-50px',
+                left: '-50px',
+                borderColor: `${COLORS.secondary}30`,
+                animation: 'ring-pulse 5s ease-out infinite',
+                animationDelay: '2s',
+              }} />
+            </>
+          )}
+          
           {/* Main orb */}
           <div style={{
             ...styles.centralOrb,
-            boxShadow: `
+            boxShadow: demoMode ? `
+              0 0 40px ${COLORS.primary}80,
+              0 0 80px ${COLORS.primary}40,
+              0 0 120px ${COLORS.secondary}30,
+              0 0 160px ${COLORS.accent}20,
+              inset 0 0 40px ${COLORS.primary}50
+            ` : `
               0 0 ${30 + Math.sin(animationPhase / 20) * 10}px ${COLORS.primary}60,
               0 0 ${60 + Math.cos(animationPhase / 15) * 20}px ${COLORS.primary}30,
               0 0 ${100 + Math.sin(animationPhase / 10) * 30}px ${COLORS.secondary}20,
               inset 0 0 30px ${COLORS.primary}40
             `,
           }}>
-            <span style={styles.centralIcon}>⚡</span>
-            <span style={styles.centralLabel}>Opie</span>
+            <span style={{
+              ...styles.centralIcon,
+              fontSize: demoMode ? '32px' : '28px',
+              animation: demoMode ? 'float 3s ease-in-out infinite' : 'none',
+            }}>⚡</span>
+            <span style={{
+              ...styles.centralLabel,
+              background: demoMode 
+                ? 'linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>Opie</span>
           </div>
           
-          {/* Pulsing indicator */}
+          {/* Status indicators */}
           {workingCount > 0 && (
             <div style={styles.pulseIndicator}>
               <span style={styles.pulseCount}>{workingCount}</span>
+            </div>
+          )}
+          
+          {/* Demo mode indicator */}
+          {demoMode && (
+            <div style={{
+              position: 'absolute',
+              bottom: '-60px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: `linear-gradient(135deg, ${COLORS.primary}20, ${COLORS.secondary}20)`,
+              borderRadius: '20px',
+              padding: '8px 16px',
+              border: `1px solid ${COLORS.primary}40`,
+              backdropFilter: 'blur(10px)',
+              textAlign: 'center',
+              width: '200px',
+            }}>
+              <div style={{
+                color: COLORS.primary,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                marginBottom: '2px',
+              }}>
+                Ready for Command
+              </div>
+              <div style={{
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: '0.6rem',
+              }}>
+                Deploy agents to see network in action
+              </div>
             </div>
           )}
         </div>
@@ -443,6 +549,55 @@ export default function OrchestrationStatus({
               </span>
               <span style={styles.detailStatLabel}>Last Active</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Actions */}
+      {demoMode && (
+        <div style={{
+          padding: '16px 24px',
+          background: 'linear-gradient(135deg, rgba(102,126,234,0.08), rgba(139,92,246,0.05))',
+          border: `1px solid ${COLORS.primary}20`,
+          borderRadius: '16px',
+          margin: '16px 24px 0',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            color: '#fff',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            marginBottom: '12px',
+          }}>
+            🚀 Ready to Deploy Agent Network
+          </div>
+          <div style={{
+            color: 'rgba(255,255,255,0.6)',
+            fontSize: '0.8rem',
+            marginBottom: '16px',
+          }}>
+            Navigate to the Agents panel to deploy specialist AI agents. Watch them appear here in real-time!
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+          }}>
+            {['🔍 Research', '💻 Code', '✍️ Content', '📊 Analyst'].map(agent => (
+              <span
+                key={agent}
+                style={{
+                  padding: '6px 12px',
+                  background: 'rgba(255,255,255,0.05)',
+                  borderRadius: '20px',
+                  fontSize: '0.75rem',
+                  color: 'rgba(255,255,255,0.7)',
+                }}
+              >
+                {agent}
+              </span>
+            ))}
           </div>
         </div>
       )}

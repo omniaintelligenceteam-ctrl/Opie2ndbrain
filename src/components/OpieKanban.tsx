@@ -733,10 +733,10 @@ export default function OpieKanban(): React.ReactElement {
           }}>
             <div style={styles.viewHeader}>
               <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                Active Tasks
+                🌌 Agent Orchestration & Tasks
               </h1>
               <p style={styles.viewSubtitle}>
-                {isMobile ? 'Running operations' : 'Monitor running operations'}
+                {isMobile ? 'Network status & operations' : 'Real-time agent network coordination and active task monitoring'}
               </p>
             </div>
             <div style={{
@@ -759,7 +759,7 @@ export default function OpieKanban(): React.ReactElement {
             {/* Mobile: Show orchestration status in collapsible */}
             {isMobile && (
               <div style={{ marginTop: '16px' }}>
-                <CollapsibleSection title="System Status" icon="📡" badge={realActiveCount}>
+                <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
                   <OrchestrationStatus />
                 </CollapsibleSection>
               </div>
