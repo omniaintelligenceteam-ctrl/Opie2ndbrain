@@ -19,7 +19,7 @@ export default function OpieStatusWidget({
 
   // Trigger pulse animation when status changes
   useEffect(() => {
-    if (status?.opie?.status === 'thinking' || status?.agents?.active > 0) {
+    if (status?.opie?.status === 'thinking' || (status?.agents?.active ?? 0) > 0) {
       setPulseAnimation(true);
       const timer = setTimeout(() => setPulseAnimation(false), 1000);
       return () => clearTimeout(timer);
@@ -101,7 +101,7 @@ export default function OpieStatusWidget({
 
   const config = getStatusConfig();
   const modelName = getModelName();
-  const isActive = status?.opie?.status === 'thinking' || status?.agents?.active > 0;
+  const isActive = status?.opie?.status === 'thinking' || (status?.agents?.active ?? 0) > 0;
 
   const containerStyle = {
     background: `linear-gradient(135deg, ${config.glow} 0%, rgba(0,0,0,0.1) 100%)`,

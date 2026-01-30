@@ -117,7 +117,7 @@ function KanbanColumn({
   return (
     <div
       style={{
-        ...styles.kanbanColumn,
+        ...styles.kanbanColumnGrid,
         borderTop: `3px solid ${column.color}`,
         // Auto-expansion: adjust min-height based on content
         minHeight: column.tasks.length > 5 ? '400px' : '300px',
@@ -2016,7 +2016,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: 'repeat(3, 1fr)',
     gap: '18px',
   },
-  kanbanColumn: {
+  kanbanColumnGrid: {
     background: 'rgba(255,255,255,0.02)',
     borderRadius: '16px',
     borderTop: '3px solid',
