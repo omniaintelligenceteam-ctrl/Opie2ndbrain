@@ -1,6 +1,16 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
+function getSessionId(): string {
+  if (typeof window === 'undefined') return 'server';
+  let id = localStorage.getItem('opie-session-id');
+  if (!id) {
+    id = `2ndbrain-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    localStorage.setItem('opie-session-id', id);
+  }
+  return id;
+}
+
 export default function OpieKanban(): React.ReactElement {
   const [messages, setMessages] = useState<{role: string; text: string}[]>([]);
   const [input, setInput] = useState('');
@@ -8,12 +18,13 @@ export default function OpieKanban(): React.ReactElement {
   const [transcript, setTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
 
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
-
+  useEffect(() => { setSessionId(getSessionId()); }, []);
   const startRecognition = useCallback(() => {
     if (recognitionRef.current && micOnRef.current && !isSpeaking) {
       try { recognitionRef.current.start(); } catch(e) {}
@@ -55,7 +66,6 @@ export default function OpieKanban(): React.ReactElement {
     recognition.onerror = () => {};
     recognitionRef.current = recognition;
   }, [isSpeaking, isLoading]);
-
   const toggleMic = () => {
     if (!micOn) {
       setMicOn(true);
@@ -99,7 +109,7 @@ export default function OpieKanban(): React.ReactElement {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg }),
+        body: JSON.stringify({ message: userMsg, sessionId }),
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
@@ -109,8 +119,7 @@ export default function OpieKanban(): React.ReactElement {
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Error' }]);
       setIsLoading(false);
-
-setTimeout(() => startRecognition(), 500);
+      setTimeout(() => startRecognition(), 500);
     }
   };
 
@@ -119,8 +128,7 @@ setTimeout(() => startRecognition(), 500);
     { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
     { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API', 'TTS'] }
   ];
-
-  return (
+return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f1a' }}>
       <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '15px' }}>
         <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>⚡️</div>
@@ -142,7 +150,7 @@ setTimeout(() => startRecognition(), 500);
       </div>
       {transcript && <div style={{ padding: '10px 20px', background: 'rgba(102,126,234,0.1)', color: '#667eea' }}>Hearing: {transcript}</div>}
       <div style={{ padding: '15px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '10px' }}>
-        <button onClick={toggleMic} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#ef4444' : '#22c55e', color: '#fff' }}>{micOn ? '🎤 ON' : '🎤 OFF'}</button>
+        <button onClick={toggleMic} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#22c55e' : '#ef4444', color: '#fff' }}>{micOn ? '🎤 ON' : '🎤 OFF'}</button>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} placeholder="Type..." style={{ flex: 1, padding: '14px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', outline: 'none' }} />
         <button onClick={() => handleSend(input)} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Send</button>
       </div>
