@@ -1,29 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const GATEWAY_URL = 'https://divisions-disco-wing-enjoy.trycloudflare.com';
-const GATEWAY_TOKEN = '08bd72129fdc575b3162b1fac84b48c87a69de72aaa1a483';
-
 export async function POST(req: NextRequest) {
   try {
     const { message } = await req.json();
     
-    const response = await fetch(`${GATEWAY_URL}/api/sessions/send`, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        sessionKey: 'main',
-        message: message,
-        timeoutSeconds: 60,
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are Opie, a helpful AI assistant. Be concise and friendly. Keep responses under 2-3 sentences for voice chat.' },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 150,
       }),
     });
 
     const data = await response.json();
-    return NextResponse.json({ reply: data.reply || data.message || 'No response' });
+    const reply = data.choices?.[0]?.message?.content || 'No response';
+    return NextResponse.json({ reply });
   } catch (error) {
     console.error('Error:', error);
-    return NextResponse.json({ reply: 'Error connecting to Opie' }, { status: 500 });
+    return NextResponse.json({ reply: 'Error connecting' }, { status: 500 });
   }
 }
