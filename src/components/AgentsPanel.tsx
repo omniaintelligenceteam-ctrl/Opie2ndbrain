@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { AGENT_NODES } from '../lib/agentMapping';
 
 interface AgentSession {
   id: string;
@@ -29,7 +30,7 @@ interface AgentDefinition {
   category: 'core' | 'specialist';
 }
 
-// Static agent definitions for reference (used when deploying)
+// Enhanced agent definitions mapped from orchestration nodes + additional details
 const AGENT_DEFINITIONS: AgentDefinition[] = [
   {
     id: 'research',
@@ -39,7 +40,7 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     goal: 'Find accurate, actionable information from any source',
     backstory: 'Built for deep web research, competitive analysis, and fact verification.',
     tier: 1,
-    skills: ['web_search', 'web_fetch', 'memory', 'analysis'],
+    skills: ['web_search', 'web_fetch', 'memory', 'analysis', 'atlas-research'],
     category: 'core',
   },
   {
@@ -50,7 +51,7 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     goal: 'Write, debug, and optimize code across any language',
     backstory: 'Expert software developer capable of full-stack development.',
     tier: 1,
-    skills: ['coding', 'git', 'testing', 'review', 'debugging'],
+    skills: ['coding', 'git', 'testing', 'review', 'debugging', 'codeforge'],
     category: 'core',
   },
   {
@@ -61,7 +62,7 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     goal: 'Create compelling content that converts',
     backstory: 'Master of written communication. Creates blog posts, emails, social content.',
     tier: 1,
-    skills: ['writing', 'editing', 'seo', 'copywriting', 'research'],
+    skills: ['writing', 'editing', 'seo', 'copywriting', 'lumina-content', 'humanizer'],
     category: 'core',
   },
   {
@@ -72,8 +73,41 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     goal: 'Turn data into actionable insights',
     backstory: 'Specializes in data analysis, visualization, and reporting.',
     tier: 1,
-    skills: ['analytics', 'visualization', 'research', 'reporting'],
+    skills: ['analytics', 'visualization', 'research', 'reporting', 'synthesis', 'decision-intelligence'],
     category: 'core',
+  },
+  {
+    id: 'proposal',
+    name: 'Proposal Agent',
+    emoji: '📝',
+    role: 'Business Strategist',
+    goal: 'Create winning proposals and estimates',
+    backstory: 'Specializes in crafting compelling business proposals, estimates, and bids.',
+    tier: 2,
+    skills: ['proposal-writing', 'estimation', 'project-planning', 'director-guidance'],
+    category: 'specialist',
+  },
+  {
+    id: 'sales',
+    name: 'Sales Agent',
+    emoji: '💰',
+    role: 'Revenue Generator',
+    goal: 'Close deals and drive revenue growth',
+    backstory: 'Expert sales professional with CRM integration and lead qualification.',
+    tier: 2,
+    skills: ['sales-tactics', 'lead-qualification', 'crm', 'hunter-sales', 'negotiation'],
+    category: 'specialist',
+  },
+  {
+    id: 'qa',
+    name: 'QA Agent',
+    emoji: '✅',
+    role: 'Quality Assurance',
+    goal: 'Ensure excellence through rigorous testing',
+    backstory: 'Quality guardian that tests, reviews, and validates all outputs.',
+    tier: 2,
+    skills: ['testing', 'review', 'quality-control', 'devils-advocate', 'accountability'],
+    category: 'specialist',
   },
   {
     id: 'outreach',
@@ -83,7 +117,7 @@ const AGENT_DEFINITIONS: AgentDefinition[] = [
     goal: 'Build relationships through effective outreach',
     backstory: 'Handles email campaigns, follow-ups, and customer communication.',
     tier: 2,
-    skills: ['email', 'crm', 'templates', 'personalization'],
+    skills: ['email', 'crm', 'templates', 'network-intelligence', 'stakeholder-orchestration', 'emotional-intelligence'],
     category: 'core',
   },
 ];
@@ -121,7 +155,7 @@ function getStatusIcon(status: AgentSession['status']): string {
 export default function AgentsPanel({ 
   onDeploy, 
   activeAgents = [],
-  pollInterval = 5000,
+  pollInterval = 1500, // Real-time updates every 1.5 seconds
 }: AgentsPanelProps) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -343,10 +377,26 @@ export default function AgentsPanel({
             <h2 style={styles.title}>Live Agent Sessions</h2>
             <span style={styles.subtitle}>
               {runningCount} running • {completedCount} complete • {failedCount} failed
+              <span style={{ 
+                color: loading ? '#f59e0b' : '#22c55e', 
+                marginLeft: '8px',
+                fontSize: '0.7rem',
+                fontWeight: 600 
+              }}>
+                • {loading ? 'SYNCING...' : '🔴 LIVE'}
+              </span>
             </span>
           </div>
         </div>
         <div style={styles.headerRight}>
+          <div style={{
+            fontSize: '0.7rem',
+            color: 'rgba(255,255,255,0.4)',
+            marginRight: '12px',
+            textAlign: 'right',
+          }}>
+            Updates every 1.5s
+          </div>
           <button onClick={() => setView('deploy')} style={styles.deployBtn}>
             + Deploy
           </button>

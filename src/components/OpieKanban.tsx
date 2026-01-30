@@ -27,6 +27,7 @@ import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
 import { useActiveAgents } from '../hooks/useAgentSessions';
+import { AGENT_NODES } from '../lib/agentMapping';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -106,8 +107,8 @@ export default function OpieKanban(): React.ReactElement {
   const isMobile = responsive.isMobile;
   const isTablet = responsive.isTablet;
   const { triggerHaptic } = useHaptic();
-  // Use real-time agent data from gateway
-  const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(5000);
+  // Use real-time agent data from gateway (poll every 2 seconds)
+  const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(2000);
   // Local state for agents deployed from this UI (merged with real data)
   const [localActiveAgents, setLocalActiveAgents] = useState<string[]>([]);
   // Merge real and local active agents (deduplicated)
@@ -511,16 +512,16 @@ export default function OpieKanban(): React.ReactElement {
             <span style={{ ...styles.statValue, color: '#22c55e' }}>{activeAgents.length}</span>
           </div>
           <div style={styles.statRow}>
+            <span style={styles.statLabel}>Total Agents</span>
+            <span style={{ ...styles.statValue, color: '#06b6d4' }}>{AGENT_NODES.length}</span>
+          </div>
+          <div style={styles.statRow}>
             <span style={styles.statLabel}>Running Tasks</span>
             <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Cron Jobs</span>
             <span style={{ ...styles.statValue, color: '#8b5cf6' }}>{cronCount}</span>
-          </div>
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Total Skills</span>
-            <span style={{ ...styles.statValue, color: '#667eea' }}>25</span>
           </div>
         </div>
       )}
@@ -550,8 +551,8 @@ export default function OpieKanban(): React.ReactElement {
     </aside>
   );
 
-  // Get live status from the hook
-  const { status: liveStatus, loading: statusLoading } = useSystemStatus(3000);
+  // Get live status from the hook (poll every 1.5 seconds for real-time updates)
+  const { status: liveStatus, loading: statusLoading } = useSystemStatus(1500);
   
   // Mobile Header - enhanced with live status
   const MobileHeaderComponent = () => {
@@ -695,10 +696,10 @@ export default function OpieKanban(): React.ReactElement {
           }}>
             <div style={styles.viewHeader}>
               <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                Agent Army
+                🤖 Agent Command Center
               </h1>
               <p style={styles.viewSubtitle}>
-                {isMobile ? 'Deploy AI agents' : 'Deploy and manage your AI agents'}
+                {isMobile ? 'Deploy & monitor AI agents' : 'Deploy and manage your specialist AI agents in real-time'}
               </p>
             </div>
             <AgentsPanel onDeploy={handleDeployAgent} activeAgents={activeAgents} />

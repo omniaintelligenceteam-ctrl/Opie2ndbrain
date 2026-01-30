@@ -28,7 +28,7 @@ export interface AgentSessionsState {
   lastUpdated: string | null;
 }
 
-export function useAgentSessions(pollInterval = 5000) {
+export function useAgentSessions(pollInterval = 2000) {
   const [state, setState] = useState<AgentSessionsState>({
     sessions: [],
     nodes: [],
@@ -102,7 +102,7 @@ export function useAgentSessions(pollInterval = 5000) {
 }
 
 // Simpler hook that just returns active agent IDs
-export function useActiveAgents(pollInterval = 5000) {
+export function useActiveAgents(pollInterval = 2000) {
   const { activeAgentIds, activeCount, loading, error, refresh } = useAgentSessions(pollInterval);
   
   return {

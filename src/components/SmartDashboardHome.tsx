@@ -225,10 +225,10 @@ export default function SmartDashboardHome({
   onQuickAction,
 }: SmartDashboardHomeProps) {
   const { greeting, suggestion } = useSmartGreeting(userName);
-  // Poll status more frequently for live updates
-  const { status, loading: statusLoading } = useSystemStatus(2000);
+  // Poll status more frequently for live updates (every 1.5 seconds)
+  const { status, loading: statusLoading } = useSystemStatus(1500);
   const { memories, loading: memoriesLoading } = useRecentMemories(5);
-  // Poll connection more frequently for real latency
+  // Poll connection more frequently for real latency (every 3 seconds)
   const { isOnline, latency } = useConnectionStatus();
   const [currentTime, setCurrentTime] = useState(new Date());
 

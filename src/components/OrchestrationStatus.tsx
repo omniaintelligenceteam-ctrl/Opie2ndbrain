@@ -37,7 +37,7 @@ function getOrbitalPosition(index: number, total: number, radius: number = 42): 
 
 export default function OrchestrationStatus({ 
   activeAgents: overrideActiveAgents,
-  pollInterval = 5000,
+  pollInterval = 2000,
   onAgentClick,
   compact = false,
 }: OrchestrationStatusProps) {
@@ -172,6 +172,14 @@ export default function OrchestrationStatus({
               color: workingCount > 0 ? COLORS.warning : COLORS.success,
             }}>
               {loading ? 'Syncing...' : `${workingCount} Active`}
+              <span style={{
+                marginLeft: '6px',
+                fontSize: '0.6rem',
+                color: loading ? COLORS.warning : COLORS.success,
+                fontWeight: 700,
+              }}>
+                {loading ? '' : '●'}
+              </span>
             </span>
           </div>
         </div>

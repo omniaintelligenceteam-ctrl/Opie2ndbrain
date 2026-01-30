@@ -442,8 +442,8 @@ export function useConnectionStatus() {
     };
 
     ping();
-    // Ping every 5 seconds for real-time latency
-    const interval = setInterval(ping, 5000);
+    // Ping every 2 seconds for real-time latency
+    const interval = setInterval(ping, 2000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
