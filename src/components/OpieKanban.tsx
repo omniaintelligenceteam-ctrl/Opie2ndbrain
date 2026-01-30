@@ -912,7 +912,11 @@ export default function OpieKanban(): React.ReactElement {
   const toggleMic = () => {
     if (!micOn) {
       setMicOn(true);
-      try { recognitionRef.current?.start(); } catch(e) {}
+      // Stop first to ensure clean state, then start
+      try { recognitionRef.current?.stop(); } catch(e) {}
+      setTimeout(() => {
+        try { recognitionRef.current?.start(); } catch(e) { console.log('Start error:', e); }
+      }, 100);
     } else {
       setMicOn(false);
       try { recognitionRef.current?.stop(); } catch(e) {}
