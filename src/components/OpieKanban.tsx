@@ -567,13 +567,14 @@ function FloatingChat({
             onClick={() => setMode('closed')}
             title="Close"
             style={{
-              background: 'rgba(255,255,255,0.1)',
+              background: 'rgba(239,68,68,0.2)',
               border: 'none',
-              color: 'rgba(255,255,255,0.6)',
+              color: '#ef4444',
               cursor: 'pointer',
-              fontSize: '14px',
-              padding: '6px 10px',
+              fontSize: '16px',
+              padding: '6px 12px',
               borderRadius: '8px',
+              fontWeight: 'bold',
             }}
           >
             ✕
@@ -758,10 +759,18 @@ export default function OpieKanban(): React.ReactElement {
     },
   ]);
   const [cronCount, setCronCount] = useState<number>(4); // Will be updated from API
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  
+  // Theme, sounds, and mobile hooks
+  const { theme, themeName, toggleTheme } = useTheme();
+  const { soundsEnabled, toggleSounds, playNotification, playSuccess } = useSounds();
+  const bottomNavVisible = useBottomNav();
 
   // Load saved state on mount
   useEffect(() => {
@@ -773,6 +782,22 @@ export default function OpieKanban(): React.ReactElement {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+  
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onNavigate: handleViewChange,
+    onOpenCommandPalette: () => setCommandPaletteOpen(true),
+    onNewMessage: () => {
+      // Focus the floating chat or open it
+      setActiveView('voice');
+    },
+    onCloseModal: () => {
+      if (commandPaletteOpen) setCommandPaletteOpen(false);
+      else if (shortcutsHelpOpen) setShortcutsHelpOpen(false);
+      else if (mobileMenuOpen) setMobileMenuOpen(false);
+    },
+    onShowHelp: () => setShortcutsHelpOpen(true),
+  });
 
   const handleViewChange = (view: ViewId) => {
     setActiveView(view);
@@ -1201,7 +1226,10 @@ export default function OpieKanban(): React.ReactElement {
               <h1 style={styles.viewTitle}>Scheduled Jobs</h1>
               <p style={styles.viewSubtitle}>Manage automated cron tasks</p>
             </div>
-            <CronsPanel />
+            <CronsPanel 
+              pollInterval={30000}
+              onCronCountChange={setCronCount}
+            />
           </div>
         )}
 
@@ -1680,6 +1708,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: '24px',
     marginBottom: '24px',
+  },
+  activityFeedWrapper: {
+    marginTop: '24px',
   },
   recentActivity: {
     background: '#1a1a2e',
