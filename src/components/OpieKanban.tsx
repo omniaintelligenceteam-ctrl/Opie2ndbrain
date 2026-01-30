@@ -25,7 +25,7 @@ import FloatingChat, { ChatMessage } from './FloatingChat';
 import SmartDashboardHome from './SmartDashboardHome';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
-import { useNotifications, useToast } from '../hooks/useRealTimeData';
+import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 
 // Persistence helpers
