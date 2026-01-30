@@ -5,6 +5,18 @@ import SkillsPanel from './SkillsPanel';
 import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
 import OrchestrationStatus from './OrchestrationStatus';
 import CronsPanel from './CronsPanel';
+import ActivityFeed from './ActivityFeed';
+import CommandPalette, { ShortcutsHelp } from './CommandPalette';
+import { useKeyboardShortcuts, ViewId } from '../hooks/useKeyboardShortcuts';
+import { useTheme } from '../contexts/ThemeContext';
+import { useSounds } from '../hooks/useSounds';
+import { useBottomNav } from '../hooks/useMobileGestures';
+import MemoryPanel from './MemoryPanel';
+import WorkspaceBrowser from './WorkspaceBrowser';
+import CalendarWidget from './CalendarWidget';
+import EmailWidget from './EmailWidget';
+import QuickActionsPanel from './QuickActionsPanel';
+import AnalyticsDashboard from './AnalyticsDashboard';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -40,7 +52,7 @@ function saveSidebarState(expanded: boolean): void {
   }
 }
 
-type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings';
+// ViewId is now imported from useKeyboardShortcuts
 
 interface NavItem {
   id: ViewId;
@@ -1090,6 +1102,24 @@ export default function OpieKanban(): React.ReactElement {
               <p style={styles.viewSubtitle}>Overview of your agent army operations</p>
             </div>
             
+            {/* Quick Actions + Orchestration Row */}
+            <div style={styles.dashboardTopRow}>
+              <div style={styles.quickActionsWrapper}>
+                <QuickActionsPanel 
+                  onSendMessage={(message) => handleSend(message)}
+                  onSpawnAgent={() => handleViewChange('agents')}
+                />
+              </div>
+              <div style={styles.orchestrationWrapper}>
+                <OrchestrationStatus activeAgents={activeAgents} />
+              </div>
+            </div>
+
+            {/* Analytics Section */}
+            <div style={styles.analyticsSection}>
+              <AnalyticsDashboard />
+            </div>
+            
             <div style={styles.dashboardGrid}>
               <div style={styles.kanbanSection}>
                 <h3 style={styles.sectionTitle}>📋 Project Board</h3>
@@ -1109,28 +1139,21 @@ export default function OpieKanban(): React.ReactElement {
                   ))}
                 </div>
               </div>
-
-              <div style={styles.orchestrationSection}>
-                <OrchestrationStatus activeAgents={activeAgents} />
-              </div>
             </div>
 
-            <div style={styles.recentActivity}>
-              <h3 style={styles.sectionTitle}>⚡ Recent Activity</h3>
-              <div style={styles.activityList}>
-                {tasks.slice(0, 4).map(task => (
-                  <div key={task.id} style={styles.activityItem}>
-                    <span style={styles.activityEmoji}>{task.agentEmoji}</span>
-                    <span style={styles.activityText}>{task.label}</span>
-                    <span style={{
-                      ...styles.activityStatus,
-                      color: task.status === 'running' ? '#f59e0b' : '#22c55e'
-                    }}>
-                      {task.status === 'running' ? '⏳ Running' : '✅ Done'}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            {/* Calendar & Email Widgets Row */}
+            <div style={styles.widgetsRow}>
+              <CalendarWidget />
+              <EmailWidget />
+            </div>
+
+            {/* Live Activity Feed */}
+            <div style={styles.activityFeedWrapper}>
+              <ActivityFeed 
+                maxItems={50}
+                pollInterval={10000}
+                isThinking={isLoading}
+              />
             </div>
           </div>
         )}
@@ -1243,35 +1266,11 @@ export default function OpieKanban(): React.ReactElement {
           <div style={styles.viewContainer}>
             <div style={styles.viewHeader}>
               <h1 style={styles.viewTitle}>Memory Bank</h1>
-              <p style={styles.viewSubtitle}>Knowledge base and context storage</p>
+              <p style={styles.viewSubtitle}>Browse memories, daily notes, and workspace files</p>
             </div>
-            <div style={styles.comingSoon}>
-              <span style={styles.comingSoonIcon}>🧠</span>
-              <h3>Memory System</h3>
-              <p>Long-term memory, context retrieval, and knowledge management coming soon.</p>
-              <div style={styles.memoryPreview}>
-                <div style={styles.memoryCard}>
-                  <span>📚</span>
-                  <div>
-                    <strong>Documents</strong>
-                    <span>Stored knowledge files</span>
-                  </div>
-                </div>
-                <div style={styles.memoryCard}>
-                  <span>💬</span>
-                  <div>
-                    <strong>Conversations</strong>
-                    <span>Chat history & context</span>
-                  </div>
-                </div>
-                <div style={styles.memoryCard}>
-                  <span>🔗</span>
-                  <div>
-                    <strong>Connections</strong>
-                    <span>Knowledge graph</span>
-                  </div>
-                </div>
-              </div>
+            <div style={styles.memoryGrid}>
+              <MemoryPanel />
+              <WorkspaceBrowser />
             </div>
           </div>
         )}
@@ -1602,9 +1601,24 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 
   // Dashboard
-  dashboardGrid: {
+  dashboardTopRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 380px',
+    gap: '24px',
+    marginBottom: '24px',
+  },
+  quickActionsWrapper: {
+    minWidth: 0,
+  },
+  orchestrationWrapper: {
+    minWidth: 0,
+  },
+  analyticsSection: {
+    marginBottom: '24px',
+  },
+  dashboardGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
     gap: '24px',
     marginBottom: '24px',
   },
@@ -1661,6 +1675,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.8rem',
   },
   orchestrationSection: {},
+  widgetsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '24px',
+    marginBottom: '24px',
+  },
   recentActivity: {
     background: '#1a1a2e',
     borderRadius: '16px',
@@ -1800,34 +1820,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
   },
 
-  // Memory (Coming Soon)
-  comingSoon: {
-    background: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '48px',
-    border: '1px solid rgba(255,255,255,0.08)',
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.6)',
-  },
-  comingSoonIcon: {
-    fontSize: '64px',
-    display: 'block',
-    marginBottom: '20px',
-  },
-  memoryPreview: {
+  // Memory Browser
+  memoryGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '16px',
-    marginTop: '32px',
-  },
-  memoryCard: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '12px',
-    padding: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    textAlign: 'left',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
   },
 
   // Settings
