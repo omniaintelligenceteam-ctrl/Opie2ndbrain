@@ -1312,7 +1312,47 @@ export default function OpieKanban(): React.ReactElement {
             </div>
             <div style={styles.settingsGrid}>
               <div style={styles.settingsCard}>
-                <h4 style={styles.settingsCardTitle}>🔊 Voice Settings</h4>
+                <h4 style={styles.settingsCardTitle}>🎨 Appearance</h4>
+                <div style={styles.settingItem}>
+                  <span>Theme</span>
+                  <button 
+                    onClick={toggleTheme}
+                    style={{
+                      ...styles.settingToggle,
+                      background: themeName === 'dark' 
+                        ? 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)'
+                        : 'linear-gradient(135deg, #f8f9fc 0%, #e8eaed 100%)',
+                      color: themeName === 'dark' ? '#fff' : '#1a1a2e',
+                    }}
+                  >
+                    {themeName === 'dark' ? '🌙 Dark' : '☀️ Light'}
+                  </button>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Sidebar</span>
+                  <button 
+                    onClick={toggleSidebar}
+                    style={styles.settingToggle}
+                  >
+                    {sidebarExpanded ? '◀ Collapse' : '▶ Expand'}
+                  </button>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>🔊 Sound & Voice</h4>
+                <div style={styles.settingItem}>
+                  <span>Notification Sounds</span>
+                  <button 
+                    onClick={toggleSounds}
+                    style={{
+                      ...styles.settingToggle,
+                      background: soundsEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                      color: soundsEnabled ? '#22c55e' : '#ef4444',
+                    }}
+                  >
+                    {soundsEnabled ? '🔔 On' : '🔕 Muted'}
+                  </button>
+                </div>
                 <div style={styles.settingItem}>
                   <span>TTS Voice</span>
                   <span style={styles.settingValue}>Default</span>
@@ -1320,6 +1360,26 @@ export default function OpieKanban(): React.ReactElement {
                 <div style={styles.settingItem}>
                   <span>Speech Speed</span>
                   <span style={styles.settingValue}>1.0x</span>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>⌨️ Keyboard Shortcuts</h4>
+                <div style={styles.settingItem}>
+                  <span>Command Palette</span>
+                  <kbd style={styles.kbdKey}>⌘K</kbd>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>New Message</span>
+                  <kbd style={styles.kbdKey}>⌘N</kbd>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Show All Shortcuts</span>
+                  <button 
+                    onClick={() => setShortcutsHelpOpen(true)}
+                    style={styles.settingToggle}
+                  >
+                    View All ➔
+                  </button>
                 </div>
               </div>
               <div style={styles.settingsCard}>
@@ -1334,17 +1394,6 @@ export default function OpieKanban(): React.ReactElement {
                 </div>
               </div>
               <div style={styles.settingsCard}>
-                <h4 style={styles.settingsCardTitle}>🎨 Appearance</h4>
-                <div style={styles.settingItem}>
-                  <span>Theme</span>
-                  <span style={styles.settingValue}>Dark</span>
-                </div>
-                <div style={styles.settingItem}>
-                  <span>Sidebar</span>
-                  <span style={styles.settingValue}>{sidebarExpanded ? 'Expanded' : 'Collapsed'}</span>
-                </div>
-              </div>
-              <div style={styles.settingsCard}>
                 <h4 style={styles.settingsCardTitle}>🔑 API Keys</h4>
                 <div style={styles.settingItem}>
                   <span>OpenAI</span>
@@ -1353,6 +1402,17 @@ export default function OpieKanban(): React.ReactElement {
                 <div style={styles.settingItem}>
                   <span>ElevenLabs</span>
                   <span style={{ ...styles.settingValue, color: '#22c55e' }}>Connected</span>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>📱 PWA</h4>
+                <div style={styles.settingItem}>
+                  <span>Install Status</span>
+                  <span style={styles.settingValue}>Available</span>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Offline Support</span>
+                  <span style={{ ...styles.settingValue, color: '#22c55e' }}>Enabled</span>
                 </div>
               </div>
             </div>
@@ -1372,6 +1432,74 @@ export default function OpieKanban(): React.ReactElement {
         isSpeaking={isSpeaking}
         transcript={transcript}
       />
+
+      {/* Command Palette */}
+      <CommandPalette 
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onNavigate={handleViewChange}
+        onNewMessage={() => {
+          setActiveView('voice');
+          setCommandPaletteOpen(false);
+        }}
+      />
+
+      {/* Shortcuts Help Modal */}
+      <ShortcutsHelp 
+        isOpen={shortcutsHelpOpen}
+        onClose={() => setShortcutsHelpOpen(false)}
+      />
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile && (
+        <nav 
+          className={`bottom-nav ${bottomNavVisible ? '' : 'hidden'}`}
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'var(--bg-secondary, #0d0d15)',
+            borderTop: '1px solid var(--border, rgba(255,255,255,0.08))',
+            display: 'flex',
+            justifyContent: 'space-around',
+            padding: '8px 0',
+            paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+            zIndex: 100,
+            transition: 'transform 0.3s ease',
+            transform: bottomNavVisible ? 'translateY(0)' : 'translateY(100%)',
+          }}
+        >
+          {[
+            { id: 'dashboard', icon: '📊', label: 'Home' },
+            { id: 'agents', icon: '🤖', label: 'Agents' },
+            { id: 'tasks', icon: '📋', label: 'Tasks' },
+            { id: 'voice', icon: '🎤', label: 'Voice' },
+            { id: 'settings', icon: '⚙️', label: 'Settings' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => handleViewChange(item.id as ViewId)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '8px 16px',
+                background: 'transparent',
+                border: 'none',
+                color: activeView === item.id ? 'var(--accent, #667eea)' : 'var(--text-muted, rgba(255,255,255,0.5))',
+                fontSize: '0.7rem',
+                minHeight: '44px',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: '20px' }}>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
       <style>{`
         @keyframes pulse {
@@ -1888,5 +2016,25 @@ const styles: { [key: string]: React.CSSProperties } = {
   settingValue: {
     color: 'rgba(255,255,255,0.5)',
     fontWeight: 500,
+  },
+  settingToggle: {
+    padding: '8px 16px',
+    borderRadius: '8px',
+    border: 'none',
+    background: 'rgba(255,255,255,0.08)',
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '0.85rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    minHeight: '36px',
+  },
+  kbdKey: {
+    padding: '4px 10px',
+    background: 'rgba(255,255,255,0.08)',
+    borderRadius: '6px',
+    fontSize: '0.8rem',
+    color: 'rgba(255,255,255,0.6)',
+    fontFamily: 'monospace',
   },
 };
