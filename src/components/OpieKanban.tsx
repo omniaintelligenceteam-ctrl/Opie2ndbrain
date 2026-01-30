@@ -69,7 +69,7 @@ export default function OpieKanban(): React.ReactElement {
   };
 
   const columns = [
-    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory'] },
+    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory', 'HeyGen'] },
     { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
     { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API'] }
   ];
