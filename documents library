@@ -1,0 +1,98 @@
+cat > src/lib/documents.ts << 'EOF'
+import fs from 'fs'
+import path from 'path'
+import matter from 'gray-matter'
+
+const CONTENT_DIR = path.join(process.cwd(), '..')
+
+export interface Document {
+  slug: string
+  category: string
+  title: string
+  content: string
+  excerpt: string
+  tags: string[]
+  date: string | null
+  modifiedAt: string
+}
+
+export interface Category {
+  name: string
+  slug: string
+  icon: string
+  count: number
+}
+
+const CATEGORY_ICONS: Record<string, string> = {
+  journals: '📔', concepts: '💡', conversations: '💬', projects: '🚀', insights: '✨',
+}
+
+const CATEGORIES = ['journals', 'concepts', 'conversations', 'projects', 'insights']
+
+function getExcerpt(content: string, length = 150): string {
+  const plainText = content.replace(/^#+\s+.*$/gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_`~]/g, '').replace(/\n+/g, ' ').trim()
+  if (plainText.length <= length) return plainText
+  return plainText.slice(0, length).trim() + '...'
+}
+
+function parseDate(filename: string, frontmatter: any): string | null {
+  if (frontmatter.date) return new Date(frontmatter.date).toISOString()
+  const dateMatch = filename.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (dateMatch) return new Date(dateMatch[1]).toISOString()
+  return null
+}
+
+export function getDocument(category: string, slug: string): Document | null {
+  for (const ext of ['.md', '.mdx']) {
+    const filePath = path.join(CONTENT_DIR, category, slug + ext)
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath, 'utf-8')
+      const { data, content } = matter(fileContent)
+      const stats = fs.statSync(filePath)
+      return {
+        slug, category,
+        title: data.title || slug.replace(/-/g, ' ').replace(/^\d{4}-\d{2}-\d{2}\s*/, ''),
+        content, excerpt: getExcerpt(content), tags: data.tags || [],
+        date: parseDate(slug, data), modifiedAt: stats.mtime.toISOString(),
+      }
+    }
+  }
+  return null
+}
+
+export function getAllDocuments(): Document[] {
+  const documents: Document[] = []
+  for (const category of CATEGORIES) {
+    const categoryPath = path.join(CONTENT_DIR, category)
+    if (!fs.existsSync(categoryPath)) { fs.mkdirSync(categoryPath, { recursive: true }); continue }
+    for (const file of fs.readdirSync(categoryPath)) {
+      if (!file.endsWith('.md') && !file.endsWith('.mdx')) continue
+      const doc = getDocument(category, file.replace(/\.(md|mdx)$/, ''))
+      if (doc) documents.push(doc)
+    }
+  }
+  return documents.sort((a, b) => {
+    if (a.date && b.date) return new Date(b.date).getTime() - new Date(a.date).getTime()
+    if (a.date) return -1
+    if (b.date) return 1
+    return new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime()
+  })
+}
+
+export function getDocumentsByCategory(category: string): Document[] {
+  return getAllDocuments().filter(doc => doc.category === category)
+}
+
+export function getCategories(): Category[] {
+  return CATEGORIES.map(cat => ({
+    name: cat.charAt(0).toUpperCase() + cat.slice(1), slug: cat,
+    icon: CATEGORY_ICONS[cat] || '📄', count: getDocumentsByCategory(cat).length,
+  }))
+}
+
+export function getRecentJournals(limit = 7): Document[] {
+  return getDocumentsByCategory('journals').slice(0, limit)
+}
+EOF
+
+echo "✓ documents.ts created"
