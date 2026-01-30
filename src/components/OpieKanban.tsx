@@ -263,6 +263,23 @@ function FloatingChat({
               } else if (e.data.type === 'micState') {
                 const btn = document.getElementById('mic-btn');
                 btn.classList.toggle('active', e.data.active);
+              } else if (e.data.type === 'transcript') {
+                const container = document.getElementById('messages');
+                let transcriptEl = document.getElementById('live-transcript');
+                if (e.data.text) {
+                  if (!transcriptEl) {
+                    transcriptEl = document.createElement('div');
+                    transcriptEl.id = 'live-transcript';
+                    transcriptEl.className = 'msg user';
+                    transcriptEl.style.opacity = '0.6';
+                    transcriptEl.style.fontStyle = 'italic';
+                    container.appendChild(transcriptEl);
+                  }
+                  transcriptEl.textContent = e.data.text + '...';
+                  container.scrollTop = container.scrollHeight;
+                } else if (transcriptEl) {
+                  transcriptEl.remove();
+                }
               }
             });
             
@@ -333,6 +350,13 @@ function FloatingChat({
       popoutWindowRef.current.postMessage({ type: 'status', text: statusText, color: statusColor }, '*');
     }
   }, [micOn, isSpeaking, isLoading, poppedOut]);
+
+  // Sync transcript to popout
+  useEffect(() => {
+    if (poppedOut && popoutWindowRef.current && !popoutWindowRef.current.closed) {
+      popoutWindowRef.current.postMessage({ type: 'transcript', text: transcript }, '*');
+    }
+  }, [transcript, poppedOut]);
   const [isResizing, setIsResizing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
