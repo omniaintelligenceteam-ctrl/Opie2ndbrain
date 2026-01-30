@@ -7,98 +7,138 @@ export default function OpieKanban(): React.ReactElement {
   const [micOn, setMicOn] = useState(false)
   const [transcript, setTranscript] = useState('')
   const recognitionRef = useRef<any>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('webkitSpeechRecognition' in window)) return
+    if (typeof window === 'undefined') return
+    if (!('webkitSpeechRecognition' in window)) return
     const SR = (window as any).webkitSpeechRecognition
-    recognitionRef.current = new SR()
-    recognitionRef.current.continuous = true
-    recognitionRef.current.interimResults = true
-    recognitionRef.current.onresult = (e: any) => {
-      let final = '', interim = ''
+    const recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.onresult = (e: any) => {
+      let final = ''
+      let interim = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript
-        else interim += e.results[i][0].transcript
+        if (e.results[i].isFinal) {
+          final += e.results[i][0].transcript
+        } else {
+          interim += e.results[i][0].transcript
+        }
       }
-      if (final) { sendMessage(final); setTranscript('') }
-      else setTranscript(interim)
+      if (final) {
+        handleSend(final)
+        setTranscript('')
+      } else {
+        setTranscript(interim)
+      }
     }
-    recognitionRef.current.onend = () => { if (micOn) recognitionRef.current?.start() }
-  }, [])
-
-  useEffect(() => {
-    if (micOn) recognitionRef.current?.start()
-    else { recognitionRef.current?.stop(); setTranscript('') }
+    recognition.onend = () => {
+      if (micOn) recognition.start()
+    }
+    recognitionRef.current = recognition
   }, [micOn])
 
+  const toggleMic = () => {
+      setMicOn(true)
+      recognitionRef.current?.start()
+    } else {
+      setMicOn(false)
+      recognitionRef.current?.stop()
+      setTranscript('')
+    }
+  }
+
   const speak = (text: string) => {
+    if (typeof window === 'undefined') return
     const u = new SpeechSynthesisUtterance(text)
     window.speechSynthesis.speak(u)
   }
 
-  const sendMessage = (text: string) => {
-    setMessages(p => [...p, { role: 'user', text }])
+  const handleSend = (text: string) => {
+    const userMsg = text.trim()
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }])
+    setInput('')
     setTimeout(() => {
-      const r = 'I heard: ' + text
-      setMessages(p => [...p, { role: 'assistant', text: r }])
-      speak(r)
+      const response = 'I heard you say: ' + userMsg
+      setMessages(prev => [...prev, { role: 'assistant', text: response }])
+      speak(response)
     }, 300)
   }
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   const columns = [
-    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Voice Integration', 'API Connect'] },
-    { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['2nd Brain'] },
-    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'Deploy'] }
+    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['API Connect', 'Real Responses'] },
+    { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
+    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', '2nd Brain'] }
   ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f1a' }}>
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Sidebar */}
-        <div style={{ width: '200px', background: '#1a1a2e', padding: '20px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', margin: '0 auto' }}>⚡️</div>
-            <h2 style={{ color: '#fff', margin: '10px 0 5px' }}>Opie</h2>
-            <div style={{ color: '#22c55e', fontSize: '0.85rem' }}>● Ready</div>
-          </div>
-            {micOn ? '🎤 MIC ON' : '🎤 MIC OFF'}
-          </button>
-          {transcript && <div style={{ color: '#667eea', fontSize: '0.8rem', fontStyle: 'italic' }}>Hearing: {transcript}</div>}
+      {/* Header */}
+      <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '15px' }}>
+        <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>⚡️</div>
+        <div>
+          <h1 style={{ color: '#fff', fontSize: '1.2rem', margin: 0 }}>Opie</h1>
+          <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>● Online</span>
         </div>
+      </div>
 
-        {/* Main */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Kanban */}
-          <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-            <h1 style={{ color: '#fff', fontSize: '1.3rem', marginBottom: '15px' }}>Dashboard</h1>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              {columns.map(col => (
+      {/* Kanban */}
+      <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <h2 style={{ color: '#fff', fontSize: '1rem', marginBottom: '12px' }}>Dashboard</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+          {columns.map(col => (
+            <div key={col.id} style={{ background: '#1e1e2e', borderRadius: '8px', borderTop: '3px solid ' + col.color }}>
+              <div style={{ padding: '8px 10px', fontWeight: 600, color: '#fff', fontSize: '0.8rem' }}>{col.title}</div>
+              <div style={{ padding: '6px' }}>
+                {col.tasks.map((t, i) => (
 
-               <div key={col.id} style={{ background: '#1e1e2e', borderRadius: '8px', borderTop: `3px solid ${col.color}` }}>
-                  <div style={{ padding: '10px', fontWeight: 600, color: '#fff', fontSize: '0.85rem' }}>{col.title}</div>
-                  <div style={{ padding: '8px' }}>
-                    {col.tasks.map((t, i) => (
-                      <div key={i} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '8px', marginBottom: '6px', color: 'rgba(255,255,255,0.85)', fontSize: '0.8rem' }}>{t}</div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                 <div key={i} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '5px', padding: '6px 8px', marginBottom: '4px', color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem' }}>{t}</div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          {/* Chat */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#667eea' : '#1e1e2e', color: '#fff', padding: '10px 14px', borderRadius: '12px', maxWidth: '70%', fontSize: '0.9rem' }}>{m.text}</div>
-            ))}
-          </div>
-
-          {/* Input */}
-          <div style={{ padding: '15px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '10px' }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { sendMessage(input); setInput('') }}} placeholder="Type or use mic..." style={{ flex: 1, padding: '12px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#fff', outline: 'none' }} />
-            <button onClick={() => { sendMessage(input); setInput('') }} style={{ padding: '12px 20px', background: '#22c55e', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Send</button>
-          </div>
+          ))}
         </div>
+      </div>
+
+      {/* Chat Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', marginTop: '30px' }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>🎤</div>
+            <p>Turn on the mic or type below</p>
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#667eea' : '#1e1e2e', color: '#fff', padding: '10px 14px', borderRadius: '12px', maxWidth: '75%', fontSize: '0.9rem' }}>{m.text}</div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Transcript */}
+      {transcript && (
+        <div style={{ padding: '10px 20px', background: 'rgba(102,126,234,0.1)', color: '#667eea', fontSize: '0.85rem' }}>
+          Hearing: {transcript}
+        </div>
+      )}
+
+      {/* Bottom Controls */}
+      <div style={{ padding: '15px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <button onClick={toggleMic} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#ef4444' : '#22c55e', color: '#fff', fontSize: '0.9rem' }}>
+          {micOn ? '🎤 ON' : '🎤 OFF'}
+        </button>
+        <input 
+          value={input} 
+          onChange={e => setInput(e.target.value)} 
+          onKeyDown={e => { if (e.key === 'Enter') handleSend(input) }}
+          placeholder="Type a message..." 
+          style={{ flex: 1, padding: '14px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} 
+        />
+        <button onClick={() => handleSend(input)} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Send</button>
       </div>
     </div>
   )
