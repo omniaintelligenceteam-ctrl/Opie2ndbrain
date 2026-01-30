@@ -23,6 +23,7 @@ import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } fro
 import FloatingChat, { ChatMessage } from './FloatingChat';
 // Real-time dashboard components
 import SmartDashboardHome from './SmartDashboardHome';
+import OpieStatusWidget from './OpieStatusWidget';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
@@ -604,35 +605,36 @@ export default function OpieKanban(): React.ReactElement {
         zIndex: 1000,
       } : {}),
     }}>
-      {/* Logo/Brand */}
-      <div style={styles.sidebarHeader}>
-        <div style={styles.logoContainer}>
-          <img 
-            src="/opie-avatar.png" 
-            alt="Opie" 
-            style={{
-              width: sidebarExpanded ? '48px' : '36px',
-              height: sidebarExpanded ? '48px' : '36px',
-              borderRadius: '50%',
-              objectFit: 'cover',
-              border: '2px solid rgba(102, 126, 234, 0.5)',
-              boxShadow: '0 0 20px rgba(102, 126, 234, 0.3)',
-              transition: 'all 0.3s ease',
-            }}
+      {/* Opie Status Widget - Top of Sidebar */}
+      <div style={{ 
+        padding: sidebarExpanded ? '16px' : '12px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        {sidebarExpanded ? (
+          <OpieStatusWidget 
+            size="medium" 
+            showDetails={true}
+            onClick={() => handleViewChange('settings')}
           />
-          {sidebarExpanded && <span style={styles.brandName}>Opie</span>}
-        </div>
-        {!isMobile && (
+        ) : (
+          <OpieStatusWidget 
+            size="small" 
+            showDetails={false}
+            onClick={() => handleViewChange('settings')}
+          />
+        )}
+      </div>
+      
+      {/* Collapse/Expand Toggle */}
+      {!isMobile && (
+        <div style={{
+          padding: '8px 14px',
+          display: 'flex',
+          justifyContent: sidebarExpanded ? 'flex-end' : 'center',
+        }}>
           <button onClick={toggleSidebar} style={styles.collapseBtn}>
             {sidebarExpanded ? '◀' : '▶'}
           </button>
-        )}
-      </div>
-
-      {/* Live Status Bar */}
-      {sidebarExpanded && (
-        <div style={{ padding: '0 14px' }}>
-          <StatusBar showDetails={true} />
         </div>
       )}
 
@@ -812,21 +814,41 @@ export default function OpieKanban(): React.ReactElement {
               </div>
             </div>
 
-            {/* Smart Dashboard Home - Greeting, Status, Metrics */}
-            <SmartDashboardHome 
-              userName="Wes"
-              onNavigate={(view) => handleViewChange(view as ViewId)}
-              onQuickAction={(action) => {
-                if (action === 'deploy') handleViewChange('agents');
-              }}
-            />
+            {/* Hero Section: Greeting + Orchestration Side by Side */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : '1fr 1.2fr',
+              gap: '24px',
+              marginBottom: '24px',
+            }}>
+              {/* Left: Smart Dashboard Home - Greeting + Metrics */}
+              <div>
+                <SmartDashboardHome 
+                  userName="Wes"
+                  onNavigate={(view) => handleViewChange(view as ViewId)}
+                  onQuickAction={(action) => {
+                    if (action === 'deploy') handleViewChange('agents');
+                  }}
+                />
+              </div>
+              
+              {/* Right: Orchestration Network - Next to greeting */}
+              <div>
+                {isMobile ? (
+                  <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
+                    <OrchestrationStatus compact={true} />
+                  </CollapsibleSection>
+                ) : (
+                  <OrchestrationStatus />
+                )}
+              </div>
+            </div>
             
-            {/* Two Column Layout: Activity + Orchestration */}
+            {/* Two Column Layout: Activity Feed + Widgets */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: isMobile || isTablet ? '1fr' : '2fr 1fr',
               gap: '24px',
-              marginTop: '24px',
             }}>
               {/* Left Column: Activity Feed */}
               <div>
@@ -847,18 +869,8 @@ export default function OpieKanban(): React.ReactElement {
                 )}
               </div>
               
-              {/* Right Column: Orchestration View (moved from tasks) + System Widgets */}
+              {/* Right Column: System Widgets */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Orchestration Status - Now in dashboard top-right */}
-                {isMobile ? (
-                  <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
-                    <OrchestrationStatus />
-                  </CollapsibleSection>
-                ) : (
-                  <OrchestrationStatus />
-                )}
-                
-                {/* System Health, Calendar, Email below orchestration */}
                 {isMobile ? (
                   <>
                     <CollapsibleSection title="System Health" icon="🩺">

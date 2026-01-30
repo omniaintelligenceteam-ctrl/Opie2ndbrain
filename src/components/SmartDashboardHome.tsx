@@ -6,7 +6,6 @@ import {
   useRecentMemories,
   useConnectionStatus,
 } from '../hooks/useRealTimeData';
-import OpieStatusWidget from './OpieStatusWidget';
 
 interface SmartDashboardHomeProps {
   userName?: string;
@@ -242,14 +241,6 @@ export default function SmartDashboardHome({
           </div>
         </div>
 
-        {/* Right: Enhanced Opie Status Widget */}
-        <div style={{ minWidth: '320px' }}>
-          <OpieStatusWidget 
-            size="large" 
-            showDetails={true}
-            onClick={() => onNavigate?.('settings')}
-          />
-        </div>
       </div>
 
       {/* Connection Status Bar */}
@@ -404,10 +395,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     animation: 'fadeInUp 0.4s ease',
   },
 
-  // Hero Section
+  // Hero Section - Now just greeting (status widget moved to sidebar)
   heroSection: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'flex-start',
     gap: '32px',
     flexWrap: 'wrap',
@@ -415,6 +406,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   greetingArea: {
     flex: 1,
     minWidth: '300px',
+    maxWidth: '600px',
   },
   greeting: {
     color: '#fff',
