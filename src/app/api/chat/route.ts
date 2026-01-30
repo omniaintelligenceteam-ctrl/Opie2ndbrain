@@ -30,12 +30,12 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-        'x-moltbot-agent-id': 'main'
+        'x-moltbot-agent-id': 'main',
+        'x-moltbot-session-key': 'agent:main:voice'  // Use dedicated voice session with full context
       },
       body: JSON.stringify({
         model: 'moltbot:main',
         input: VOICE_INSTRUCTIONS + message,
-        user: sessionId || '2ndbrain-default',
         stream: false
       }),
     });
