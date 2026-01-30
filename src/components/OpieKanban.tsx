@@ -874,9 +874,17 @@ export default function OpieKanban(): React.ReactElement {
     recognition.onend = () => {
       if (micOnRef.current && !isSpeaking && !isLoading) {
         setTimeout(() => { try { recognition.start(); } catch(e) {} }, 100);
+      } else {
+        // Sync visual state if recognition ended unexpectedly
+        setMicOn(false);
       }
     };
-    recognition.onerror = () => {};
+    recognition.onerror = (e: any) => {
+      console.log('Speech recognition error:', e.error);
+      if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+        setMicOn(false);
+      }
+    };
     recognitionRef.current = recognition;
   }, [isSpeaking, isLoading]);
 
