@@ -878,21 +878,36 @@ export default function OpieKanban(): React.ReactElement {
       else setTranscript(interim);
     };
     recognition.onend = () => {
-      if (micOnRef.current && !isSpeaking && !isLoading) {
-        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 100);
-      } else {
-        // Sync visual state if recognition ended unexpectedly
-        setMicOn(false);
+      // Always try to restart if mic should be on, regardless of loading state
+      if (micOnRef.current) {
+        setTimeout(() => { 
+          try { 
+            recognition.start(); 
+          } catch(e) {
+            // If start fails, try again in a bit
+            setTimeout(() => {
+              if (micOnRef.current) {
+                try { recognition.start(); } catch(e) {}
+              }
+            }, 500);
+          }
+        }, 100);
       }
     };
     recognition.onerror = (e: any) => {
       console.log('Speech recognition error:', e.error);
+      // Only turn off mic for permission errors, not transient ones
       if (e.error === 'not-allowed' || e.error === 'audio-capture') {
         setMicOn(false);
+      } else if (micOnRef.current) {
+        // For other errors, try to restart
+        setTimeout(() => {
+          try { recognition.start(); } catch(e) {}
+        }, 500);
       }
     };
     recognitionRef.current = recognition;
-  }, [isSpeaking, isLoading]);
+  }, []);
 
   const toggleMic = () => {
     if (!micOn) {
