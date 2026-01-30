@@ -60,6 +60,253 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
+// Floating Chat Component
+function FloatingChat({ 
+  messages, 
+  input, 
+  setInput, 
+  isLoading, 
+  onSend 
+}: {
+  messages: {role: string; text: string}[];
+  input: string;
+  setInput: (val: string) => void;
+  isLoading: boolean;
+  onSend: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [size, setSize] = useState({ width: 380, height: 500 });
+  const [isResizing, setIsResizing] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (chatEndRef.current && isOpen) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isOpen]);
+
+  const handleResize = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    setSize(prev => ({
+      width: Math.max(300, Math.min(600, prev.width - e.movementX)),
+      height: Math.max(400, Math.min(800, prev.height - e.movementY)),
+    }));
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResize);
+      window.addEventListener('mouseup', () => setIsResizing(false));
+      return () => {
+        window.removeEventListener('mousemove', handleResize);
+        window.removeEventListener('mouseup', () => setIsResizing(false));
+      };
+    }
+  }, [isResizing, handleResize]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSend();
+    }
+  };
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          border: 'none',
+          cursor: 'pointer',
+          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '24px',
+          zIndex: 1000,
+          transition: 'transform 0.2s, box-shadow 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.1)';
+          e.currentTarget.style.boxShadow = '0 6px 30px rgba(102, 126, 234, 0.6)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(102, 126, 234, 0.4)';
+        }}
+      >
+        💬
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '24px',
+        right: '24px',
+        width: `${size.width}px`,
+        height: `${size.height}px`,
+        background: '#0d0d1a',
+        borderRadius: '16px',
+        border: '1px solid rgba(255,255,255,0.1)',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 1000,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Resize Handle */}
+      <div
+        onMouseDown={() => setIsResizing(true)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '20px',
+          height: '20px',
+          cursor: 'nw-resize',
+          zIndex: 10,
+        }}
+      />
+      
+      {/* Header */}
+      <div style={{
+        padding: '16px',
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: 'rgba(255,255,255,0.02)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '20px' }}>⚡</span>
+          <span style={{ color: '#fff', fontWeight: 600 }}>Chat with Opie</span>
+        </div>
+        <button
+          onClick={() => setIsOpen(false)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255,255,255,0.5)',
+            cursor: 'pointer',
+            fontSize: '20px',
+            padding: '4px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+      }}>
+        {messages.length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            color: 'rgba(255,255,255,0.4)',
+            padding: '40px 20px',
+          }}>
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '12px' }}>⚡</span>
+            <p>Hey! Ask me anything.</p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            style={{
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+              padding: '12px 16px',
+              borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+              background: msg.role === 'user' 
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                : 'rgba(255,255,255,0.08)',
+              color: '#fff',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
+            }}
+          >
+            {msg.text}
+          </div>
+        ))}
+        {isLoading && (
+          <div style={{
+            alignSelf: 'flex-start',
+            padding: '12px 16px',
+            borderRadius: '16px 16px 16px 4px',
+            background: 'rgba(255,255,255,0.08)',
+            color: 'rgba(255,255,255,0.5)',
+          }}>
+            Thinking...
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{
+        padding: '16px',
+        borderTop: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex',
+        gap: '10px',
+      }}>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message..."
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '12px',
+            color: '#fff',
+            fontSize: '0.9rem',
+            resize: 'none',
+            outline: 'none',
+            minHeight: '44px',
+            maxHeight: '120px',
+          }}
+          rows={1}
+        />
+        <button
+          onClick={onSend}
+          disabled={isLoading || !input.trim()}
+          style={{
+            padding: '12px 20px',
+            background: input.trim() ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'rgba(255,255,255,0.1)',
+            border: 'none',
+            borderRadius: '12px',
+            color: '#fff',
+            fontWeight: 600,
+            cursor: input.trim() ? 'pointer' : 'not-allowed',
+            opacity: input.trim() ? 1 : 0.5,
+          }}
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function OpieKanban(): React.ReactElement {
   const [messages, setMessages] = useState<{role: string; text: string}[]>([]);
   const [input, setInput] = useState('');
@@ -670,6 +917,15 @@ export default function OpieKanban(): React.ReactElement {
           </div>
         )}
       </main>
+
+      {/* Floating Chat Box */}
+      <FloatingChat 
+        messages={messages}
+        input={input}
+        setInput={setInput}
+        isLoading={isLoading}
+        onSend={() => handleSend(input)}
+      />
 
       <style>{`
         @keyframes pulse {
