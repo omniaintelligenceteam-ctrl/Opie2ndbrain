@@ -88,7 +88,7 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// Enhanced Kanban Column Component with auto-expansion and scrollable "Done"
+// Enhanced Kanban Column Component with auto-expansion and scrollable functionality for ALL columns
 function KanbanColumn({ 
   column, 
   isMobile = false 
@@ -96,12 +96,23 @@ function KanbanColumn({
   column: { id: string; title: string; color: string; tasks: string[] }; 
   isMobile?: boolean;
 }) {
-  const [showAllDone, setShowAllDone] = useState(false);
-  const isDoneColumn = column.id === 'done';
-  const visibleTasks = isDoneColumn && !showAllDone 
-    ? column.tasks.slice(-8) // Show only last 8 items for "Done" column
+  const [showAll, setShowAll] = useState(false);
+  const MAX_VISIBLE_ITEMS = 8;
+  
+  // Show only last 8 items by default for all columns
+  const visibleTasks = !showAll && column.tasks.length > MAX_VISIBLE_ITEMS
+    ? column.tasks.slice(-MAX_VISIBLE_ITEMS) // Show last 8 items
     : column.tasks;
-  const hiddenCount = isDoneColumn ? Math.max(0, column.tasks.length - 8) : 0;
+  const hiddenCount = Math.max(0, column.tasks.length - MAX_VISIBLE_ITEMS);
+
+  const getColumnActionText = () => {
+    switch (column.id) {
+      case 'done': return 'completed item';
+      case 'progress': return 'in-progress item';
+      case 'todo': return 'pending item';
+      default: return 'item';
+    }
+  };
 
   return (
     <div
@@ -110,7 +121,7 @@ function KanbanColumn({
         borderTop: `3px solid ${column.color}`,
         // Auto-expansion: adjust min-height based on content
         minHeight: column.tasks.length > 5 ? '400px' : '300px',
-        maxHeight: isDoneColumn ? '500px' : 'auto',
+        maxHeight: showAll ? '500px' : 'auto',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -131,17 +142,17 @@ function KanbanColumn({
         </span>
       </div>
       
-      {/* Show hidden items indicator for Done column */}
-      {isDoneColumn && hiddenCount > 0 && !showAllDone && (
+      {/* Show hidden items indicator for all columns */}
+      {hiddenCount > 0 && !showAll && (
         <div style={styles.hiddenItemsIndicator}>
           <button
-            onClick={() => setShowAllDone(true)}
+            onClick={() => setShowAll(true)}
             style={styles.showMoreButton}
             className="show-more-hover"
           >
             <span style={styles.showMoreIcon}>⋯</span>
             <span style={styles.showMoreText}>
-              {hiddenCount} more completed item{hiddenCount !== 1 ? 's' : ''}
+              {hiddenCount} more {getColumnActionText()}{hiddenCount !== 1 ? 's' : ''}
             </span>
             <span style={styles.showMoreArrow}>▼</span>
           </button>
@@ -151,44 +162,47 @@ function KanbanColumn({
       <div 
         style={{
           ...styles.kanbanTasks,
-          // Make Done column scrollable when expanded
-          ...(isDoneColumn && showAllDone ? {
+          // Make all columns scrollable when expanded
+          ...(showAll ? {
             maxHeight: '350px',
             overflowY: 'auto',
             paddingRight: '8px',
           } : {}),
           flex: 1,
         }}
-        className={isDoneColumn && showAllDone ? 'kanban-scrollable' : ''}
+        className={showAll ? 'kanban-scrollable' : ''}
       >
         {visibleTasks.map((task, index) => (
           <div
             key={`${column.id}-${index}`}
             style={{
               ...styles.kanbanTask,
-              // Fade effect for older items in Done column
-              ...(isDoneColumn && index < visibleTasks.length - 3 ? {
+              // Fade effect for older items when showing limited view
+              ...(!showAll && column.tasks.length > MAX_VISIBLE_ITEMS && index < 3 ? {
                 opacity: 0.7,
               } : {}),
             }}
             className="kanban-task-hover"
           >
             <span style={styles.kanbanTaskText}>{task}</span>
-            {/* Add completion date for done items */}
-            {isDoneColumn && (
-              <span style={styles.taskTimestamp}>
-                {new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString()}
-              </span>
-            )}
+            {/* Add timestamps for all items based on column type */}
+            <span style={styles.taskTimestamp}>
+              {column.id === 'done' 
+                ? `Completed ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString()}`
+                : column.id === 'progress'
+                  ? `Started ${new Date(Date.now() - (visibleTasks.length - index) * 86400000).toLocaleDateString()}`
+                  : `Added ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 0.5).toLocaleDateString()}`
+              }
+            </span>
           </div>
         ))}
       </div>
       
-      {/* Collapse button for expanded Done column */}
-      {isDoneColumn && showAllDone && (
+      {/* Collapse button for all expanded columns */}
+      {showAll && hiddenCount > 0 && (
         <div style={styles.collapseSection}>
           <button
-            onClick={() => setShowAllDone(false)}
+            onClick={() => setShowAll(false)}
             style={styles.collapseButton}
             className="collapse-hover"
           >
@@ -1986,17 +2000,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '28px',
     marginBottom: '28px',
   },
-  kanbanSection: {
-    background: 'rgba(20, 20, 35, 0.6)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    borderRadius: '20px',
-    padding: '24px',
-    border: '1px solid rgba(255,255,255,0.06)',
-    position: 'relative',
-    overflow: 'hidden',
-    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
-  },
+  // Removed duplicate kanbanSection property
   sectionTitle: {
     color: '#fff',
     fontSize: '1.1rem',
