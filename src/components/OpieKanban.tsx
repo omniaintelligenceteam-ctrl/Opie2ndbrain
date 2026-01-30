@@ -9,9 +9,15 @@ export default function OpieKanban(): React.ReactElement {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    audioRef.current = new Audio();
+    audioRef.current.onended = () => {
+      setIsSpeaking(false);
+      if (micOn) recognitionRef.current?.start();
+    };
     if (!('webkitSpeechRecognition' in window)) return;
     const SR = (window as any).webkitSpeechRecognition;
     const recognition = new SR();
@@ -37,13 +43,26 @@ export default function OpieKanban(): React.ReactElement {
     else { setMicOn(false); recognitionRef.current?.stop(); setTranscript(''); }
   };
 
-  const speak = (text: string) => {
-    if (typeof window === 'undefined') return;
+  const speak = async (text: string) => {
     setIsSpeaking(true);
     recognitionRef.current?.stop();
-    const u = new SpeechSynthesisUtterance(text);
-    u.onend = () => { setIsSpeaking(false); if (micOn) recognitionRef.current?.start(); };
-    window.speechSynthesis.speak(u);
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.play();
+      }
+    } catch (err) {
+      console.error('TTS error:', err);
+      setIsSpeaking(false);
+      if (micOn) recognitionRef.current?.start();
+    }
   };
 
   const handleSend = async (text: string) => {
@@ -71,7 +90,7 @@ export default function OpieKanban(): React.ReactElement {
   const columns = [
     { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory', 'HeyGen'] },
     { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
-    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API'] }
+    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API', 'ElevenLabs'] }
   ];
 
 return (
