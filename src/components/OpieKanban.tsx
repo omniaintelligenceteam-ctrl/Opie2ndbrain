@@ -27,6 +27,7 @@ import OpieStatusWidget from './OpieStatusWidget';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
+import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
 
@@ -625,6 +626,9 @@ export default function OpieKanban(): React.ReactElement {
         )}
       </div>
       
+      {/* Sidebar Widgets - Calendar, Email, System Health */}
+      {!isMobile && <SidebarWidgets isExpanded={sidebarExpanded} />}
+      
       {/* Collapse/Expand Toggle */}
       {!isMobile && (
         <div style={{
@@ -844,15 +848,10 @@ export default function OpieKanban(): React.ReactElement {
               </div>
             </div>
             
-            {/* Two Column Layout: Activity Feed + Widgets */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile || isTablet ? '1fr' : '2fr 1fr',
-              gap: '24px',
-            }}>
-              {/* Left Column: Activity Feed */}
-              <div>
-                {isMobile ? (
+            {/* Activity Feed - Full Width (Widgets moved to sidebar) */}
+            <div>
+              {isMobile ? (
+                <>
                   <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
                     <ActivityFeed 
                       maxItems={20}
@@ -860,19 +859,8 @@ export default function OpieKanban(): React.ReactElement {
                       isThinking={isLoading}
                     />
                   </CollapsibleSection>
-                ) : (
-                  <ActivityFeed 
-                    maxItems={50}
-                    pollInterval={10000}
-                    isThinking={isLoading}
-                  />
-                )}
-              </div>
-              
-              {/* Right Column: System Widgets */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {isMobile ? (
-                  <>
+                  {/* Mobile: Keep widgets here as collapsible sections */}
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <CollapsibleSection title="System Health" icon="🩺">
                       <SystemHealthPanel />
                     </CollapsibleSection>
@@ -882,15 +870,15 @@ export default function OpieKanban(): React.ReactElement {
                     <CollapsibleSection title="Email" icon="📧">
                       <EmailWidget />
                     </CollapsibleSection>
-                  </>
-                ) : (
-                  <>
-                    <SystemHealthPanel />
-                    <CalendarWidget />
-                    <EmailWidget />
-                  </>
-                )}
-              </div>
+                  </div>
+                </>
+              ) : (
+                <ActivityFeed 
+                  maxItems={50}
+                  pollInterval={10000}
+                  isThinking={isLoading}
+                />
+              )}
             </div>
             
           </div>
