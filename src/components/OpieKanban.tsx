@@ -783,6 +783,12 @@ export default function OpieKanban(): React.ReactElement {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
+  const handleViewChange = useCallback((view: ViewId) => {
+    setActiveView(view);
+    saveView(view);
+    if (isMobile) setMobileMenuOpen(false);
+  }, [isMobile]);
+
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onNavigate: handleViewChange,
@@ -798,12 +804,6 @@ export default function OpieKanban(): React.ReactElement {
     },
     onShowHelp: () => setShortcutsHelpOpen(true),
   });
-
-  const handleViewChange = (view: ViewId) => {
-    setActiveView(view);
-    saveView(view);
-    if (isMobile) setMobileMenuOpen(false);
-  };
 
   const toggleSidebar = () => {
     const newState = !sidebarExpanded;

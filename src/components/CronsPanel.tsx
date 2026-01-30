@@ -26,6 +26,11 @@ interface CronHistory {
   runtime?: string;
 }
 
+interface CronsPanelProps {
+  pollInterval?: number;
+  onCronCountChange?: (count: number) => void;
+}
+
 function parseSchedule(schedule: string): string {
   const parts = schedule.split(' ');
   if (parts.length !== 5) return schedule;
@@ -132,9 +137,12 @@ const DEMO_HISTORY: CronHistory[] = [
   { id: 'h4', cronId: 'cron-1', startedAt: new Date(Date.now() - 1000 * 60 * 105).toISOString(), completedAt: new Date(Date.now() - 1000 * 60 * 104).toISOString(), status: 'failed', output: 'Error: Connection timeout', runtime: '30s' },
 ];
 
-export default function CronsPanel() {
+export default function CronsPanel({ 
+  pollInterval = 30000,
+  onCronCountChange,
+}: CronsPanelProps = {}) {
   const [crons, setCrons] = useState<CronJob[]>(DEMO_CRONS);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCron, setSelectedCron] = useState<CronJob | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -155,25 +163,50 @@ export default function CronsPanel() {
 
   const fetchCrons = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await fetch('/api/crons');
       if (res.ok) {
         const data = await res.json();
-        if (data.crons) setCrons(data.crons);
+        if (data.crons) {
+          setCrons(data.crons);
+          onCronCountChange?.(data.crons.length);
+        }
       }
       setError(null);
     } catch (err) {
       // Use demo data on error
+      console.error('Failed to fetch crons:', err);
     } finally {
       setLoading(false);
+    }
+  }, [onCronCountChange]);
+
+  const fetchHistory = useCallback(async (cronId: string) => {
+    try {
+      setHistoryLoading(true);
+      const res = await fetch(`/api/crons/${cronId}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.history) setHistory(data.history);
+      }
+    } catch (err) {
+      console.error('Failed to fetch cron history:', err);
+    } finally {
+      setHistoryLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchCrons();
-    const interval = setInterval(fetchCrons, 30000);
+    const interval = setInterval(fetchCrons, pollInterval);
     return () => clearInterval(interval);
-  }, [fetchCrons]);
+  }, [fetchCrons, pollInterval]);
+
+  // Fetch history when a cron is selected
+  useEffect(() => {
+    if (selectedCron) {
+      fetchHistory(selectedCron.id);
+    }
+  }, [selectedCron, fetchHistory]);
 
   const handleRunNow = async (cronId: string) => {
     setRunningCrons(prev => new Set(prev).add(cronId));
@@ -449,6 +482,9 @@ export default function CronsPanel() {
     );
   }
 
+  const enabledCount = crons.filter(c => c.enabled).length;
+  const runningNowCount = crons.filter(c => c.lastStatus === 'running').length + runningCrons.size;
+
   // List View
   return (
     <div style={styles.container}>
@@ -457,19 +493,26 @@ export default function CronsPanel() {
           <span style={styles.headerIcon}>⏰</span>
           <div>
             <h2 style={styles.title}>Scheduled Jobs</h2>
-            <span style={styles.subtitle}>{crons.length} cron jobs configured</span>
+            <span style={styles.subtitle}>
+              {enabledCount} enabled • {runningNowCount > 0 ? `${runningNowCount} running now` : 'idle'}
+            </span>
           </div>
         </div>
-        <button 
-          onClick={() => {
-            setEditingCron(null);
-            setFormData({ name: '', description: '', schedule: '*/30 * * * *', command: '', enabled: true, priority: 'normal' });
-            setShowAddModal(true);
-          }}
-          style={styles.addButton}
-        >
-          + Add Cron
-        </button>
+        <div style={styles.headerRight}>
+          <button 
+            onClick={() => {
+              setEditingCron(null);
+              setFormData({ name: '', description: '', schedule: '*/30 * * * *', command: '', enabled: true, priority: 'normal' });
+              setShowAddModal(true);
+            }}
+            style={styles.addButton}
+          >
+            + Add Cron
+          </button>
+          <button onClick={fetchCrons} style={styles.refreshBtn} disabled={loading}>
+            {loading ? '⏳' : '🔄'}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -728,6 +771,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'rgba(255,255,255,0.5)',
     fontSize: '0.8rem',
   },
+  headerRight: {
+    display: 'flex',
+    gap: '8px',
+  },
   addButton: {
     padding: '10px 20px',
     background: '#667eea',
@@ -736,6 +783,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#fff',
     fontWeight: 600,
     fontSize: '0.9rem',
+    cursor: 'pointer',
+  },
+  refreshBtn: {
+    width: '42px',
+    height: '42px',
+    background: 'rgba(255,255,255,0.05)',
+    border: 'none',
+    borderRadius: '10px',
+    color: '#fff',
+    fontSize: '18px',
     cursor: 'pointer',
   },
   filters: {
