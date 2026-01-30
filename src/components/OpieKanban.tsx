@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function OpieKanban(): React.ReactElement {
   const [messages, setMessages] = useState<{role: string; text: string}[]>([]);
@@ -10,21 +10,34 @@ export default function OpieKanban(): React.ReactElement {
   const [isLoading, setIsLoading] = useState(false);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const micOnRef = useRef(false);
+
+  useEffect(() => { micOnRef.current = micOn; }, [micOn]);
+
+  const startRecognition = useCallback(() => {
+    if (recognitionRef.current && micOnRef.current && !isSpeaking) {
+      try { recognitionRef.current.start(); } catch(e) {}
+    }
+  }, [isSpeaking]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     audioRef.current = new Audio();
     audioRef.current.onended = () => {
       setIsSpeaking(false);
-      if (micOn) recognitionRef.current?.start();
+      setTimeout(() => startRecognition(), 500);
     };
+  }, [startRecognition]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     if (!('webkitSpeechRecognition' in window)) return;
     const SR = (window as any).webkitSpeechRecognition;
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
-      if (isSpeaking) return;
+      if (isSpeaking || isLoading) return;
       let final = '';
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -34,18 +47,29 @@ export default function OpieKanban(): React.ReactElement {
       if (final) { handleSend(final); setTranscript(''); }
       else setTranscript(interim);
     };
-    recognition.onend = () => { if (micOn && !isSpeaking) recognition.start(); };
+    recognition.onend = () => {
+      if (micOnRef.current && !isSpeaking && !isLoading) {
+        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 100);
+      }
+    };
+    recognition.onerror = () => {};
     recognitionRef.current = recognition;
-  }, [micOn, isSpeaking]);
+  }, [isSpeaking, isLoading]);
 
   const toggleMic = () => {
-    if (!micOn) { setMicOn(true); recognitionRef.current?.start(); }
-    else { setMicOn(false); recognitionRef.current?.stop(); setTranscript(''); }
+    if (!micOn) {
+      setMicOn(true);
+      try { recognitionRef.current?.start(); } catch(e) {}
+    } else {
+      setMicOn(false);
+      try { recognitionRef.current?.stop(); } catch(e) {}
+      setTranscript('');
+    }
   };
 
   const speak = async (text: string) => {
     setIsSpeaking(true);
-    recognitionRef.current?.stop();
+    try { recognitionRef.current?.stop(); } catch(e) {}
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -56,12 +80,11 @@ export default function OpieKanban(): React.ReactElement {
       const url = URL.createObjectURL(blob);
       if (audioRef.current) {
         audioRef.current.src = url;
-        audioRef.current.play();
+        await audioRef.current.play();
       }
     } catch (err) {
-      console.error('TTS error:', err);
       setIsSpeaking(false);
-      if (micOn) recognitionRef.current?.start();
+      setTimeout(() => startRecognition(), 500);
     }
   };
 
@@ -71,6 +94,7 @@ export default function OpieKanban(): React.ReactElement {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setInput('');
     setIsLoading(true);
+    try { recognitionRef.current?.stop(); } catch(e) {}
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -80,20 +104,23 @@ export default function OpieKanban(): React.ReactElement {
       const data = await res.json();
       const reply = data.reply || 'No response';
       setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
-      speak(reply);
+      setIsLoading(false);
+      await speak(reply);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Error connecting' }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Error' }]);
+      setIsLoading(false);
+
+setTimeout(() => startRecognition(), 500);
     }
-    setIsLoading(false);
   };
 
   const columns = [
     { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory', 'HeyGen'] },
     { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
-    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API', 'ElevenLabs'] }
+    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API', 'TTS'] }
   ];
 
-return (
+  return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f1a' }}>
       <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '15px' }}>
         <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>⚡️</div>
@@ -110,15 +137,14 @@ return (
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {messages.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', marginTop: '30px' }}><div style={{ fontSize: '40px', marginBottom: '10px' }}>🎤</div><p>Turn on mic or type below</p></div>}
+        {messages.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', marginTop: '30px' }}><div style={{ fontSize: '40px', marginBottom: '10px' }}>🎤</div><p>Turn on mic or type</p></div>}
         {messages.map((m, i) => (<div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#667eea' : '#1e1e2e', color: '#fff', padding: '10px 14px', borderRadius: '12px', maxWidth: '75%' }}>{m.text}</div>))}
-        {isLoading && <div style={{ color: 'rgba(255,255,255,0.5)', padding: '10px' }}>Thinking...</div>}
       </div>
       {transcript && <div style={{ padding: '10px 20px', background: 'rgba(102,126,234,0.1)', color: '#667eea' }}>Hearing: {transcript}</div>}
       <div style={{ padding: '15px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '10px' }}>
-        <button onClick={toggleMic} disabled={isSpeaking} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#ef4444' : '#22c55e', color: '#fff', opacity: isSpeaking ? 0.5 : 1 }}>{micOn ? '🎤 ON' : '🎤 OFF'}</button>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} placeholder="Type a message..." style={{ flex: 1, padding: '14px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', outline: 'none' }} />
-        <button onClick={() => handleSend(input)} disabled={isLoading} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: isLoading ? 0.5 : 1 }}>Send</button>
+        <button onClick={toggleMic} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#ef4444' : '#22c55e', color: '#fff' }}>{micOn ? '🎤 ON' : '🎤 OFF'}</button>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} placeholder="Type..." style={{ flex: 1, padding: '14px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', outline: 'none' }} />
+        <button onClick={() => handleSend(input)} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Send</button>
       </div>
     </div>
   );
