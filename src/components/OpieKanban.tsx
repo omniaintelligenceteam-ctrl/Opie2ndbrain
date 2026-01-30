@@ -4,6 +4,7 @@ import AgentsPanel from './AgentsPanel';
 import SkillsPanel from './SkillsPanel';
 import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
 import OrchestrationStatus from './OrchestrationStatus';
+import CronsPanel from './CronsPanel';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -39,7 +40,7 @@ function saveSidebarState(expanded: boolean): void {
   }
 }
 
-type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'voice' | 'memory' | 'settings';
+type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings';
 
 interface NavItem {
   id: ViewId;
@@ -51,8 +52,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
-  { id: 'skills', label: 'Skills', icon: '⚡' },
+  { id: 'skills', label: 'Skills', icon: '🛠️' },
   { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
+  { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '🧠' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -93,6 +95,7 @@ export default function OpieKanban(): React.ReactElement {
       output: 'Draft completed: 1,200 words covering 5 key benefits...',
     },
   ]);
+  const [cronCount, setCronCount] = useState<number>(4); // Will be updated from API
   
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -266,6 +269,7 @@ export default function OpieKanban(): React.ReactElement {
   const getCount = (itemId: ViewId): number | null => {
     if (itemId === 'agents') return activeAgents.length;
     if (itemId === 'tasks') return runningTasksCount;
+    if (itemId === 'crons') return cronCount;
     return null;
   };
 
@@ -357,6 +361,10 @@ export default function OpieKanban(): React.ReactElement {
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Running Tasks</span>
             <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={styles.statLabel}>Cron Jobs</span>
+            <span style={{ ...styles.statValue, color: '#8b5cf6' }}>{cronCount}</span>
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Total Skills</span>
@@ -498,6 +506,17 @@ export default function OpieKanban(): React.ReactElement {
               <ActiveTasksPanel tasks={tasks} />
               <OrchestrationStatus activeAgents={activeAgents} />
             </div>
+          </div>
+        )}
+
+        {/* Crons View */}
+        {activeView === 'crons' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Scheduled Jobs</h1>
+              <p style={styles.viewSubtitle}>Manage automated cron tasks</p>
+            </div>
+            <CronsPanel />
           </div>
         )}
 
