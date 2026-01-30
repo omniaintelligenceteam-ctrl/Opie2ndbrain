@@ -88,6 +88,119 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// Enhanced Kanban Column Component with auto-expansion and scrollable "Done"
+function KanbanColumn({ 
+  column, 
+  isMobile = false 
+}: { 
+  column: { id: string; title: string; color: string; tasks: string[] }; 
+  isMobile?: boolean;
+}) {
+  const [showAllDone, setShowAllDone] = useState(false);
+  const isDoneColumn = column.id === 'done';
+  const visibleTasks = isDoneColumn && !showAllDone 
+    ? column.tasks.slice(-8) // Show only last 8 items for "Done" column
+    : column.tasks;
+  const hiddenCount = isDoneColumn ? Math.max(0, column.tasks.length - 8) : 0;
+
+  return (
+    <div
+      style={{
+        ...styles.kanbanColumn,
+        borderTop: `3px solid ${column.color}`,
+        // Auto-expansion: adjust min-height based on content
+        minHeight: column.tasks.length > 5 ? '400px' : '300px',
+        maxHeight: isDoneColumn ? '500px' : 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={styles.kanbanHeader}>
+        <h3 style={{
+          ...styles.kanbanColumnTitle,
+          color: column.color,
+        }}>
+          {column.title}
+        </h3>
+        <span style={{
+          ...styles.kanbanCount,
+          background: `${column.color}20`,
+          color: column.color,
+        }}>
+          {column.tasks.length}
+        </span>
+      </div>
+      
+      {/* Show hidden items indicator for Done column */}
+      {isDoneColumn && hiddenCount > 0 && !showAllDone && (
+        <div style={styles.hiddenItemsIndicator}>
+          <button
+            onClick={() => setShowAllDone(true)}
+            style={styles.showMoreButton}
+            className="show-more-hover"
+          >
+            <span style={styles.showMoreIcon}>⋯</span>
+            <span style={styles.showMoreText}>
+              {hiddenCount} more completed item{hiddenCount !== 1 ? 's' : ''}
+            </span>
+            <span style={styles.showMoreArrow}>▼</span>
+          </button>
+        </div>
+      )}
+      
+      <div 
+        style={{
+          ...styles.kanbanTasks,
+          // Make Done column scrollable when expanded
+          ...(isDoneColumn && showAllDone ? {
+            maxHeight: '350px',
+            overflowY: 'auto',
+            paddingRight: '8px',
+          } : {}),
+          flex: 1,
+        }}
+        className={isDoneColumn && showAllDone ? 'kanban-scrollable' : ''}
+      >
+        {visibleTasks.map((task, index) => (
+          <div
+            key={`${column.id}-${index}`}
+            style={{
+              ...styles.kanbanTask,
+              // Fade effect for older items in Done column
+              ...(isDoneColumn && index < visibleTasks.length - 3 ? {
+                opacity: 0.7,
+              } : {}),
+            }}
+            className="kanban-task-hover"
+          >
+            <span style={styles.kanbanTaskText}>{task}</span>
+            {/* Add completion date for done items */}
+            {isDoneColumn && (
+              <span style={styles.taskTimestamp}>
+                {new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      {/* Collapse button for expanded Done column */}
+      {isDoneColumn && showAllDone && (
+        <div style={styles.collapseSection}>
+          <button
+            onClick={() => setShowAllDone(false)}
+            style={styles.collapseButton}
+            className="collapse-hover"
+          >
+            <span style={styles.collapseIcon}>▲</span>
+            <span>Show less</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OpieKanban(): React.ReactElement {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -405,10 +518,55 @@ export default function OpieKanban(): React.ReactElement {
     handleViewChange('tasks');
   };
 
+  // Enhanced Kanban columns with more realistic data and auto-expansion support
   const columns = [
-    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory Integration', 'HeyGen Avatar', 'Email Automation'] },
-    { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat', 'Agent Dashboard'] },
-    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard UI', 'Chat API', 'TTS Integration', 'Skill Catalog'] }
+    { 
+      id: 'todo', 
+      title: 'To Do', 
+      color: '#f59e0b', 
+      tasks: [
+        'Memory Integration with Vector DB',
+        'HeyGen Avatar Integration', 
+        'Email Automation Pipeline',
+        'Voice Recognition Improvements',
+        'Mobile PWA Optimization',
+        'Agent Performance Analytics',
+        'Security Audit & Compliance'
+      ]
+    },
+    { 
+      id: 'progress', 
+      title: 'In Progress', 
+      color: '#667eea', 
+      tasks: [
+        'Voice Chat Enhancement',
+        'Agent Dashboard Redesign',
+        'Real-time Orchestration View',
+        'Kanban Board Implementation'
+      ]
+    },
+    { 
+      id: 'done', 
+      title: 'Done', 
+      color: '#22c55e', 
+      tasks: [
+        'Dashboard UI Design System',
+        'Chat API Integration', 
+        'TTS Integration with ElevenLabs',
+        'Skill Catalog Architecture',
+        'Authentication System',
+        'Database Schema Design',
+        'Docker Containerization',
+        'CI/CD Pipeline Setup',
+        'Initial Agent Framework',
+        'Basic Voice Commands',
+        'Settings Panel',
+        'Navigation System',
+        'Theme System Implementation',
+        'Mobile Responsive Design',
+        'Error Handling Framework'
+      ]
+    }
   ];
 
   const runningTasksCount = tasks.filter(t => t.status === 'running').length;
@@ -551,8 +709,8 @@ export default function OpieKanban(): React.ReactElement {
     </aside>
   );
 
-  // Get live status from the hook (poll every 1.5 seconds for real-time updates)
-  const { status: liveStatus, loading: statusLoading } = useSystemStatus(1500);
+  // Get live status from the hook (poll every 3 seconds for real-time updates)
+  const { status: liveStatus, loading: statusLoading } = useSystemStatus(3000);
   
   // Mobile Header - enhanced with live status
   const MobileHeaderComponent = () => {
@@ -562,7 +720,7 @@ export default function OpieKanban(): React.ReactElement {
       if (isLoading) return 'thinking';
       
       // Use real gateway status
-      if (liveStatus?.opie?.status === 'thinking' || liveStatus?.agents?.active > 0) {
+      if (liveStatus?.opie?.status === 'thinking' || (liveStatus?.agents?.active && liveStatus.agents.active > 0)) {
         return 'thinking';
       }
       if (liveStatus?.opie?.status === 'offline') {
@@ -571,7 +729,7 @@ export default function OpieKanban(): React.ReactElement {
       return 'online';
     };
     
-    const statusText = liveStatus?.agents?.active > 0 
+    const statusText = (liveStatus?.agents?.active && liveStatus.agents.active > 0)
       ? `${liveStatus.agents.active} agents active`
       : NAV_ITEMS.find(n => n.id === activeView)?.label;
     
@@ -624,6 +782,22 @@ export default function OpieKanban(): React.ReactElement {
             paddingTop: isMobile ? '72px' : undefined,
             paddingBottom: isMobile ? '100px' : undefined,
           }}>
+            {/* NEW LAYOUT: Kanban Board at Top (Full Width) */}
+            <div style={styles.kanbanSection}>
+              <h2 style={styles.kanbanTitle}>
+                📋 Project Board
+              </h2>
+              <div style={styles.kanbanBoard}>
+                {columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    isMobile={isMobile}
+                  />
+                ))}
+              </div>
+            </div>
+
             {/* Smart Dashboard Home - Greeting, Status, Metrics */}
             <SmartDashboardHome 
               userName="Wes"
@@ -633,14 +807,14 @@ export default function OpieKanban(): React.ReactElement {
               }}
             />
             
-            {/* Two Column Layout: Activity + Widgets */}
+            {/* Two Column Layout: Activity + Orchestration */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile || isTablet ? '1fr' : '1fr 400px',
+              gridTemplateColumns: isMobile || isTablet ? '1fr' : '2fr 1fr',
               gap: '24px',
               marginTop: '24px',
             }}>
-              {/* Activity Feed */}
+              {/* Left Column: Activity Feed */}
               <div>
                 {isMobile ? (
                   <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
@@ -659,8 +833,18 @@ export default function OpieKanban(): React.ReactElement {
                 )}
               </div>
               
-              {/* Right Column: Calendar, Email, System Health */}
+              {/* Right Column: Orchestration View (moved from tasks) + System Widgets */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Orchestration Status - Now in dashboard top-right */}
+                {isMobile ? (
+                  <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
+                    <OrchestrationStatus />
+                  </CollapsibleSection>
+                ) : (
+                  <OrchestrationStatus />
+                )}
+                
+                {/* System Health, Calendar, Email below orchestration */}
                 {isMobile ? (
                   <>
                     <CollapsibleSection title="System Health" icon="🩺">
@@ -734,37 +918,22 @@ export default function OpieKanban(): React.ReactElement {
           }}>
             <div style={styles.viewHeader}>
               <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                🌌 Agent Orchestration & Tasks
+                📋 Active Tasks
               </h1>
               <p style={styles.viewSubtitle}>
-                {isMobile ? 'Network status & operations' : 'Real-time agent network coordination and active task monitoring'}
+                {isMobile ? 'Task monitoring' : 'Monitor and manage active task execution'}
               </p>
             </div>
-            <div style={{
-              ...styles.tasksGrid,
-              gridTemplateColumns: isMobile || isTablet ? '1fr' : '1fr 380px',
-              gap: isMobile ? '16px' : '24px',
-            }}>
-              <ActiveTasksPanel 
-                tasks={tasks} 
-                onTaskClick={isMobile ? (taskId) => {
-                  const task = tasks.find(t => t.id === taskId);
-                  if (task) setSelectedTask(task);
-                  setMobileSheetContent('task');
-                  triggerHaptic('selection');
-                } : undefined}
-              />
-              {!isMobile && <OrchestrationStatus />}
-            </div>
-            
-            {/* Mobile: Show orchestration status in collapsible */}
-            {isMobile && (
-              <div style={{ marginTop: '16px' }}>
-                <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
-                  <OrchestrationStatus />
-                </CollapsibleSection>
-              </div>
-            )}
+            {/* Tasks now take full width since orchestration moved to dashboard */}
+            <ActiveTasksPanel 
+              tasks={tasks} 
+              onTaskClick={isMobile ? (taskId) => {
+                const task = tasks.find(t => t.id === taskId);
+                if (task) setSelectedTask(task);
+                setMobileSheetContent('task');
+                triggerHaptic('selection');
+              } : undefined}
+            />
           </div>
         )}
 
@@ -1245,6 +1414,43 @@ export default function OpieKanban(): React.ReactElement {
           border-color: rgba(255,255,255,0.1);
         }
         
+        /* Kanban Task Hover Effects */
+        .kanban-task-hover:hover {
+          background: rgba(255,255,255,0.06) !important;
+          border-color: rgba(99,102,241,0.3) !important;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        
+        /* Enhanced Kanban Scrollbar */
+        .kanban-scrollable::-webkit-scrollbar {
+          width: 4px;
+        }
+        .kanban-scrollable::-webkit-scrollbar-track {
+          background: rgba(255,255,255,0.02);
+          borderRadius: 2px;
+        }
+        .kanban-scrollable::-webkit-scrollbar-thumb {
+          background: rgba(34,197,94,0.3);
+          borderRadius: 2px;
+        }
+        .kanban-scrollable::-webkit-scrollbar-thumb:hover {
+          background: rgba(34,197,94,0.5);
+        }
+        
+        /* Show More Button Hover */
+        .show-more-hover:hover {
+          color: rgba(255,255,255,0.8) !important;
+          background: rgba(255,255,255,0.04) !important;
+        }
+        
+        /* Collapse Button Hover */
+        .collapse-hover:hover {
+          background: rgba(255,255,255,0.06) !important;
+          color: rgba(255,255,255,0.7) !important;
+          border-color: rgba(255,255,255,0.12) !important;
+        }
+        
         /* Animated Gradient Border */
         .gradient-border {
           position: relative;
@@ -1619,6 +1825,141 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 0,
     fontWeight: 400,
     letterSpacing: '-0.01em',
+  },
+
+  // ==========================================================================
+  // KANBAN BOARD STYLES
+  // ==========================================================================
+  kanbanSection: {
+    marginBottom: '32px',
+    padding: '24px',
+    background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(139,92,246,0.03) 100%)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255,255,255,0.08)',
+  },
+  kanbanTitle: {
+    color: '#fff',
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    margin: '0 0 20px 0',
+    letterSpacing: '-0.02em',
+  },
+  kanbanBoard: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '20px',
+  },
+  kanbanColumn: {
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '16px',
+    padding: '16px',
+    border: '1px solid rgba(255,255,255,0.05)',
+    backdropFilter: 'blur(10px)',
+  },
+  kanbanHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+  },
+  kanbanColumnTitle: {
+    fontSize: '1rem',
+    fontWeight: 600,
+    margin: 0,
+  },
+  kanbanCount: {
+    padding: '4px 8px',
+    borderRadius: '12px',
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    border: '1px solid rgba(255,255,255,0.1)',
+  },
+  kanbanTasks: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  kanbanTask: {
+    background: 'rgba(255,255,255,0.03)',
+    borderRadius: '10px',
+    padding: '12px',
+    border: '1px solid rgba(255,255,255,0.06)',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  kanbanTaskText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '0.85rem',
+    fontWeight: 500,
+    lineHeight: 1.4,
+    flex: 1,
+  },
+  taskTimestamp: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: '0.7rem',
+    fontWeight: 400,
+    marginTop: '4px',
+    fontStyle: 'italic',
+  },
+  hiddenItemsIndicator: {
+    padding: '8px 12px',
+    marginBottom: '12px',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.05)',
+  },
+  showMoreButton: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    background: 'transparent',
+    border: 'none',
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    padding: '0',
+    transition: 'all 0.2s ease',
+  },
+  showMoreIcon: {
+    fontSize: '1.2rem',
+    color: '#22c55e',
+  },
+  showMoreText: {
+    flex: 1,
+    textAlign: 'left',
+    marginLeft: '8px',
+  },
+  showMoreArrow: {
+    fontSize: '0.7rem',
+    color: '#22c55e',
+  },
+  collapseSection: {
+    paddingTop: '8px',
+    borderTop: '1px solid rgba(255,255,255,0.05)',
+    marginTop: '8px',
+  },
+  collapseButton: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: '6px',
+    padding: '6px 12px',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '0.75rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  collapseIcon: {
+    fontSize: '0.7rem',
+    color: '#22c55e',
   },
 
   // ==========================================================================

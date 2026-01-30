@@ -40,43 +40,7 @@ function formatTime(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
-// Status Orb Component
-function StatusOrb({ status, size = 48 }: { status: string; size?: number }) {
-  const getColor = () => {
-    switch (status) {
-      case 'online': return { main: '#22c55e', glow: 'rgba(34, 197, 94, 0.4)' };
-      case 'thinking': return { main: '#6366f1', glow: 'rgba(99, 102, 241, 0.4)' };
-      case 'speaking': return { main: '#f59e0b', glow: 'rgba(245, 158, 11, 0.4)' };
-      default: return { main: '#6b7280', glow: 'rgba(107, 114, 128, 0.4)' };
-    }
-  };
-  
-  const colors = getColor();
-  const isAnimated = status === 'thinking' || status === 'speaking';
-  
-  return (
-    <div style={{
-      width: size,
-      height: size,
-      borderRadius: '50%',
-      background: `radial-gradient(circle at 30% 30%, ${colors.main} 0%, ${colors.main}80 50%, ${colors.main}40 100%)`,
-      boxShadow: `0 0 ${size/2}px ${colors.glow}, inset 0 0 ${size/4}px rgba(255,255,255,0.2)`,
-      animation: isAnimated ? 'pulse 2s infinite' : 'glow 3s infinite',
-      position: 'relative',
-    }}>
-      <div style={{
-        position: 'absolute',
-        top: '20%',
-        left: '25%',
-        width: '20%',
-        height: '20%',
-        borderRadius: '50%',
-        background: 'rgba(255,255,255,0.6)',
-        filter: 'blur(2px)',
-      }} />
-    </div>
-  );
-}
+// Status Orb Component - REMOVED (as per requirements)
 
 // Metric Card Component
 function MetricCard({ 
