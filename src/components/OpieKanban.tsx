@@ -1,38 +1,128 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export default function OpieKanban(): React.ReactElement {
-  const columns = [
-    { id: 'todo', title: 'To Do', emoji: '📋', color: '#f59e0b', tasks: [{ id: '1', title: 'Voice Integration' }] },
-    { id: 'progress', title: 'In Progress', emoji: '🔄', color: '#667eea', tasks: [{ id: '2', title: '2nd Brain' }] },
-    { id: 'done', title: 'Done', emoji: '✅', color: '#22c55e', tasks: [{ id: '3', title: 'Dashboard' }] }
-  ]
+  const [messages, setMessages] = useState<{role: string, text: string}[]>([])
+  const [input, setInput] = useState('')
+  const [micOn, setMicOn] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window)) return
+    
+    const SpeechRecognition = (window as any).webkitSpeechRecognition
+    recognitionRef.current = new SpeechRecognition()
+    recognitionRef.current.continuous = true
+    recognitionRef.current.interimResults = true
+    
+    recognitionRef.current.onresult = (event: any) => {
+      let finalTranscript = ''
+      let interimTranscript = ''
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript
+        } else {
+          interimTranscript += result[0].transcript
+        }
+      }
+      
+      if (finalTranscript) {
+        sendMessage(finalTranscript)
+        setTranscript('')
+      } else {
+        setTranscript(interimTranscript)
+      }
+    }
+    
+    recognitionRef.current.onend = () => {
+      if (micOn) recognitionRef.current?.start()
+    }
+    
+    return () => recognitionRef.current?.stop()
+  }, [])
+
+  useEffect(() => {
+    if (micOn) {
+      recognitionRef.current?.start()
+    } else {
+      recognitionRef.current?.stop()
+      setTranscript('')
+    }
+  }, [micOn])
+
+  const speak = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 1.0
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const sendMessage = async (text: string) => {
+    setMessages(prev => [...prev, { role: 'user', text }])
+    setIsLoading(true)
+    
+    setTimeout(() => {
+      const response = 'I heard: ' + text
+      setMessages(prev => [...prev, { role: 'assistant', text: response }])
+      speak(response)
+      setIsLoading(false)
+    }, 500)
+  }
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0f0f1a' }}>
-      <div style={{ width: '280px', background: '#1a1a2e', padding: '12px' }}>
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', margin: '0 auto' }}>⚡️</div>
-          <h2 style={{ color: '#fff', margin: '10px 0' }}>Opie</h2>
-          <div style={{ color: '#22c55e' }}>● Ready</div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f1a' }}>
+      <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>⚡️</div>
+        <div style={{ flex: 1 }}>
+          <h1 style={{ color: '#fff', fontSize: '1.2rem', margin: 0 }}>Opie</h1>
+          <div style={{ color: '#22c55e', fontSize: '0.8rem' }}>● Online</div>
         </div>
+        <button
+          style={{ 
+            padding: '12px 24px', borderRadius: '30px', border: 'none', cursor: 'pointer', fontWeight: 600,
+            background: micOn ? '#ef4444' : '#22c55e',
+            color: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+        >
+          {micOn ? '🎤 MIC ON' : '🎤 MIC OFF'}
+        </button>
       </div>
-      <div style={{ flex: 1, padding: '20px' }}>
-        <h1 style={{ color: '#fff', marginBottom: '20px' }}>Dashboard</h1>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
-          {columns.map(col => (
-            <div key={col.id} style={{ background: '#1e1e2e', borderRadius: '8px', borderTop: `3px solid ${col.color}` }}>
-              <div style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <span style={{ color: '#fff', fontWeight: 600 }}>{col.emoji} {col.title}</span>
-              </div>
-              <div style={{ padding: '8px' }}>
-                {col.tasks.map(t => (
-                  <div key={t.id} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '8px', marginBottom: '6px' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.9)' }}>{t.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', marginTop: '40px' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎤</div>
+            <p>Turn on the mic and start talking</p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} style={{ 
+            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            background: msg.role === 'user' ? '#667eea' : '#1e1e2e',
+
+color: '#fff', padding: '12px 16px', borderRadius: '16px', maxWidth: '80%'
+          }}>
+            {msg.text}
+          </div>
+        ))}
+        {isLoading && <div style={{ color: 'rgba(255,255,255,0.5)', padding: '12px' }}>Thinking...</div>}
+      </div>
+
+      <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        {transcript && <div style={{ color: '#667eea', marginBottom: '10px', fontStyle: 'italic' }}>Hearing: {transcript}</div>}
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage(input) && setInput('')}
+            placeholder="Or type here..."
+            style={{ flex: 1, padding: '14px 18px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '1rem', outline: 'none' }}
+          />
+          <button onClick={() => { sendMessage(input); setInput('') }} style={{ padding: '14px 24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: '#22c55e', color: '#fff', fontWeight: 600 }}>Send</button>
         </div>
       </div>
     </div>
