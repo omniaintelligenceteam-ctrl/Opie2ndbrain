@@ -118,7 +118,7 @@ color: '#fff', padding: '12px 16px', borderRadius: '16px', maxWidth: '80%'
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage(input) && setInput('')}
+            onKeyDown={(e) => { if (e.key === 'Enter') { sendMessage(input); setInput(''); } }}
             placeholder="Or type here..."
             style={{ flex: 1, padding: '14px 18px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '1rem', outline: 'none' }}
           />
