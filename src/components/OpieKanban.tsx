@@ -7,6 +7,7 @@ export default function OpieKanban(): React.ReactElement {
   const [micOn, setMicOn] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -32,14 +33,8 @@ export default function OpieKanban(): React.ReactElement {
   }, [micOn, isSpeaking]);
 
   const toggleMic = () => {
-    if (!micOn) {
-      setMicOn(true);
-      recognitionRef.current?.start();
-    } else {
-      setMicOn(false);
-      recognitionRef.current?.stop();
-      setTranscript('');
-    }
+    if (!micOn) { setMicOn(true); recognitionRef.current?.start(); }
+    else { setMicOn(false); recognitionRef.current?.stop(); setTranscript(''); }
   };
 
   const speak = (text: string) => {
@@ -47,35 +42,43 @@ export default function OpieKanban(): React.ReactElement {
     setIsSpeaking(true);
     recognitionRef.current?.stop();
     const u = new SpeechSynthesisUtterance(text);
-    u.onend = () => {
-      setIsSpeaking(false);
-      if (micOn) recognitionRef.current?.start();
-    };
+    u.onend = () => { setIsSpeaking(false); if (micOn) recognitionRef.current?.start(); };
     window.speechSynthesis.speak(u);
   };
 
-  const handleSend = (text: string) => {
-    if (!text.trim()) return;
-    setMessages(prev => [...prev, { role: 'user', text: text.trim() }]);
+  const handleSend = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+    const userMsg = text.trim();
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setInput('');
-    setTimeout(() => {
-      const response = 'I heard: ' + text.trim();
-      setMessages(prev => [...prev, { role: 'assistant', text: response }]);
-      speak(response);
-    }, 300);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg }),
+      });
+      const data = await res.json();
+      const reply = data.reply || 'No response';
+      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+      speak(reply);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Error connecting' }]);
+    }
+    setIsLoading(false);
   };
 
   const columns = [
-    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Real API'] },
+    { id: 'todo', title: 'To Do', color: '#f59e0b', tasks: ['Memory'] },
     { id: 'progress', title: 'In Progress', color: '#667eea', tasks: ['Voice Chat'] },
-    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard'] }
+    { id: 'done', title: 'Done', color: '#22c55e', tasks: ['Dashboard', 'API'] }
   ];
 
 return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f1a' }}>
       <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '15px' }}>
         <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>⚡️</div>
-        <div><h1 style={{ color: '#fff', fontSize: '1.2rem', margin: 0 }}>Opie</h1><span style={{ color: isSpeaking ? '#f59e0b' : '#22c55e', fontSize: '0.8rem' }}>{isSpeaking ? '● Speaking...' : '● Online'}</span></div>
+        <div><h1 style={{ color: '#fff', fontSize: '1.2rem', margin: 0 }}>Opie</h1><span style={{ color: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e', fontSize: '0.8rem' }}>{isSpeaking ? '● Speaking...' : isLoading ? '● Thinking...' : '● Online'}</span></div>
       </div>
       <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
@@ -88,14 +91,15 @@ return (
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {messages.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', marginTop: '30px' }}><div style={{ fontSize: '40px', marginBottom: '10px' }}>🎤</div><p>Turn on the mic or type below</p></div>}
+        {messages.length === 0 && <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', marginTop: '30px' }}><div style={{ fontSize: '40px', marginBottom: '10px' }}>🎤</div><p>Turn on mic or type below</p></div>}
         {messages.map((m, i) => (<div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#667eea' : '#1e1e2e', color: '#fff', padding: '10px 14px', borderRadius: '12px', maxWidth: '75%' }}>{m.text}</div>))}
+        {isLoading && <div style={{ color: 'rgba(255,255,255,0.5)', padding: '10px' }}>Thinking...</div>}
       </div>
       {transcript && <div style={{ padding: '10px 20px', background: 'rgba(102,126,234,0.1)', color: '#667eea' }}>Hearing: {transcript}</div>}
       <div style={{ padding: '15px 20px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '10px' }}>
         <button onClick={toggleMic} disabled={isSpeaking} style={{ padding: '14px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600, background: micOn ? '#ef4444' : '#22c55e', color: '#fff', opacity: isSpeaking ? 0.5 : 1 }}>{micOn ? '🎤 ON' : '🎤 OFF'}</button>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} placeholder="Type a message..." style={{ flex: 1, padding: '14px', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', outline: 'none' }} />
-        <button onClick={() => handleSend(input)} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Send</button>
+        <button onClick={() => handleSend(input)} disabled={isLoading} style={{ padding: '14px 24px', background: '#667eea', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: isLoading ? 0.5 : 1 }}>Send</button>
       </div>
     </div>
   );
