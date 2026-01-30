@@ -535,7 +535,19 @@ export default function OpieKanban(): React.ReactElement {
       {/* Logo/Brand */}
       <div style={styles.sidebarHeader}>
         <div style={styles.logoContainer}>
-          <div style={styles.logo}>⚡</div>
+          <img 
+            src="/opie-avatar.png" 
+            alt="Opie" 
+            style={{
+              width: sidebarExpanded ? '48px' : '36px',
+              height: sidebarExpanded ? '48px' : '36px',
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '2px solid rgba(102, 126, 234, 0.5)',
+              boxShadow: '0 0 20px rgba(102, 126, 234, 0.3)',
+              transition: 'all 0.3s ease',
+            }}
+          />
           {sidebarExpanded && <span style={styles.brandName}>Opie</span>}
         </div>
         {!isMobile && (
