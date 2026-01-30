@@ -14,6 +14,7 @@ interface SmartDashboardHomeProps {
   onQuickAction?: (action: string) => void;
 }
 
+// Utility functions
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
@@ -39,6 +40,185 @@ function formatTime(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
+// Status Orb Component
+function StatusOrb({ status, size = 48 }: { status: string; size?: number }) {
+  const getColor = () => {
+    switch (status) {
+      case 'online': return { main: '#22c55e', glow: 'rgba(34, 197, 94, 0.4)' };
+      case 'thinking': return { main: '#6366f1', glow: 'rgba(99, 102, 241, 0.4)' };
+      case 'speaking': return { main: '#f59e0b', glow: 'rgba(245, 158, 11, 0.4)' };
+      default: return { main: '#6b7280', glow: 'rgba(107, 114, 128, 0.4)' };
+    }
+  };
+  
+  const colors = getColor();
+  const isAnimated = status === 'thinking' || status === 'speaking';
+  
+  return (
+    <div style={{
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      background: `radial-gradient(circle at 30% 30%, ${colors.main} 0%, ${colors.main}80 50%, ${colors.main}40 100%)`,
+      boxShadow: `0 0 ${size/2}px ${colors.glow}, inset 0 0 ${size/4}px rgba(255,255,255,0.2)`,
+      animation: isAnimated ? 'pulse 2s infinite' : 'glow 3s infinite',
+      position: 'relative',
+    }}>
+      <div style={{
+        position: 'absolute',
+        top: '20%',
+        left: '25%',
+        width: '20%',
+        height: '20%',
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.6)',
+        filter: 'blur(2px)',
+      }} />
+    </div>
+  );
+}
+
+// Metric Card Component
+function MetricCard({ 
+  icon, 
+  label, 
+  value, 
+  subtext, 
+  color = '#6366f1',
+  onClick 
+}: { 
+  icon: string; 
+  label: string; 
+  value: string | number; 
+  subtext?: string;
+  color?: string;
+  onClick?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  
+  return (
+    <div 
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered 
+          ? 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.08) 100%)'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+        borderRadius: '16px',
+        padding: '20px',
+        border: hovered ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(255,255,255,0.06)',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? '0 8px 30px rgba(99,102,241,0.15)' : 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+        <span style={{ fontSize: '20px' }}>{icon}</span>
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', fontWeight: 500 }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ 
+        color: color, 
+        fontSize: '2.25rem', 
+        fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
+        letterSpacing: '-0.02em',
+        lineHeight: 1,
+        marginBottom: '6px',
+      }}>
+        {value}
+      </div>
+      {subtext && (
+        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>
+          {subtext}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Connection Status Pill
+function ConnectionPill({ label, connected }: { label: string; connected: boolean }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '8px 14px',
+      background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+      borderRadius: '20px',
+      border: `1px solid ${connected ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+    }}>
+      <div style={{
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        background: connected ? '#22c55e' : '#ef4444',
+        boxShadow: connected ? '0 0 8px rgba(34,197,94,0.6)' : '0 0 8px rgba(239,68,68,0.6)',
+      }} />
+      <span style={{ 
+        color: connected ? '#22c55e' : '#ef4444', 
+        fontSize: '0.8rem', 
+        fontWeight: 500 
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// Quick Action Button
+function QuickActionButton({ 
+  icon, 
+  label, 
+  variant = 'primary',
+  onClick 
+}: { 
+  icon: string; 
+  label: string; 
+  variant?: 'primary' | 'secondary';
+  onClick?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  
+  const isPrimary = variant === 'primary';
+  
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: 1,
+        minWidth: '120px',
+        padding: '14px 20px',
+        background: isPrimary 
+          ? (hovered ? 'linear-gradient(135deg, #818cf8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)')
+          : (hovered ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)'),
+        border: isPrimary ? 'none' : '1px solid rgba(99,102,241,0.3)',
+        borderRadius: '12px',
+        color: isPrimary ? '#fff' : '#818cf8',
+        fontSize: '0.9rem',
+        fontWeight: 600,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        transition: 'all 0.2s ease',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: isPrimary && hovered ? '0 8px 25px rgba(99,102,241,0.4)' : 'none',
+      }}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export default function SmartDashboardHome({ 
   userName = 'Wes',
   onNavigate,
@@ -51,21 +231,10 @@ export default function SmartDashboardHome({
   const { isOnline, latency } = useConnectionStatus();
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Update time every minute
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
   }, []);
-
-  const getStatusColor = () => {
-    if (!status?.opie) return '#6b7280';
-    switch (status.opie.status) {
-      case 'online': return '#22c55e';
-      case 'thinking': return '#667eea';
-      case 'speaking': return '#f59e0b';
-      default: return '#ef4444';
-    }
-  };
 
   const getStatusText = () => {
     if (!status?.opie) return 'Connecting...';
@@ -77,214 +246,185 @@ export default function SmartDashboardHome({
     }
   };
 
-  // Calculate quick wins / opportunities
-  const getOpportunities = () => {
-    const opps = [];
-    if (status?.tasks?.pending && status.tasks.pending > 0) {
-      opps.push({ icon: '📋', text: `${status.tasks.pending} pending tasks`, action: 'tasks' });
-    }
-    if (status?.tasks?.failed && status.tasks.failed > 0) {
-      opps.push({ icon: '⚠️', text: `${status.tasks.failed} failed tasks need attention`, action: 'tasks' });
-    }
-    if (metrics?.tasks?.successRate && metrics.tasks.successRate < 90) {
-      opps.push({ icon: '📊', text: 'Success rate below target', action: 'analytics' });
-    }
-    if (opps.length === 0) {
-      opps.push({ icon: '✨', text: 'All systems running smoothly', action: null });
-    }
-    return opps;
-  };
+  const opieStatus = status?.opie?.status || 'offline';
 
   return (
     <div style={styles.container}>
-      {/* Top Section: Greeting + Status */}
+      <style>{animationCSS}</style>
+      
+      {/* Hero Section */}
       <div style={styles.heroSection}>
-        {/* Greeting */}
+        {/* Left: Greeting */}
         <div style={styles.greetingArea}>
-          <h1 style={styles.greeting}>{greeting}</h1>
+          <div style={styles.greeting}>{greeting}</div>
           <p style={styles.suggestion}>{suggestion}</p>
-          <div style={styles.timeDisplay}>
-            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            {' • '}
-            {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          <div style={styles.timestamp}>
+            <span style={styles.timestampIcon}>📅</span>
+            {currentTime.toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+            <span style={styles.timestampDot}>•</span>
+            {currentTime.toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit' 
+            })}
           </div>
         </div>
 
-        {/* Opie Status Card */}
+        {/* Right: Opie Status Card */}
         <div style={styles.statusCard}>
-          <div style={styles.statusHeader}>
-            <div style={styles.avatarContainer}>
-              <img 
-                src="/opie-avatar.png" 
-                alt="Opie" 
-                style={styles.avatar}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-              <div style={{
-                ...styles.statusDot,
-                background: getStatusColor(),
-                animation: status?.opie?.status === 'thinking' ? 'pulse 1.5s infinite' : 'none',
-              }} />
-            </div>
-            <div style={styles.statusInfo}>
-              <span style={styles.opieLabel}>Opie</span>
-              <span style={{ ...styles.statusText, color: getStatusColor() }}>
-                {getStatusText()}
-              </span>
-            </div>
-          </div>
-          <div style={styles.statusMeta}>
-            {status?.opie?.uptime && (
-              <div style={styles.metaItem}>
-                <span style={styles.metaIcon}>⏱️</span>
-                <span>Uptime: {formatUptime(status.opie.uptime)}</span>
+          <div style={styles.statusCardInner}>
+            <div style={styles.statusHeader}>
+              <StatusOrb status={opieStatus} size={56} />
+              <div style={styles.statusInfo}>
+                <div style={styles.opieName}>
+                  Opie
+                  <span style={styles.modelBadge}>
+                    {status?.model?.split('-').slice(0,2).join('-') || 'claude'}
+                  </span>
+                </div>
+                <div style={{
+                  ...styles.statusText,
+                  color: opieStatus === 'online' ? '#22c55e' : 
+                         opieStatus === 'thinking' ? '#6366f1' : 
+                         opieStatus === 'speaking' ? '#f59e0b' : '#6b7280',
+                }}>
+                  {getStatusText()}
+                </div>
               </div>
-            )}
-            {latency !== null && (
-              <div style={styles.metaItem}>
-                <span style={styles.metaIcon}>📡</span>
-                <span>Latency: {latency}ms</span>
-              </div>
-            )}
+            </div>
+            
+            <div style={styles.statusMeta}>
+              {status?.opie?.uptime && (
+                <div style={styles.metaItem}>
+                  <span style={styles.metaLabel}>Uptime</span>
+                  <span style={styles.metaValue}>{formatUptime(status.opie.uptime)}</span>
+                </div>
+              )}
+              {latency !== null && (
+                <div style={styles.metaItem}>
+                  <span style={styles.metaLabel}>Latency</span>
+                  <span style={styles.metaValue}>{latency}ms</span>
+                </div>
+              )}
+              {status?.context && (
+                <div style={styles.metaItem}>
+                  <span style={styles.metaLabel}>Context</span>
+                  <span style={styles.metaValue}>
+                    {formatNumber(status.context.used)}/{formatNumber(status.context.total)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Connection Indicators */}
+      {/* Connection Status Bar */}
       <div style={styles.connectionBar}>
-        <div style={styles.connectionItem}>
-          <div style={{
-            ...styles.connectionDot,
-            background: status?.gateway?.connected ? '#22c55e' : '#ef4444',
-          }} />
-          <span>Gateway</span>
-        </div>
-        <div style={styles.connectionItem}>
-          <div style={{
-            ...styles.connectionDot,
-            background: status?.voice?.available ? '#22c55e' : '#6b7280',
-          }} />
-          <span>Voice</span>
-        </div>
-        <div style={styles.connectionItem}>
-          <div style={{
-            ...styles.connectionDot,
-            background: status?.api?.healthy ? '#22c55e' : '#ef4444',
-          }} />
-          <span>API</span>
-        </div>
-        <div style={styles.connectionItem}>
-          <div style={{
-            ...styles.connectionDot,
-            background: isOnline ? '#22c55e' : '#ef4444',
-          }} />
-          <span>Network</span>
-        </div>
+        <ConnectionPill label="Gateway" connected={status?.gateway?.connected ?? false} />
+        <ConnectionPill label="Voice" connected={status?.voice?.available ?? false} />
+        <ConnectionPill label="API" connected={status?.api?.healthy ?? false} />
+        <ConnectionPill label="Network" connected={isOnline} />
       </div>
 
-      {/* Key Metrics Grid */}
+      {/* Metrics Grid */}
       <div style={styles.metricsGrid}>
-        <div style={styles.metricCard} onClick={() => onNavigate?.('agents')}>
-          <div style={styles.metricHeader}>
-            <span style={styles.metricIcon}>🤖</span>
-            <span style={styles.metricLabel}>Active Agents</span>
-          </div>
-          <div style={styles.metricValue}>{status?.agents?.active ?? '-'}</div>
-          <div style={styles.metricSub}>
-            {status?.agents?.total ?? 0} total agents
-          </div>
-        </div>
-
-        <div style={styles.metricCard} onClick={() => onNavigate?.('tasks')}>
-          <div style={styles.metricHeader}>
-            <span style={styles.metricIcon}>⚡</span>
-            <span style={styles.metricLabel}>Running Tasks</span>
-          </div>
-          <div style={{ ...styles.metricValue, color: '#f59e0b' }}>
-            {status?.tasks?.running ?? '-'}
-          </div>
-          <div style={styles.metricSub}>
-            {status?.tasks?.completed ?? 0} completed today
-          </div>
-        </div>
-
-        <div style={styles.metricCard} onClick={() => onNavigate?.('analytics')}>
-          <div style={styles.metricHeader}>
-            <span style={styles.metricIcon}>📊</span>
-            <span style={styles.metricLabel}>Sessions Today</span>
-          </div>
-          <div style={{ ...styles.metricValue, color: '#667eea' }}>
-            {metrics?.sessions?.today ?? '-'}
-          </div>
-          <div style={styles.metricSub}>
-            {formatNumber(metrics?.tokens?.today ?? 0)} tokens used
-          </div>
-        </div>
-
-        <div style={styles.metricCard}>
-          <div style={styles.metricHeader}>
-            <span style={styles.metricIcon}>✅</span>
-            <span style={styles.metricLabel}>Success Rate</span>
-          </div>
-          <div style={{ ...styles.metricValue, color: '#22c55e' }}>
-            {metrics?.tasks?.successRate?.toFixed(1) ?? '-'}%
-          </div>
-          <div style={styles.metricSub}>
-            Avg {metrics?.tasks?.avgDuration ?? 0}s per task
-          </div>
-        </div>
+        <MetricCard
+          icon="🤖"
+          label="Active Agents"
+          value={status?.agents?.active ?? 0}
+          subtext={`${status?.agents?.total ?? 0} total agents`}
+          color="#22c55e"
+          onClick={() => onNavigate?.('agents')}
+        />
+        <MetricCard
+          icon="⚡"
+          label="Running Tasks"
+          value={status?.tasks?.running ?? 0}
+          subtext={`${status?.tasks?.completed ?? 0} completed today`}
+          color="#f59e0b"
+          onClick={() => onNavigate?.('tasks')}
+        />
+        <MetricCard
+          icon="💬"
+          label="Sessions Today"
+          value={metrics?.sessions?.today ?? 0}
+          subtext={`${formatNumber(metrics?.tokens?.today ?? 0)} tokens used`}
+          color="#6366f1"
+          onClick={() => onNavigate?.('analytics')}
+        />
+        <MetricCard
+          icon="✅"
+          label="Success Rate"
+          value={`${metrics?.tasks?.successRate?.toFixed(1) ?? '—'}%`}
+          subtext={`Avg ${metrics?.tasks?.avgDuration ?? 0}s per task`}
+          color="#10b981"
+        />
       </div>
 
-      {/* Two Column Layout: Opportunities + Recent Memory */}
+      {/* Two Column Layout */}
       <div style={styles.twoColumnLayout}>
-        {/* Opportunities / Quick Actions */}
+        {/* Suggested Actions */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>
             <span style={styles.sectionIcon}>💡</span>
-            Suggested Actions
+            Quick Actions
           </h3>
-          <div style={styles.opportunitiesList}>
-            {getOpportunities().map((opp, idx) => (
-              <div 
-                key={idx} 
-                style={styles.opportunityItem}
-                onClick={() => opp.action && onNavigate?.(opp.action)}
-              >
-                <span style={styles.oppIcon}>{opp.icon}</span>
-                <span style={styles.oppText}>{opp.text}</span>
-                {opp.action && <span style={styles.oppArrow}>→</span>}
-              </div>
-            ))}
-          </div>
           
-          {/* Quick Action Buttons */}
+          <div style={styles.actionsList}>
+            {status?.tasks?.pending && status.tasks.pending > 0 && (
+              <div style={styles.actionItem} onClick={() => onNavigate?.('tasks')}>
+                <span style={styles.actionIcon}>📋</span>
+                <span style={styles.actionText}>{status.tasks.pending} pending tasks need attention</span>
+                <span style={styles.actionArrow}>→</span>
+              </div>
+            )}
+            {status?.tasks?.failed && status.tasks.failed > 0 && (
+              <div style={styles.actionItem} onClick={() => onNavigate?.('tasks')}>
+                <span style={styles.actionIcon}>⚠️</span>
+                <span style={styles.actionText}>{status.tasks.failed} failed tasks to review</span>
+                <span style={styles.actionArrow}>→</span>
+              </div>
+            )}
+            <div style={styles.actionItem} onClick={() => onNavigate?.('memory')}>
+              <span style={styles.actionIcon}>🧠</span>
+              <span style={styles.actionText}>Browse your memory bank</span>
+              <span style={styles.actionArrow}>→</span>
+            </div>
+          </div>
+
           <div style={styles.quickActions}>
-            <button 
-              style={styles.quickActionBtn}
+            <QuickActionButton
+              icon="🚀"
+              label="Deploy Agent"
+              variant="primary"
               onClick={() => onQuickAction?.('deploy')}
-            >
-              🚀 Deploy Agent
-            </button>
-            <button 
-              style={{ ...styles.quickActionBtn, ...styles.quickActionSecondary }}
+            />
+            <QuickActionButton
+              icon="🎤"
+              label="Voice Chat"
+              variant="secondary"
               onClick={() => onNavigate?.('voice')}
-            >
-              🎤 Voice Chat
-            </button>
+            />
           </div>
         </div>
 
-        {/* Recent Memories */}
+        {/* Recent Memory */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>
             <span style={styles.sectionIcon}>🧠</span>
             Recent Memory
           </h3>
+          
           <div style={styles.memoryList}>
             {memoriesLoading ? (
-              <div style={styles.loadingState}>Loading memories...</div>
+              <div style={styles.loadingState}>
+                <div style={styles.spinner} />
+                <span>Loading memories...</span>
+              </div>
             ) : memories.length === 0 ? (
               <div style={styles.emptyState}>No recent memories</div>
             ) : (
@@ -306,6 +446,7 @@ export default function SmartDashboardHome({
               ))
             )}
           </div>
+          
           <button 
             style={styles.viewAllBtn}
             onClick={() => onNavigate?.('memory')}
@@ -315,57 +456,62 @@ export default function SmartDashboardHome({
         </div>
       </div>
 
-      {/* Agent Activity Summary */}
-      <div style={styles.activitySummary}>
+      {/* Performance Summary */}
+      <div style={styles.performanceSection}>
         <h3 style={styles.sectionTitle}>
           <span style={styles.sectionIcon}>📈</span>
-          Agent Performance
+          Performance Overview
         </h3>
         <div style={styles.performanceGrid}>
           <div style={styles.perfItem}>
             <span style={styles.perfLabel}>Most Active</span>
-            <span style={styles.perfValue}>{metrics?.agents?.mostActive ?? 'Code Agent'}</span>
+            <span style={styles.perfValue}>{metrics?.agents?.mostActive ?? 'Main Agent'}</span>
           </div>
           <div style={styles.perfItem}>
             <span style={styles.perfLabel}>Tasks/Agent</span>
-            <span style={styles.perfValue}>{metrics?.agents?.tasksPerAgent ?? 4}</span>
+            <span style={styles.perfValue}>{metrics?.agents?.tasksPerAgent ?? '—'}</span>
           </div>
           <div style={styles.perfItem}>
             <span style={styles.perfLabel}>Efficiency</span>
-            <span style={styles.perfValue}>{metrics?.agents?.efficiency?.toFixed(0) ?? 92}%</span>
+            <span style={styles.perfValue}>{metrics?.agents?.efficiency?.toFixed(0) ?? '—'}%</span>
           </div>
           <div style={styles.perfItem}>
             <span style={styles.perfLabel}>Conversations</span>
-            <span style={styles.perfValue}>{metrics?.conversations?.today ?? 8}</span>
+            <span style={styles.perfValue}>{metrics?.conversations?.today ?? 0}</span>
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes glow {
-          0%, 100% { box-shadow: 0 0 10px rgba(102, 126, 234, 0.3); }
-          50% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.5); }
-        }
-      `}</style>
     </div>
   );
 }
+
+// Animation CSS
+const animationCSS = `
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+  @keyframes glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.5); }
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
-    animation: 'slideUp 0.3s ease',
+    gap: '24px',
+    animation: 'fadeInUp 0.4s ease',
   },
 
   // Hero Section
@@ -373,231 +519,189 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: '24px',
+    gap: '32px',
     flexWrap: 'wrap',
   },
   greetingArea: {
     flex: 1,
-    minWidth: '280px',
+    minWidth: '300px',
   },
   greeting: {
     color: '#fff',
-    fontSize: 'clamp(1.8rem, 4vw, 2.5rem)',
+    fontSize: 'clamp(2rem, 5vw, 2.75rem)',
     fontWeight: 700,
-    margin: '0 0 8px 0',
-    lineHeight: 1.2,
+    margin: '0 0 12px 0',
+    lineHeight: 1.1,
+    letterSpacing: '-0.03em',
+    background: 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
   },
   suggestion: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: '1rem',
-    margin: '0 0 12px 0',
+    fontSize: '1.1rem',
+    margin: '0 0 16px 0',
     lineHeight: 1.5,
+    maxWidth: '500px',
   },
-  timeDisplay: {
+  timestamp: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
     color: 'rgba(255,255,255,0.4)',
     fontSize: '0.9rem',
+  },
+  timestampIcon: {
+    fontSize: '14px',
+  },
+  timestampDot: {
+    opacity: 0.5,
   },
 
   // Status Card
   statusCard: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid rgba(255,255,255,0.08)',
-    minWidth: '220px',
+    background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.05) 100%)',
+    borderRadius: '20px',
+    padding: '2px',
+    minWidth: '280px',
+  },
+  statusCardInner: {
+    background: 'rgba(10,10,15,0.9)',
+    borderRadius: '18px',
+    padding: '24px',
+    backdropFilter: 'blur(20px)',
   },
   statusHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
-    marginBottom: '12px',
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatar: {
-    width: '56px',
-    height: '56px',
-    borderRadius: '50%',
-    objectFit: 'cover',
-    border: '2px solid rgba(102, 126, 234, 0.4)',
-  },
-  statusDot: {
-    position: 'absolute',
-    bottom: '2px',
-    right: '2px',
-    width: '14px',
-    height: '14px',
-    borderRadius: '50%',
-    border: '2px solid #1a1a2e',
+    gap: '16px',
+    marginBottom: '20px',
   },
   statusInfo: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
+    gap: '4px',
   },
-  opieLabel: {
+  opieName: {
     color: '#fff',
-    fontSize: '1.1rem',
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  modelBadge: {
+    fontSize: '0.65rem',
+    padding: '4px 8px',
+    background: 'rgba(99,102,241,0.2)',
+    borderRadius: '6px',
+    color: '#818cf8',
     fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
   statusText: {
-    fontSize: '0.85rem',
+    fontSize: '0.9rem',
     fontWeight: 500,
   },
   statusMeta: {
     display: 'flex',
-    gap: '16px',
+    gap: '20px',
     flexWrap: 'wrap',
   },
   metaItem: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '0.8rem',
-    color: 'rgba(255,255,255,0.5)',
+    flexDirection: 'column',
+    gap: '2px',
   },
-  metaIcon: {
-    fontSize: '12px',
+  metaLabel: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: '0.7rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  metaValue: {
+    color: '#fff',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
   },
 
   // Connection Bar
   connectionBar: {
     display: 'flex',
-    gap: '24px',
-    padding: '12px 20px',
-    background: 'rgba(255,255,255,0.02)',
-    borderRadius: '12px',
+    gap: '12px',
     flexWrap: 'wrap',
-  },
-  connectionItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '0.85rem',
-    color: 'rgba(255,255,255,0.6)',
-  },
-  connectionDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
   },
 
   // Metrics Grid
   metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '16px',
-  },
-  metricCard: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '14px',
-    padding: '18px',
-    border: '1px solid rgba(255,255,255,0.06)',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  metricHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '10px',
-  },
-  metricIcon: {
-    fontSize: '18px',
-  },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-  },
-  metricValue: {
-    color: '#fff',
-    fontSize: '2rem',
-    fontWeight: 700,
-    lineHeight: 1,
-    marginBottom: '6px',
-  },
-  metricSub: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: '0.75rem',
   },
 
   // Two Column Layout
   twoColumnLayout: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
     gap: '20px',
   },
   section: {
-    background: 'rgba(255,255,255,0.02)',
-    borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid rgba(255,255,255,0.05)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+    borderRadius: '20px',
+    padding: '24px',
+    border: '1px solid rgba(255,255,255,0.06)',
   },
   sectionTitle: {
     color: '#fff',
     fontSize: '1rem',
     fontWeight: 600,
-    margin: '0 0 16px 0',
+    margin: '0 0 20px 0',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
   },
   sectionIcon: {
     fontSize: '18px',
   },
 
-  // Opportunities
-  opportunitiesList: {
+  // Actions
+  actionsList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
-    marginBottom: '16px',
+    marginBottom: '20px',
   },
-  opportunityItem: {
+  actionItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '12px 14px',
+    padding: '14px 16px',
     background: 'rgba(255,255,255,0.03)',
-    borderRadius: '10px',
+    borderRadius: '12px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    border: '1px solid transparent',
   },
-  oppIcon: {
+  actionIcon: {
     fontSize: '16px',
   },
-  oppText: {
+  actionText: {
     flex: 1,
     color: 'rgba(255,255,255,0.8)',
     fontSize: '0.9rem',
   },
-  oppArrow: {
-    color: '#667eea',
+  actionArrow: {
+    color: '#6366f1',
     fontSize: '1rem',
+    fontWeight: 500,
   },
   quickActions: {
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
     flexWrap: 'wrap',
-  },
-  quickActionBtn: {
-    flex: 1,
-    minWidth: '120px',
-    padding: '12px 16px',
-    background: '#667eea',
-    border: 'none',
-    borderRadius: '10px',
-    color: '#fff',
-    fontSize: '0.9rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  quickActionSecondary: {
-    background: 'rgba(102,126,234,0.15)',
-    color: '#667eea',
   },
 
   // Memory List
@@ -605,15 +709,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    marginBottom: '12px',
+    marginBottom: '16px',
+    maxHeight: '280px',
+    overflowY: 'auto',
   },
   memoryItem: {
     display: 'flex',
     alignItems: 'flex-start',
     gap: '12px',
-    padding: '10px 12px',
+    padding: '12px 14px',
     background: 'rgba(255,255,255,0.02)',
-    borderRadius: '10px',
+    borderRadius: '12px',
+    transition: 'all 0.2s ease',
   },
   memoryIcon: {
     fontSize: '16px',
@@ -625,7 +732,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   memoryTitle: {
     color: '#fff',
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     fontWeight: 500,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -637,6 +744,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    marginTop: '2px',
   },
   memoryTime: {
     color: 'rgba(255,255,255,0.3)',
@@ -645,32 +753,45 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   viewAllBtn: {
     width: '100%',
-    padding: '10px',
+    padding: '12px',
     background: 'transparent',
     border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '8px',
-    color: '#667eea',
-    fontSize: '0.85rem',
+    borderRadius: '10px',
+    color: '#6366f1',
+    fontSize: '0.875rem',
+    fontWeight: 500,
     cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   loadingState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
     color: 'rgba(255,255,255,0.4)',
-    fontSize: '0.85rem',
-    textAlign: 'center',
-    padding: '20px',
+    fontSize: '0.875rem',
+    padding: '40px 20px',
+  },
+  spinner: {
+    width: '20px',
+    height: '20px',
+    border: '2px solid rgba(255,255,255,0.1)',
+    borderTopColor: '#6366f1',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
   emptyState: {
     color: 'rgba(255,255,255,0.4)',
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     textAlign: 'center',
-    padding: '20px',
+    padding: '40px 20px',
   },
 
-  // Activity Summary
-  activitySummary: {
-    background: 'rgba(255,255,255,0.02)',
-    borderRadius: '16px',
-    padding: '20px',
+  // Performance Section
+  performanceSection: {
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
+    borderRadius: '20px',
+    padding: '24px',
     border: '1px solid rgba(255,255,255,0.05)',
   },
   performanceGrid: {
@@ -680,19 +801,22 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   perfItem: {
     textAlign: 'center',
-    padding: '12px',
+    padding: '16px',
     background: 'rgba(255,255,255,0.02)',
-    borderRadius: '10px',
+    borderRadius: '12px',
   },
   perfLabel: {
     display: 'block',
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.4)',
     fontSize: '0.75rem',
-    marginBottom: '6px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '8px',
   },
   perfValue: {
     color: '#fff',
-    fontSize: '1.1rem',
-    fontWeight: 600,
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    fontVariantNumeric: 'tabular-nums',
   },
 };

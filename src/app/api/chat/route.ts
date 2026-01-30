@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const GATEWAY_URL = process.env.OPIE_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
-const GATEWAY_TOKEN = process.env.OPIE_GATEWAY_TOKEN;
+import { GATEWAY_URL, GATEWAY_TOKEN } from '@/lib/gateway';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -13,15 +11,15 @@ const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 User said: `;
 
 export async function POST(req: NextRequest) {
-  const { message, sessionId } = await req.json();
+  const { message, sessionId, isVoice = true } = await req.json();
   
   if (!message) {
     return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
   }
 
   if (!GATEWAY_TOKEN) {
-    console.error('OPIE_GATEWAY_TOKEN not set');
-    return NextResponse.json({ reply: 'Server configuration error' }, { status: 500 });
+    console.error('MOLTBOT_GATEWAY_TOKEN not set');
+    return NextResponse.json({ reply: 'Server configuration error - no gateway token' }, { status: 500 });
   }
 
   try {
@@ -31,11 +29,11 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
         'x-moltbot-agent-id': 'main',
-        'x-moltbot-session-key': 'agent:main:voice'  // Use dedicated voice session with full context
+        'x-moltbot-session-key': sessionId || 'agent:main:voice'
       },
       body: JSON.stringify({
         model: 'moltbot:main',
-        input: VOICE_INSTRUCTIONS + message,
+        input: isVoice ? VOICE_INSTRUCTIONS + message : message,
         stream: false
       }),
     });
@@ -48,11 +46,22 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     
-    const assistantMessage = data.output
-      ?.find((item: any) => item.type === 'message' && item.role === 'assistant')
-      ?.content?.[0]?.text;
+    // Handle different response formats
+    let reply = 'No response';
     
-    const reply = assistantMessage || data.text || data.reply || 'No response';
+    if (data.output) {
+      const assistantMessage = data.output
+        .find((item: { type?: string; role?: string }) => item.type === 'message' && item.role === 'assistant');
+      if (assistantMessage?.content?.[0]?.text) {
+        reply = assistantMessage.content[0].text;
+      }
+    } else if (data.text) {
+      reply = data.text;
+    } else if (data.reply) {
+      reply = data.reply;
+    } else if (data.message) {
+      reply = data.message;
+    }
     
     return NextResponse.json({ reply });
 

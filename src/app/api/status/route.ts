@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
+import { gatewayFetch, gatewayHealth, GATEWAY_URL } from '@/lib/gateway';
 
-const GATEWAY_URL = process.env.OPIE_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'http://localhost:18100';
-const GATEWAY_TOKEN = process.env.OPIE_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || '';
-
-// Track server start time for uptime
 const SERVER_START = Date.now();
 
 interface SystemStatus {
@@ -16,6 +13,7 @@ interface SystemStatus {
     connected: boolean;
     latency: number;
     lastPing: string;
+    url: string;
   };
   voice: {
     available: boolean;
@@ -36,89 +34,49 @@ interface SystemStatus {
     failed: number;
     pending: number;
   };
-}
-
-async function checkGateway(): Promise<{ connected: boolean; latency: number }> {
-  const start = Date.now();
-  try {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-    };
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const res = await fetch(`${GATEWAY_URL}/v1/health`, {
-      headers,
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    const latency = Date.now() - start;
-    
-    return { connected: res.ok, latency };
-  } catch (error) {
-    return { connected: false, latency: Date.now() - start };
-  }
+  model?: string;
+  context?: {
+    used: number;
+    total: number;
+  };
 }
 
 async function getAgentSessions(): Promise<{ active: number; idle: number; total: number }> {
   try {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-    };
-    
-    const res = await fetch(`${GATEWAY_URL}/v1/sessions`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch sessions');
-    
-    const data = await res.json();
+    const data = await gatewayFetch<{ sessions?: Array<{ status?: string }> }>('/sessions');
     const sessions = data.sessions || [];
-    
-    const active = sessions.filter((s: any) => s.status === 'running').length;
-    const idle = sessions.filter((s: any) => s.status === 'idle' || s.status === 'complete').length;
-    
+    const active = sessions.filter((s) => s.status === 'running').length;
+    const idle = sessions.filter((s) => s.status === 'idle' || s.status === 'complete').length;
     return { active, idle, total: sessions.length };
   } catch {
-    // Demo data
-    return { active: 2, idle: 3, total: 5 };
+    return { active: 0, idle: 0, total: 0 };
   }
 }
 
-async function getTaskStats(): Promise<{ running: number; completed: number; failed: number; pending: number }> {
+async function getGatewayStatus(): Promise<{ model?: string; contextUsed?: number; contextTotal?: number }> {
   try {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-    };
-    
-    const res = await fetch(`${GATEWAY_URL}/v1/tasks`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch tasks');
-    
-    const data = await res.json();
-    const tasks = data.tasks || [];
-    
+    const data = await gatewayFetch<{ 
+      model?: string;
+      context_window?: number;
+      context_used?: number;
+    }>('/status');
     return {
-      running: tasks.filter((t: any) => t.status === 'running').length,
-      completed: tasks.filter((t: any) => t.status === 'complete' || t.status === 'completed').length,
-      failed: tasks.filter((t: any) => t.status === 'failed' || t.status === 'error').length,
-      pending: tasks.filter((t: any) => t.status === 'pending' || t.status === 'queued').length,
+      model: data.model,
+      contextUsed: data.context_used,
+      contextTotal: data.context_window,
     };
   } catch {
-    // Demo data
-    return { running: 3, completed: 47, failed: 2, pending: 5 };
+    return {};
   }
 }
 
 export async function GET() {
   const requestStart = Date.now();
-  
-  // Run checks in parallel
-  const [gatewayCheck, agentStats, taskStats] = await Promise.all([
-    checkGateway(),
+
+  const [gatewayCheck, agentStats, gatewayStatus] = await Promise.all([
+    gatewayHealth(),
     getAgentSessions(),
-    getTaskStats(),
+    getGatewayStatus(),
   ]);
 
   const responseTime = Date.now() - requestStart;
@@ -134,9 +92,10 @@ export async function GET() {
       connected: gatewayCheck.connected,
       latency: gatewayCheck.latency,
       lastPing: new Date().toISOString(),
+      url: GATEWAY_URL,
     },
     voice: {
-      available: true, // Assume TTS is available
+      available: true,
       status: 'ready',
     },
     api: {
@@ -144,13 +103,26 @@ export async function GET() {
       responseTime,
     },
     agents: agentStats,
-    tasks: taskStats,
+    tasks: {
+      running: agentStats.active,
+      completed: 0,
+      failed: 0,
+      pending: 0,
+    },
+    model: gatewayStatus.model,
+    context: gatewayStatus.contextUsed && gatewayStatus.contextTotal ? {
+      used: gatewayStatus.contextUsed,
+      total: gatewayStatus.contextTotal,
+    } : undefined,
   };
 
-  return NextResponse.json(status);
+  return NextResponse.json(status, {
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    },
+  });
 }
 
-// HEAD request for quick health check
 export async function HEAD() {
   return new Response(null, { status: 200 });
 }

@@ -15,6 +15,7 @@ export interface SystemStatus {
     connected: boolean;
     latency: number; // ms
     lastPing: string;
+    url?: string;
   };
   voice: {
     available: boolean;
@@ -34,6 +35,11 @@ export interface SystemStatus {
     completed: number;
     failed: number;
     pending: number;
+  };
+  model?: string;
+  context?: {
+    used: number;
+    total: number;
   };
 }
 

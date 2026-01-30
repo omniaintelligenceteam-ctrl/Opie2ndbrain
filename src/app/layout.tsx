@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import GlobalStyles from '../components/GlobalStyles'
-import '../styles/premium.css'
 
 export const metadata: Metadata = {
   title: 'Opie 2nd Brain',
