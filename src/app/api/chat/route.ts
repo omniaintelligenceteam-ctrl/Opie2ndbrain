@@ -1,24 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const GATEWAY_URL = process.env.OPIE_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
+const GATEWAY_TOKEN = process.env.OPIE_GATEWAY_TOKEN;
+
 export async function POST(req: NextRequest) {
   const { message } = await req.json();
   
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + process.env.GROQ_API_KEY,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: 'You are Opie, a helpful AI assistant. Be concise and friendly. 2-3 sentences max.' },
-        { role: 'user', content: message }
-      ],
-      max_tokens: 150,
-    }),
-  });
+  if (!message) {
+    return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
+  }
 
-  const data = await res.json();
-  return NextResponse.json({ reply: data.choices?.[0]?.message?.content || 'No response' });
+  if (!GATEWAY_TOKEN) {
+    console.error('OPIE_GATEWAY_TOKEN not set');
+    return NextResponse.json({ reply: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    const res = await fetch(`${GATEWAY_URL}/v1/responses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        'x-moltbot-agent-id': 'main'
+      },
+      body: JSON.stringify({
+        model: 'moltbot:main',
+        input: message,
+        stream: false
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Gateway error:', res.status, errorText);
+      return NextResponse.json({ reply: 'Sorry, hit an error. Try again?' }, { status: 500 });
+    }
+
+    const data = await res.json();
+    
+    const assistantMessage = data.output
+      ?.find((item: any) => item.type === 'message' && item.role === 'assistant')
+      ?.content?.[0]?.text;
+    
+    const reply = assistantMessage || data.text || data.reply || 'No response';
+    
+    return NextResponse.json({ reply });
+
+  } catch (error) {
+    console.error('Fetch error:', error);
+    return NextResponse.json({ reply: 'Connection error. Try again?' }, { status: 500 });
+  }
 }
