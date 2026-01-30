@@ -26,6 +26,7 @@ import SmartDashboardHome from './SmartDashboardHome';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast } from '../hooks/useRealTimeData';
+import { useActiveAgents } from '../hooks/useAgentSessions';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -105,7 +106,12 @@ export default function OpieKanban(): React.ReactElement {
   const isMobile = responsive.isMobile;
   const isTablet = responsive.isTablet;
   const { triggerHaptic } = useHaptic();
-  const [activeAgents, setActiveAgents] = useState<string[]>(['content', 'outreach']);
+  // Use real-time agent data from gateway
+  const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(5000);
+  // Local state for agents deployed from this UI (merged with real data)
+  const [localActiveAgents, setLocalActiveAgents] = useState<string[]>([]);
+  // Merge real and local active agents (deduplicated)
+  const activeAgents = Array.from(new Set([...realActiveAgents, ...localActiveAgents]));
   const [tasks, setTasks] = useState<Task[]>([
     {
       id: '1',
@@ -367,7 +373,7 @@ export default function OpieKanban(): React.ReactElement {
   };
 
   const handleDeployAgent = (agentId: string, taskLabel: string) => {
-    setActiveAgents(prev => prev.includes(agentId) ? prev : [...prev, agentId]);
+    setLocalActiveAgents(prev => prev.includes(agentId) ? prev : [...prev, agentId]);
     
     const agentInfo: { [key: string]: { name: string; emoji: string } } = {
       research: { name: 'Research Agent', emoji: '🔍' },
@@ -735,14 +741,14 @@ export default function OpieKanban(): React.ReactElement {
                   triggerHaptic('selection');
                 } : undefined}
               />
-              {!isMobile && <OrchestrationStatus activeAgents={activeAgents} />}
+              {!isMobile && <OrchestrationStatus />}
             </div>
             
             {/* Mobile: Show orchestration status in collapsible */}
             {isMobile && (
               <div style={{ marginTop: '16px' }}>
-                <CollapsibleSection title="System Status" icon="📡" badge={activeAgents.length}>
-                  <OrchestrationStatus activeAgents={activeAgents} />
+                <CollapsibleSection title="System Status" icon="📡" badge={realActiveCount}>
+                  <OrchestrationStatus />
                 </CollapsibleSection>
               </div>
             )}
