@@ -5,7 +5,7 @@ import SkillsPanel from './SkillsPanel';
 import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
 import OrchestrationStatus from './OrchestrationStatus';
 
-// Generate or retrieve persistent session ID
+// Persistence helpers
 function getSessionId(): string {
   if (typeof window === 'undefined') return 'server';
   let id = localStorage.getItem('opie-session-id');
@@ -16,32 +16,46 @@ function getSessionId(): string {
   return id;
 }
 
-// Get/set persistent tab
-function getSavedTab(): string {
+function getSavedView(): string {
   if (typeof window === 'undefined') return 'dashboard';
-  return localStorage.getItem('opie-active-tab') || 'dashboard';
+  return localStorage.getItem('opie-active-view') || 'dashboard';
 }
 
-function saveTab(tab: string): void {
+function saveView(view: string): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('opie-active-tab', tab);
+    localStorage.setItem('opie-active-view', view);
   }
 }
 
-type TabId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'voice';
-
-interface Tab {
-  id: TabId;
-  label: string;
-  emoji: string;
+function getSidebarState(): boolean {
+  if (typeof window === 'undefined') return true;
+  const saved = localStorage.getItem('opie-sidebar-expanded');
+  return saved === null ? true : saved === 'true';
 }
 
-const TABS: Tab[] = [
-  { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
-  { id: 'agents', label: 'Agents', emoji: '🤖' },
-  { id: 'skills', label: 'Skills', emoji: '⚡' },
-  { id: 'tasks', label: 'Tasks', emoji: '📋' },
-  { id: 'voice', label: 'Voice', emoji: '🎤' },
+function saveSidebarState(expanded: boolean): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('opie-sidebar-expanded', String(expanded));
+  }
+}
+
+type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'voice' | 'memory' | 'settings';
+
+interface NavItem {
+  id: ViewId;
+  label: string;
+  icon: string;
+  showCount?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
+  { id: 'skills', label: 'Skills', icon: '⚡' },
+  { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
+  { id: 'voice', label: 'Voice', icon: '🎤' },
+  { id: 'memory', label: 'Memory', icon: '🧠' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function OpieKanban(): React.ReactElement {
@@ -52,7 +66,10 @@ export default function OpieKanban(): React.ReactElement {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeAgents, setActiveAgents] = useState<string[]>(['content', 'outreach']);
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -81,15 +98,27 @@ export default function OpieKanban(): React.ReactElement {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
 
-  // Load saved tab on mount
+  // Load saved state on mount
   useEffect(() => {
-    setActiveTab(getSavedTab() as TabId);
+    setActiveView(getSavedView() as ViewId);
+    setSidebarExpanded(getSidebarState());
+    
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Handle tab change with persistence
-  const handleTabChange = (tab: TabId) => {
-    setActiveTab(tab);
-    saveTab(tab);
+  const handleViewChange = (view: ViewId) => {
+    setActiveView(view);
+    saveView(view);
+    if (isMobile) setMobileMenuOpen(false);
+  };
+
+  const toggleSidebar = () => {
+    const newState = !sidebarExpanded;
+    setSidebarExpanded(newState);
+    saveSidebarState(newState);
   };
 
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
@@ -223,9 +252,7 @@ export default function OpieKanban(): React.ReactElement {
     };
 
     setTasks(prev => [newTask, ...prev]);
-    
-    // Switch to tasks tab to show the new task
-    handleTabChange('tasks');
+    handleViewChange('tasks');
   };
 
   const columns = [
@@ -236,64 +263,164 @@ export default function OpieKanban(): React.ReactElement {
 
   const runningTasksCount = tasks.filter(t => t.status === 'running').length;
 
+  const getCount = (itemId: ViewId): number | null => {
+    if (itemId === 'agents') return activeAgents.length;
+    if (itemId === 'tasks') return runningTasksCount;
+    return null;
+  };
+
+  // Sidebar Component
+  const Sidebar = () => (
+    <aside style={{
+      ...styles.sidebar,
+      width: sidebarExpanded ? '240px' : '72px',
+      ...(isMobile ? {
+        position: 'fixed',
+        left: mobileMenuOpen ? 0 : '-100%',
+        width: '280px',
+        zIndex: 1000,
+      } : {}),
+    }}>
+      {/* Logo/Brand */}
+      <div style={styles.sidebarHeader}>
+        <div style={styles.logoContainer}>
+          <div style={styles.logo}>⚡</div>
+          {sidebarExpanded && <span style={styles.brandName}>Opie</span>}
+        </div>
+        {!isMobile && (
+          <button onClick={toggleSidebar} style={styles.collapseBtn}>
+            {sidebarExpanded ? '◀' : '▶'}
+          </button>
+        )}
+      </div>
+
+      {/* Status */}
+      {sidebarExpanded && (
+        <div style={styles.statusBar}>
+          <div style={{
+            ...styles.statusDot,
+            background: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e',
+          }} />
+          <span style={styles.statusText}>
+            {isSpeaking ? 'Speaking' : isLoading ? 'Thinking' : 'Online'}
+          </span>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav style={styles.nav}>
+        {NAV_ITEMS.map(item => {
+          const count = getCount(item.id);
+          const isActive = activeView === item.id;
+          
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleViewChange(item.id)}
+              style={{
+                ...styles.navItem,
+                ...(isActive ? styles.navItemActive : {}),
+                justifyContent: sidebarExpanded ? 'flex-start' : 'center',
+              }}
+              title={!sidebarExpanded ? item.label : undefined}
+            >
+              <span style={styles.navIcon}>{item.icon}</span>
+              {sidebarExpanded && (
+                <>
+                  <span style={styles.navLabel}>{item.label}</span>
+                  {count !== null && count > 0 && (
+                    <span style={{
+                      ...styles.navBadge,
+                      background: item.id === 'tasks' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
+                      color: item.id === 'tasks' ? '#f59e0b' : '#22c55e',
+                    }}>
+                      {count}
+                    </span>
+                  )}
+                </>
+              )}
+              {!sidebarExpanded && count !== null && count > 0 && (
+                <span style={styles.navBadgeCollapsed}>{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Quick Stats */}
+      {sidebarExpanded && (
+        <div style={styles.quickStats}>
+          <div style={styles.statRow}>
+            <span style={styles.statLabel}>Active Agents</span>
+            <span style={{ ...styles.statValue, color: '#22c55e' }}>{activeAgents.length}</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={styles.statLabel}>Running Tasks</span>
+            <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={styles.statLabel}>Total Skills</span>
+            <span style={{ ...styles.statValue, color: '#667eea' }}>25</span>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={styles.sidebarFooter}>
+        {sidebarExpanded ? (
+          <span style={styles.footerText}>Omnia Intelligence</span>
+        ) : (
+          <span style={styles.footerIcon}>🌟</span>
+        )}
+      </div>
+    </aside>
+  );
+
+  // Mobile Header
+  const MobileHeader = () => (
+    <div style={styles.mobileHeader}>
+      <button onClick={() => setMobileMenuOpen(true)} style={styles.hamburger}>
+        ☰
+      </button>
+      <div style={styles.mobileTitle}>
+        <span style={styles.mobileLogo}>⚡</span>
+        <span>Opie</span>
+      </div>
+      <div style={{
+        ...styles.mobileStatus,
+        background: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e',
+      }} />
+    </div>
+  );
+
+  // Mobile Overlay
+  const MobileOverlay = () => (
+    mobileMenuOpen ? (
+      <div style={styles.mobileOverlay} onClick={() => setMobileMenuOpen(false)} />
+    ) : null
+  );
+
   return (
     <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.logo}>⚡️</div>
-          <div>
-            <h1 style={styles.title}>Opie Command Center</h1>
-            <span style={{ 
-              color: isSpeaking ? '#f59e0b' : isLoading ? '#667eea' : '#22c55e', 
-              fontSize: '0.8rem' 
-            }}>
-              {isSpeaking ? '● Speaking...' : isLoading ? '● Thinking...' : '● Online'}
-            </span>
-          </div>
-        </div>
-
-        {/* Quick Stats */}
-        <div style={styles.quickStats}>
-          <div style={styles.statItem}>
-            <span style={styles.statValue}>{activeAgents.length}</span>
-            <span style={styles.statLabel}>Active</span>
-          </div>
-          <div style={styles.statDivider} />
-          <div style={styles.statItem}>
-            <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
-            <span style={styles.statLabel}>Running</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Bar */}
-      <div style={styles.tabBar}>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => handleTabChange(tab.id)}
-            style={{
-              ...styles.tab,
-              ...(activeTab === tab.id ? styles.tabActive : {}),
-            }}
-          >
-            <span style={styles.tabEmoji}>{tab.emoji}</span>
-            <span style={styles.tabLabel}>{tab.label}</span>
-            {tab.id === 'tasks' && runningTasksCount > 0 && (
-              <span style={styles.tabBadge}>{runningTasksCount}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      <div style={styles.content}>
-        {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
-          <div style={styles.dashboardTab}>
+      {isMobile && <MobileHeader />}
+      {isMobile && <MobileOverlay />}
+      <Sidebar />
+      
+      {/* Main Content */}
+      <main style={{
+        ...styles.main,
+        marginLeft: isMobile ? 0 : (sidebarExpanded ? '240px' : '72px'),
+        paddingTop: isMobile ? '60px' : 0,
+      }}>
+        {/* Dashboard View */}
+        {activeView === 'dashboard' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Dashboard</h1>
+              <p style={styles.viewSubtitle}>Overview of your agent army operations</p>
+            </div>
+            
             <div style={styles.dashboardGrid}>
-              {/* Left Column - Kanban */}
               <div style={styles.kanbanSection}>
                 <h3 style={styles.sectionTitle}>📋 Project Board</h3>
                 <div style={styles.kanbanGrid}>
@@ -313,17 +440,15 @@ export default function OpieKanban(): React.ReactElement {
                 </div>
               </div>
 
-              {/* Right Column - Orchestration */}
               <div style={styles.orchestrationSection}>
                 <OrchestrationStatus activeAgents={activeAgents} />
               </div>
             </div>
 
-            {/* Recent Activity */}
             <div style={styles.recentActivity}>
               <h3 style={styles.sectionTitle}>⚡ Recent Activity</h3>
               <div style={styles.activityList}>
-                {tasks.slice(0, 3).map(task => (
+                {tasks.slice(0, 4).map(task => (
                   <div key={task.id} style={styles.activityItem}>
                     <span style={styles.activityEmoji}>{task.agentEmoji}</span>
                     <span style={styles.activityText}>{task.label}</span>
@@ -340,44 +465,51 @@ export default function OpieKanban(): React.ReactElement {
           </div>
         )}
 
-        {/* Agents Tab */}
-        {activeTab === 'agents' && (
-          <div style={styles.tabPane}>
+        {/* Agents View */}
+        {activeView === 'agents' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Agent Army</h1>
+              <p style={styles.viewSubtitle}>Deploy and manage your AI agents</p>
+            </div>
             <AgentsPanel onDeploy={handleDeployAgent} activeAgents={activeAgents} />
           </div>
         )}
 
-        {/* Skills Tab */}
-        {activeTab === 'skills' && (
-          <div style={styles.tabPane}>
+        {/* Skills View */}
+        {activeView === 'skills' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Skill Catalog</h1>
+              <p style={styles.viewSubtitle}>Browse available capabilities</p>
+            </div>
             <SkillsPanel />
           </div>
         )}
 
-        {/* Tasks Tab */}
-        {activeTab === 'tasks' && (
-          <div style={styles.tasksTab}>
+        {/* Tasks View */}
+        {activeView === 'tasks' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Active Tasks</h1>
+              <p style={styles.viewSubtitle}>Monitor running operations</p>
+            </div>
             <div style={styles.tasksGrid}>
-              <div style={styles.tasksMain}>
-                <ActiveTasksPanel tasks={tasks} />
-              </div>
-              <div style={styles.tasksAside}>
-                <OrchestrationStatus activeAgents={activeAgents} />
-              </div>
+              <ActiveTasksPanel tasks={tasks} />
+              <OrchestrationStatus activeAgents={activeAgents} />
             </div>
           </div>
         )}
 
-        {/* Voice Tab */}
-        {activeTab === 'voice' && (
-          <div style={styles.voiceTab}>
-            {/* Chat Messages */}
+        {/* Voice View */}
+        {activeView === 'voice' && (
+          <div style={styles.voiceContainer}>
             <div style={styles.chatMessages}>
               {messages.length === 0 && (
                 <div style={styles.emptyChat}>
                   <div style={styles.emptyChatIcon}>🎤</div>
                   <h3 style={styles.emptyChatTitle}>Voice Chat with Opie</h3>
-                  <p style={styles.emptyChatText}>Turn on the mic or type below to start a conversation</p>
+                  <p style={styles.emptyChatText}>Turn on the mic or type below to start</p>
                 </div>
               )}
               {messages.map((m, i) => (
@@ -394,12 +526,9 @@ export default function OpieKanban(): React.ReactElement {
             </div>
             
             {transcript && (
-              <div style={styles.transcript}>
-                🎙️ Hearing: {transcript}
-              </div>
+              <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
             )}
             
-            {/* Voice Input */}
             <div style={styles.voiceInput}>
               <button 
                 onClick={toggleMic} 
@@ -427,9 +556,102 @@ export default function OpieKanban(): React.ReactElement {
             </div>
           </div>
         )}
-      </div>
 
-      {/* CSS Animations */}
+        {/* Memory View */}
+        {activeView === 'memory' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Memory Bank</h1>
+              <p style={styles.viewSubtitle}>Knowledge base and context storage</p>
+            </div>
+            <div style={styles.comingSoon}>
+              <span style={styles.comingSoonIcon}>🧠</span>
+              <h3>Memory System</h3>
+              <p>Long-term memory, context retrieval, and knowledge management coming soon.</p>
+              <div style={styles.memoryPreview}>
+                <div style={styles.memoryCard}>
+                  <span>📚</span>
+                  <div>
+                    <strong>Documents</strong>
+                    <span>Stored knowledge files</span>
+                  </div>
+                </div>
+                <div style={styles.memoryCard}>
+                  <span>💬</span>
+                  <div>
+                    <strong>Conversations</strong>
+                    <span>Chat history & context</span>
+                  </div>
+                </div>
+                <div style={styles.memoryCard}>
+                  <span>🔗</span>
+                  <div>
+                    <strong>Connections</strong>
+                    <span>Knowledge graph</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settings View */}
+        {activeView === 'settings' && (
+          <div style={styles.viewContainer}>
+            <div style={styles.viewHeader}>
+              <h1 style={styles.viewTitle}>Settings</h1>
+              <p style={styles.viewSubtitle}>Configure your Opie instance</p>
+            </div>
+            <div style={styles.settingsGrid}>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>🔊 Voice Settings</h4>
+                <div style={styles.settingItem}>
+                  <span>TTS Voice</span>
+                  <span style={styles.settingValue}>Default</span>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Speech Speed</span>
+                  <span style={styles.settingValue}>1.0x</span>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>🤖 Agent Settings</h4>
+                <div style={styles.settingItem}>
+                  <span>Auto-deploy</span>
+                  <span style={styles.settingValue}>Off</span>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Max concurrent</span>
+                  <span style={styles.settingValue}>5</span>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>🎨 Appearance</h4>
+                <div style={styles.settingItem}>
+                  <span>Theme</span>
+                  <span style={styles.settingValue}>Dark</span>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>Sidebar</span>
+                  <span style={styles.settingValue}>{sidebarExpanded ? 'Expanded' : 'Collapsed'}</span>
+                </div>
+              </div>
+              <div style={styles.settingsCard}>
+                <h4 style={styles.settingsCardTitle}>🔑 API Keys</h4>
+                <div style={styles.settingItem}>
+                  <span>OpenAI</span>
+                  <span style={{ ...styles.settingValue, color: '#22c55e' }}>Connected</span>
+                </div>
+                <div style={styles.settingItem}>
+                  <span>ElevenLabs</span>
+                  <span style={{ ...styles.settingValue, color: '#22c55e' }}>Connected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
       <style>{`
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 0.5; }
@@ -439,11 +661,6 @@ export default function OpieKanban(): React.ReactElement {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
         }
-        @keyframes progress {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
       `}</style>
     </div>
   );
@@ -452,142 +669,256 @@ export default function OpieKanban(): React.ReactElement {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
+    minHeight: '100vh',
     background: '#0f0f1a',
-    overflow: 'hidden',
   },
-  
-  // Header
-  header: {
-    padding: '16px 24px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
+
+  // Sidebar
+  sidebar: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    height: '100vh',
+    background: '#0d0d15',
+    borderRight: '1px solid rgba(255,255,255,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'all 0.3s ease',
+    zIndex: 100,
+  },
+  sidebarHeader: {
+    padding: '20px 16px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    background: '#0d0d15',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
   },
-  headerLeft: {
+  logoContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
+    gap: '12px',
   },
   logo: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
+    borderRadius: '12px',
     background: 'linear-gradient(135deg, #667eea, #764ba2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '24px',
+    fontSize: '20px',
   },
-  title: {
+  brandName: {
     color: '#fff',
-    fontSize: '1.25rem',
-    fontWeight: 600,
-    margin: 0,
-  },
-  quickStats: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '20px',
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: '12px',
-    padding: '12px 20px',
-  },
-  statItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '2px',
-  },
-  statValue: {
-    color: '#22c55e',
     fontSize: '1.25rem',
     fontWeight: 700,
   },
-  statLabel: {
+  collapseBtn: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '6px',
+    border: 'none',
+    background: 'rgba(255,255,255,0.05)',
     color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.7rem',
-    textTransform: 'uppercase',
-  },
-  statDivider: {
-    width: '1px',
-    height: '30px',
-    background: 'rgba(255,255,255,0.1)',
-  },
-
-  // Tab Bar
-  tabBar: {
+    cursor: 'pointer',
+    fontSize: '10px',
     display: 'flex',
-    gap: '4px',
-    padding: '12px 24px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
-    background: '#0d0d15',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tab: {
+  statusBar: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '12px 20px',
+    background: 'rgba(255,255,255,0.02)',
+  },
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+  },
+  statusText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: '0.8rem',
+  },
+  nav: {
+    flex: 1,
+    padding: '16px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  navItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 14px',
     borderRadius: '10px',
     border: 'none',
     background: 'transparent',
     color: 'rgba(255,255,255,0.6)',
     fontSize: '0.9rem',
-    fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     position: 'relative',
+    textAlign: 'left',
+    width: '100%',
   },
-  tabActive: {
+  navItemActive: {
     background: 'rgba(102,126,234,0.15)',
     color: '#fff',
   },
-  tabEmoji: {
-    fontSize: '1.1rem',
+  navIcon: {
+    fontSize: '1.2rem',
+    width: '24px',
+    textAlign: 'center',
   },
-  tabLabel: {},
-  tabBadge: {
+  navLabel: {
+    flex: 1,
+    fontWeight: 500,
+  },
+  navBadge: {
+    padding: '2px 8px',
+    borderRadius: '10px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+  },
+  navBadgeCollapsed: {
     position: 'absolute',
     top: '6px',
     right: '6px',
     background: '#f59e0b',
     color: '#000',
-    fontSize: '0.65rem',
+    fontSize: '0.6rem',
     fontWeight: 700,
-    padding: '2px 6px',
-    borderRadius: '10px',
-    minWidth: '18px',
+    padding: '2px 5px',
+    borderRadius: '8px',
+    minWidth: '16px',
     textAlign: 'center',
   },
-
-  // Content
-  content: {
-    flex: 1,
-    overflow: 'hidden',
-  },
-
-  // Dashboard Tab
-  dashboardTab: {
-    height: '100%',
-    overflow: 'auto',
-    padding: '24px',
+  quickStats: {
+    padding: '16px',
+    margin: '0 12px',
+    background: 'rgba(255,255,255,0.03)',
+    borderRadius: '12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '10px',
   },
+  statRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '0.8rem',
+  },
+  statValue: {
+    fontWeight: 700,
+    fontSize: '0.9rem',
+  },
+  sidebarFooter: {
+    padding: '16px',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    textAlign: 'center',
+  },
+  footerText: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: '0.75rem',
+  },
+  footerIcon: {
+    fontSize: '16px',
+    opacity: 0.5,
+  },
+
+  // Mobile
+  mobileHeader: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '60px',
+    background: '#0d0d15',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 16px',
+    zIndex: 50,
+  },
+  hamburger: {
+    width: '40px',
+    height: '40px',
+    background: 'transparent',
+    border: 'none',
+    color: '#fff',
+    fontSize: '24px',
+    cursor: 'pointer',
+  },
+  mobileTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    color: '#fff',
+    fontWeight: 600,
+  },
+  mobileLogo: {
+    fontSize: '20px',
+  },
+  mobileStatus: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+  },
+  mobileOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.6)',
+    zIndex: 99,
+  },
+
+  // Main Content
+  main: {
+    flex: 1,
+    minHeight: '100vh',
+    transition: 'margin-left 0.3s ease',
+  },
+  viewContainer: {
+    padding: '32px',
+    maxWidth: '1400px',
+  },
+  viewHeader: {
+    marginBottom: '28px',
+  },
+  viewTitle: {
+    color: '#fff',
+    fontSize: '1.75rem',
+    fontWeight: 700,
+    margin: '0 0 6px 0',
+  },
+  viewSubtitle: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '0.95rem',
+    margin: 0,
+  },
+
+  // Dashboard
   dashboardGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 380px',
     gap: '24px',
+    marginBottom: '24px',
   },
   kanbanSection: {
     background: '#1a1a2e',
     borderRadius: '16px',
     padding: '20px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.08)',
   },
   sectionTitle: {
     color: '#fff',
@@ -598,7 +929,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   kanbanGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '16px',
+    gap: '14px',
   },
   kanbanColumn: {
     background: 'rgba(255,255,255,0.03)',
@@ -640,12 +971,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: '#1a1a2e',
     borderRadius: '16px',
     padding: '20px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.08)',
   },
   activityList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
   },
   activityItem: {
     display: 'flex',
@@ -668,38 +999,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
   },
 
-  // Tab Pane
-  tabPane: {
-    height: '100%',
-    overflow: 'auto',
-    padding: '24px',
-  },
-
-  // Tasks Tab
-  tasksTab: {
-    height: '100%',
-    overflow: 'auto',
-    padding: '24px',
-  },
+  // Tasks Grid
   tasksGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 380px',
     gap: '24px',
-    height: '100%',
   },
-  tasksMain: {},
-  tasksAside: {},
 
-  // Voice Tab
-  voiceTab: {
-    height: '100%',
+  // Voice
+  voiceContainer: {
     display: 'flex',
     flexDirection: 'column',
+    height: '100vh',
   },
   chatMessages: {
     flex: 1,
     overflowY: 'auto',
-    padding: '24px',
+    padding: '32px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
@@ -714,24 +1030,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'rgba(255,255,255,0.4)',
   },
   emptyChatIcon: {
-    fontSize: '64px',
-    marginBottom: '16px',
+    fontSize: '72px',
+    marginBottom: '20px',
   },
   emptyChatTitle: {
     color: '#fff',
-    fontSize: '1.25rem',
+    fontSize: '1.5rem',
     fontWeight: 600,
     margin: '0 0 8px 0',
   },
   emptyChatText: {
-    fontSize: '0.9rem',
+    fontSize: '1rem',
     margin: 0,
   },
   chatBubble: {
-    padding: '12px 16px',
-    borderRadius: '16px',
-    maxWidth: '70%',
-    fontSize: '0.9rem',
+    padding: '14px 18px',
+    borderRadius: '18px',
+    maxWidth: '65%',
+    fontSize: '0.95rem',
     lineHeight: 1.5,
   },
   chatBubbleUser: {
@@ -747,46 +1063,108 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottomLeftRadius: '4px',
   },
   transcript: {
-    padding: '12px 24px',
+    padding: '14px 32px',
     background: 'rgba(102,126,234,0.1)',
     color: '#667eea',
-    fontSize: '0.85rem',
+    fontSize: '0.9rem',
   },
   voiceInput: {
-    padding: '16px 24px',
+    padding: '20px 32px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
     display: 'flex',
     gap: '12px',
     background: '#0d0d15',
   },
   micButton: {
-    padding: '14px 24px',
-    borderRadius: '12px',
+    padding: '16px 28px',
+    borderRadius: '14px',
     border: 'none',
     cursor: 'pointer',
     fontWeight: 600,
     color: '#fff',
-    fontSize: '0.9rem',
+    fontSize: '0.95rem',
     whiteSpace: 'nowrap',
   },
   textInput: {
     flex: 1,
-    padding: '14px 18px',
+    padding: '16px 20px',
     background: '#1a1a2e',
     border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '12px',
+    borderRadius: '14px',
     color: '#fff',
-    fontSize: '0.9rem',
+    fontSize: '0.95rem',
     outline: 'none',
   },
   sendButton: {
-    padding: '14px 28px',
+    padding: '16px 32px',
     background: '#667eea',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '14px',
     color: '#fff',
     fontWeight: 600,
-    fontSize: '0.9rem',
+    fontSize: '0.95rem',
     cursor: 'pointer',
+  },
+
+  // Memory (Coming Soon)
+  comingSoon: {
+    background: '#1a1a2e',
+    borderRadius: '16px',
+    padding: '48px',
+    border: '1px solid rgba(255,255,255,0.08)',
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  comingSoonIcon: {
+    fontSize: '64px',
+    display: 'block',
+    marginBottom: '20px',
+  },
+  memoryPreview: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '16px',
+    marginTop: '32px',
+  },
+  memoryCard: {
+    background: 'rgba(255,255,255,0.03)',
+    borderRadius: '12px',
+    padding: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    textAlign: 'left',
+  },
+
+  // Settings
+  settingsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '20px',
+  },
+  settingsCard: {
+    background: '#1a1a2e',
+    borderRadius: '16px',
+    padding: '24px',
+    border: '1px solid rgba(255,255,255,0.08)',
+  },
+  settingsCardTitle: {
+    color: '#fff',
+    fontSize: '1rem',
+    fontWeight: 600,
+    margin: '0 0 20px 0',
+  },
+  settingItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 0',
+    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '0.9rem',
+  },
+  settingValue: {
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: 500,
   },
 };
