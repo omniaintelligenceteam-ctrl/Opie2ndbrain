@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useSidebarCrons, CronJob as SidebarCronJob } from '@/hooks/useSidebarData';
 
 interface CronJob {
   id: string;
@@ -148,9 +149,18 @@ export default function CronsPanel({
   pollInterval = 30000,
   onCronCountChange,
 }: CronsPanelProps = {}) {
-  const [crons, setCrons] = useState<CronJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use real-time SSE data for crons
+  const { 
+    crons: sseCrons, 
+    totalCrons, 
+    loading: sseLoading, 
+    error: sseError,
+    connectionType,
+    refresh: refreshCrons,
+  } = useSidebarCrons();
+  
+  // Merge SSE crons with local state for UI interactions
+  const [localCrons, setLocalCrons] = useState<CronJob[]>([]);
   const [selectedCron, setSelectedCron] = useState<CronJob | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCron, setEditingCron] = useState<CronJob | null>(null);
@@ -160,14 +170,25 @@ export default function CronsPanel({
   const [filterPriority, setFilterPriority] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
-  // Initialize demo data on client only (avoids hydration mismatch)
+  // Use SSE crons if available, otherwise use local state
+  const crons = sseCrons.length > 0 ? sseCrons.map(c => ({
+    ...c,
+    priority: (c.priority || 'normal') as 'critical' | 'normal' | 'low',
+  })) : localCrons;
+  const loading = sseLoading && localCrons.length === 0;
+  const error = sseError;
+
+  // Initialize time on client only (avoids hydration mismatch)
   useEffect(() => {
     setCurrentTime(new Date());
-    setCrons(createDemoCrons());
-    setHistory(createDemoHistory());
     const interval = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Report cron count changes
+  useEffect(() => {
+    onCronCountChange?.(totalCrons);
+  }, [totalCrons, onCronCountChange]);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -177,25 +198,6 @@ export default function CronsPanel({
     enabled: true,
     priority: 'normal' as 'critical' | 'normal' | 'low',
   });
-
-  const fetchCrons = useCallback(async () => {
-    try {
-      const res = await fetch('/api/crons');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.crons) {
-          setCrons(data.crons);
-          onCronCountChange?.(data.crons.length);
-        }
-      }
-      setError(null);
-    } catch (err) {
-      // Use demo data on error
-      console.error('Failed to fetch crons:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [onCronCountChange]);
 
   const fetchHistory = useCallback(async (cronId: string) => {
     try {
@@ -212,12 +214,6 @@ export default function CronsPanel({
     }
   }, []);
 
-  useEffect(() => {
-    fetchCrons();
-    const interval = setInterval(fetchCrons, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchCrons, pollInterval]);
-
   // Fetch history when a cron is selected
   useEffect(() => {
     if (selectedCron) {
@@ -229,7 +225,7 @@ export default function CronsPanel({
     setRunningCrons(prev => new Set(prev).add(cronId));
     try {
       await fetch(`/api/crons/${cronId}/run`, { method: 'POST' });
-      await fetchCrons();
+      await refreshCrons();
     } catch (err) {
       console.error('Failed to run cron');
     } finally {
@@ -516,6 +512,11 @@ export default function CronsPanel({
           </div>
         </div>
         <div style={styles.headerRight}>
+          {connectionType === 'sse' && (
+            <span style={{ color: '#22c55e', fontSize: '0.7rem', marginRight: '8px' }} title="Real-time updates active">
+              ⚡ Live
+            </span>
+          )}
           <button 
             onClick={() => {
               setEditingCron(null);
@@ -526,7 +527,7 @@ export default function CronsPanel({
           >
             + Add Cron
           </button>
-          <button onClick={fetchCrons} style={styles.refreshBtn} disabled={loading}>
+          <button onClick={refreshCrons} style={styles.refreshBtn} disabled={loading}>
             {loading ? '⏳' : '🔄'}
           </button>
         </div>

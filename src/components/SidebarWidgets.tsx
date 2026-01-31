@@ -609,16 +609,7 @@ export default function SidebarWidgets({ isExpanded }: SidebarWidgetsProps) {
 
   return (
     <div style={widgetsStyles.container}>
-      {/* Calendar and Email widgets removed */}
-
-      <CollapsibleSidebarSection 
-        title="System Health" 
-        icon={<Activity size={14} />}
-        defaultOpen={false}
-      >
-        <SidebarSystemHealth />
-      </CollapsibleSidebarSection>
-
+      {/* System Health removed - already shown on main page */}
       <style>{`
         .sidebar-section-header:hover {
           background: rgba(255,255,255,0.03);

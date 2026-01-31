@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { gatewayFetch, gatewayHealth, GATEWAY_URL, IS_VERCEL } from '@/lib/gateway';
+import { gatewayFetch, gatewayHealth, invokeGatewayTool, GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
 
 const SERVER_START = Date.now();
 
@@ -65,6 +65,79 @@ async function getAgentSessions(): Promise<{ active: number; idle: number; total
   } catch {
     return { active: 0, idle: 0, total: 0 };
   }
+}
+
+async function getSecurityStatus(gatewayCheck: { connected: boolean }): Promise<{
+  secure: boolean;
+  status: string;
+  warnings: number;
+  sslValid: boolean;
+  authEnabled: boolean;
+  lastScan: string;
+  checks?: {
+    gateway: boolean;
+    authToken: boolean;
+    httpsOnly: boolean;
+    noExposedSecrets: boolean;
+  };
+}> {
+  const warnings: string[] = [];
+  const checks = {
+    gateway: gatewayCheck.connected,
+    authToken: !!GATEWAY_TOKEN && GATEWAY_TOKEN.length > 20,
+    httpsOnly: GATEWAY_URL.startsWith('https://') || GATEWAY_URL.includes('localhost'),
+    noExposedSecrets: true, // Assume true unless we detect otherwise
+  };
+
+  // Check gateway connection
+  if (!gatewayCheck.connected) {
+    warnings.push('Gateway disconnected');
+  }
+
+  // Check auth token is configured
+  if (!GATEWAY_TOKEN || GATEWAY_TOKEN.length < 20) {
+    warnings.push('Weak or missing auth token');
+    checks.authToken = false;
+  }
+
+  // Check HTTPS
+  if (!GATEWAY_URL.startsWith('https://') && !GATEWAY_URL.includes('localhost')) {
+    warnings.push('Gateway not using HTTPS');
+    checks.httpsOnly = false;
+  }
+
+  // Try to get gateway config to check for security issues
+  try {
+    const configResult = await invokeGatewayTool<{ config?: { gateway?: { auth?: { mode?: string } } } }>('gateway', { action: 'config.get' });
+    if (configResult.ok && configResult.result) {
+      // Check if auth is properly configured
+      const config = configResult.result as { config?: { gateway?: { auth?: { mode?: string } } } };
+      const authMode = config?.config?.gateway?.auth?.mode;
+      if (!authMode || authMode === 'none') {
+        warnings.push('Gateway auth disabled');
+        checks.authToken = false;
+      }
+    }
+  } catch {
+    // Ignore config check errors
+  }
+
+  const secure = warnings.length === 0;
+  const status = secure 
+    ? 'All systems secure' 
+    : warnings.length === 1 
+      ? warnings[0] 
+      : `${warnings.length} issues detected`;
+
+  return {
+    secure,
+    status,
+    warnings: warnings.length,
+    sslValid: checks.httpsOnly,
+    authEnabled: checks.authToken,
+    lastScan: new Date().toISOString(),
+    checks,
+  };
 }
 
 async function getGatewayStatus(): Promise<{ 
@@ -185,14 +258,7 @@ export async function GET() {
       healthy: true,
       responseTime,
     },
-    security: {
-      secure: gatewayCheck.connected,
-      status: gatewayCheck.connected ? 'All systems secure' : 'Gateway disconnected',
-      warnings: gatewayCheck.connected ? 0 : 1,
-      sslValid: true,
-      authEnabled: true,
-      lastScan: new Date().toISOString(),
-    },
+    security: await getSecurityStatus(gatewayCheck),
     agents: agentStats,
     tasks: {
       running: agentStats.active,
