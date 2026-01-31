@@ -1,0 +1,101 @@
+# Recommended Clawdbot Gateway Docker Compose Configuration
+# This includes stability improvements based on research
+
+services:
+  clawdbot-gateway:
+    image: ${CLAWDBOT_IMAGE:-clawdbot:local}
+    container_name: clawdbot-gateway
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      CLAWDBOT_GATEWAY_TOKEN: ${CLAWDBOT_GATEWAY_TOKEN}
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # Ensure temp files go to volatile storage
+      TMPDIR: /tmp
+      # Optional: limit Node.js memory
+      NODE_OPTIONS: "--max-old-space-size=1536"
+    volumes:
+      - ${CLAWDBOT_CONFIG_DIR}:/home/node/.clawdbot
+      - ${CLAWDBOT_WORKSPACE_DIR}:/home/node/clawd
+    ports:
+      - "${CLAWDBOT_GATEWAY_PORT:-18789}:18789"
+      - "${CLAWDBOT_BRIDGE_PORT:-18790}:18790"
+    
+    # CRITICAL: Proper process management
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+    
+    # CRITICAL: Health check for detecting unresponsive gateway
+    healthcheck:
+      test: ["CMD", "node", "dist/index.js", "gateway", "probe", "--timeout", "5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits to prevent runaway memory
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--bind",
+        "${CLAWDBOT_GATEWAY_BIND:-lan}",
+        "--port",
+        "${CLAWDBOT_GATEWAY_PORT:-18789}"
+      ]
+    
+    # Label for autoheal
+    labels:
+      - "autoheal=true"
+
+  # CLI container (unchanged except for labels)
+  clawdbot-cli:
+    image: ${CLAWDBOT_IMAGE:-clawdbot:local}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      BROWSER: echo
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - ${CLAWDBOT_CONFIG_DIR}:/home/node/.clawdbot
+      - ${CLAWDBOT_WORKSPACE_DIR}:/home/node/clawd
+    stdin_open: true
+    tty: true
+    init: true
+    entrypoint: ["node", "dist/index.js"]
+
+  # NEW: Autoheal container to auto-restart unhealthy containers
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    restart: always
+    environment:
+      # Watch containers with autoheal=true label
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      # Check every 30 seconds
+      AUTOHEAL_INTERVAL: 30
+      # Wait 2 minutes before starting health checks (let containers boot)
+      AUTOHEAL_START_PERIOD: 120
+      # Give 30 seconds for graceful shutdown
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+      # Optional: webhook for notifications
+      # WEBHOOK_URL: https://hooks.slack.com/services/xxx
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+    network_mode: none
