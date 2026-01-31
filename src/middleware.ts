@@ -4,6 +4,8 @@ import type { NextRequest } from 'next/server';
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/api/status', // Health check endpoint
+  '/api/tts',    // TTS for voice features
+  '/api/chat',   // Chat interface
   '/_next',      // Next.js internals
   '/favicon',
   '/manifest',
@@ -11,8 +13,6 @@ const PUBLIC_ROUTES = [
 
 // Routes that require authentication
 const PROTECTED_API_ROUTES = [
-  '/api/chat',
-  '/api/tts',
   '/api/email',
   '/api/calendar',
   '/api/agents',
