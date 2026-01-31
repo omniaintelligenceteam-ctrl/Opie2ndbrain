@@ -15,6 +15,7 @@ interface ActivityFeedProps {
   maxItems?: number;
   pollInterval?: number;
   isThinking?: boolean;
+  enabled?: boolean;
 }
 
 function formatRelativeTime(dateStr: string, mounted: boolean): string {
@@ -66,6 +67,7 @@ export default function ActivityFeed({
   maxItems = 20,
   pollInterval = 15000,
   isThinking = false,
+  enabled = true,
 }: ActivityFeedProps) {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,10 +110,13 @@ export default function ActivityFeed({
   }, [maxItems, activity.length]);
 
   useEffect(() => {
+    // Only poll when enabled
+    if (!enabled) return;
+
     fetchActivity();
     const interval = setInterval(fetchActivity, pollInterval);
     return () => clearInterval(interval);
-  }, [fetchActivity, pollInterval]);
+  }, [fetchActivity, pollInterval, enabled]);
 
   return (
     <div style={styles.container}>

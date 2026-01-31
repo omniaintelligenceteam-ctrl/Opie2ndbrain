@@ -32,7 +32,7 @@ export interface AgentSessionsState {
 
 const CACHE_KEY = 'opie-agent-sessions-cache';
 
-export function useAgentSessions(pollInterval = 2000) {
+export function useAgentSessions(pollInterval = 5000, enabled = true) {
   const [state, setState] = useState<AgentSessionsState>(() => {
     // Try to load cached data on initial render
     if (typeof window !== 'undefined') {
@@ -125,14 +125,17 @@ export function useAgentSessions(pollInterval = 2000) {
   }, []);
 
   useEffect(() => {
+    // Only poll when enabled
+    if (!enabled) return;
+
     // Initial fetch
     fetchSessions();
-    
+
     // Poll for updates
     const interval = setInterval(fetchSessions, pollInterval);
-    
+
     return () => clearInterval(interval);
-  }, [fetchSessions, pollInterval]);
+  }, [fetchSessions, pollInterval, enabled]);
 
   return {
     ...state,
@@ -141,8 +144,8 @@ export function useAgentSessions(pollInterval = 2000) {
 }
 
 // Simpler hook that just returns active agent IDs
-export function useActiveAgents(pollInterval = 2000) {
-  const { activeAgentIds, activeCount, loading, error, gatewayConnected, refresh } = useAgentSessions(pollInterval);
+export function useActiveAgents(pollInterval = 5000, enabled = true) {
+  const { activeAgentIds, activeCount, loading, error, gatewayConnected, refresh } = useAgentSessions(pollInterval, enabled);
 
   return {
     activeAgents: activeAgentIds,

@@ -156,7 +156,11 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   return null;
 }
 
-export default function ContextWindowVisualizer() {
+interface ContextWindowVisualizerProps {
+  enabled?: boolean;
+}
+
+export default function ContextWindowVisualizer({ enabled = true }: ContextWindowVisualizerProps) {
   const { theme } = useTheme();
   const [contextState, setContextState] = useState<ContextWindowState>(EMPTY_CONTEXT_STATE);
   const [loading, setLoading] = useState(true);
@@ -185,12 +189,14 @@ export default function ContextWindowVisualizer() {
     }
   }, []);
 
-  // Initial fetch and polling
+  // Initial fetch and polling - only when enabled
   useEffect(() => {
+    if (!enabled) return;
+
     fetchContext();
     const interval = setInterval(fetchContext, 10000); // Poll every 10s
     return () => clearInterval(interval);
-  }, [fetchContext]);
+  }, [fetchContext, enabled]);
 
   // Generate display data
   const displayState = useDemo ? {

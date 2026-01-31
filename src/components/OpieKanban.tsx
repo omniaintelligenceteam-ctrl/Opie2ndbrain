@@ -32,6 +32,9 @@ import { AGENT_NODES } from '../lib/agentMapping';
 import AgentLeaderboard from './AgentLeaderboard';
 import ContextWindowVisualizer from './ContextWindowVisualizer';
 import AgentPersonalityPanel from './AgentPersonalityPanel';
+import ParticleBackground from './ParticleBackground';
+import ImmersiveVoiceMode from './ImmersiveVoiceMode';
+import StatusOrb from './StatusOrb';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -247,8 +250,9 @@ export default function OpieKanban(): React.ReactElement {
   const isMobile = responsive.isMobile;
   const isTablet = responsive.isTablet;
   const { triggerHaptic } = useHaptic();
-  // Use real-time agent data from gateway (poll every 2 seconds)
-  const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(2000);
+  // Use real-time agent data from gateway (poll every 5 seconds, only when on agents/dashboard view)
+  const shouldPollAgents = activeView === 'agents' || activeView === 'dashboard';
+  const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(5000, shouldPollAgents);
   // Local state for agents deployed from this UI (merged with real data)
   const [localActiveAgents, setLocalActiveAgents] = useState<string[]>([]);
   // Merge real and local active agents (deduplicated)
@@ -930,6 +934,26 @@ export default function OpieKanban(): React.ReactElement {
   return (
     <NotificationProvider>
       <div style={styles.container}>
+        {/* Premium particle background */}
+        <ParticleBackground
+          particleCount={50}
+          intensity="low"
+          mouseAttraction={!isMobile}
+        />
+
+        {/* Immersive voice mode overlay */}
+        <ImmersiveVoiceMode
+          isActive={activeView === 'voice' && micOn && !isMobile}
+          isSpeaking={isSpeaking}
+          isListening={micOn && !isLoading && !isSpeaking}
+          isLoading={isLoading}
+          transcript={transcript}
+          lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
+          onClose={() => setMicOn(false)}
+          onMicToggle={() => setMicOn(!micOn)}
+          micOn={micOn}
+        />
+
         {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
         {isMobile && <MobileOverlay />}
         <Sidebar />
@@ -1000,10 +1024,11 @@ export default function OpieKanban(): React.ReactElement {
               {isMobile ? (
                 <>
                   <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
-                    <ActivityFeed 
+                    <ActivityFeed
                       maxItems={20}
                       pollInterval={15000}
                       isThinking={isLoading}
+                      enabled={activeView === 'dashboard'}
                     />
                   </CollapsibleSection>
                   {/* Mobile: Keep widgets here as collapsible sections */}
@@ -1015,10 +1040,11 @@ export default function OpieKanban(): React.ReactElement {
                   </div>
                 </>
               ) : (
-                <ActivityFeed 
+                <ActivityFeed
                   maxItems={50}
-                  pollInterval={10000}
+                  pollInterval={15000}
                   isThinking={isLoading}
+                  enabled={activeView === 'dashboard'}
                 />
               )}
             </div>
@@ -1267,7 +1293,7 @@ export default function OpieKanban(): React.ReactElement {
               </p>
             </div>
             <div style={{ maxWidth: 600 }}>
-              <ContextWindowVisualizer />
+              <ContextWindowVisualizer enabled={activeView === 'context'} />
             </div>
           </div>
         )}

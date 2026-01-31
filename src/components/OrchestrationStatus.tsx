@@ -463,6 +463,49 @@ export default function OrchestrationStatus({
                   opacity: 0.5 + Math.sin(animationPhase / 15) * 0.3,
                 }} />
               )}
+
+              {/* Holographic scanline effect */}
+              {isActive && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  overflow: 'hidden',
+                  borderRadius: '16px',
+                  pointerEvents: 'none',
+                  zIndex: 15,
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)',
+                    animation: 'scanline 2s ease-in-out infinite',
+                    boxShadow: '0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(102,126,234,0.3)',
+                  }} />
+                </div>
+              )}
+
+              {/* Holographic sheen overlay */}
+              {isHovered && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, transparent 0%, rgba(255,0,128,0.05) 25%, rgba(0,255,255,0.05) 50%, rgba(255,255,0,0.05) 75%, transparent 100%)',
+                  backgroundSize: '200% 200%',
+                  animation: 'holo-shift 3s ease infinite',
+                  pointerEvents: 'none',
+                  zIndex: 14,
+                }} />
+              )}
               
               {/* Status indicator ring */}
               <div style={{
@@ -690,6 +733,28 @@ export default function OrchestrationStatus({
         @keyframes shimmer {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
+        }
+        @keyframes scanline {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(200%); }
+        }
+        @keyframes holo-shift {
+          0%, 100% {
+            background-position: 0% 50%;
+            filter: hue-rotate(0deg);
+          }
+          50% {
+            background-position: 100% 50%;
+            filter: hue-rotate(30deg);
+          }
+        }
+        @keyframes data-flow {
+          0% { stroke-dashoffset: 20; }
+          100% { stroke-dashoffset: 0; }
+        }
+        @keyframes electric-pulse {
+          0%, 100% { opacity: 0; }
+          50% { opacity: 0.8; }
         }
       `}</style>
     </div>
