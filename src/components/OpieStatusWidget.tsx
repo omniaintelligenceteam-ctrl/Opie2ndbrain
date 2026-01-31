@@ -1,5 +1,4 @@
 'use client';
-import { useSystemStatus } from '../hooks/useRealTimeData';
 
 interface OpieStatusWidgetProps {
   size?: 'small' | 'medium' | 'large';
@@ -7,58 +6,10 @@ interface OpieStatusWidgetProps {
   onClick?: () => void;
 }
 
-type OpieStatus = 'online' | 'offline' | 'thinking' | 'working';
-
 export default function OpieStatusWidget({ 
   size = 'medium',
-  showDetails = true,
   onClick 
 }: OpieStatusWidgetProps) {
-  const { status, loading, error } = useSystemStatus(2000);
-
-  const getStatus = (): OpieStatus => {
-    // Offline: gateway not connected or error
-    if (error || !status?.gateway?.connected) {
-      return 'offline';
-    }
-
-    // Working: agents are actively running
-    if (status?.agents?.active && status.agents.active > 0) {
-      return 'working';
-    }
-
-    // Thinking: processing a request
-    if (status?.opie?.status === 'thinking') {
-      return 'thinking';
-    }
-
-    // Default: online and ready
-    return 'online';
-  };
-
-  const getStatusConfig = (currentStatus: OpieStatus) => {
-    // Simplified: just Online or Offline
-    if (currentStatus === 'offline') {
-      return { 
-        color: '#ef4444', 
-        text: 'Offline',
-        icon: '⚡',
-        animation: 'none',
-        glowAnimation: 'none',
-      };
-    }
-    // Everything else is Online
-    return { 
-      color: '#22c55e', 
-      text: 'Online',
-      icon: '⚡',
-      animation: 'opieOnline 3s ease-in-out infinite',
-      glowAnimation: 'none',
-    };
-  };
-
-  const currentStatus = getStatus();
-  const config = getStatusConfig(currentStatus);
   const orbSize = size === 'small' ? 48 : size === 'medium' ? 64 : 80;
 
   return (
@@ -75,79 +26,168 @@ export default function OpieStatusWidget({
       }}
       onClick={onClick}
     >
-      {/* Avatar - Sleek AI with Electric Blue Energy */}
+      {/* Opie Avatar - Neural Core with Lightning */}
       <div style={{
         width: orbSize,
         height: orbSize,
         flexShrink: 0,
         position: 'relative',
       }}>
-        {/* Outer glow ring - always animated */}
-        <div style={{
-          position: 'absolute',
-          inset: -4,
-          borderRadius: '50%',
-          background: 'conic-gradient(from 0deg, #0ea5e9, #667eea, #8b5cf6, #0ea5e9)',
-          animation: 'avatarRotate 4s linear infinite',
-          opacity: 0.7,
-        }} />
-        {/* Inner dark circle */}
-        <div style={{
-          position: 'absolute',
-          inset: 2,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #0c1222 0%, #1a1a2e 100%)',
-          zIndex: 1,
-        }} />
-        {/* AI Core SVG */}
         <svg
           viewBox="0 0 100 100"
           style={{
-            position: 'absolute',
-            inset: 0,
             width: '100%',
             height: '100%',
-            zIndex: 2,
+            overflow: 'visible',
           }}
         >
           <defs>
-            <linearGradient id="electricBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+            {/* Gradients */}
+            <linearGradient id="coreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#0ea5e9" />
               <stop offset="50%" stopColor="#667eea" />
               <stop offset="100%" stopColor="#8b5cf6" />
             </linearGradient>
-            <filter id="glow">
-              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            
+            <linearGradient id="lightningGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#fff" />
+              <stop offset="50%" stopColor="#0ea5e9" />
+              <stop offset="100%" stopColor="#667eea" />
+            </linearGradient>
+            
+            <radialGradient id="glowGradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#667eea" stopOpacity="0.8" />
+              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0" />
+            </radialGradient>
+            
+            {/* Filters */}
+            <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
               <feMerge>
-                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            
+            <filter id="strongGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feFlood floodColor="#667eea" floodOpacity="0.6"/>
+              <feComposite in2="blur" operator="in"/>
+              <feMerge>
+                <feMergeNode/>
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
           </defs>
-          {/* Central eye/core */}
-          <circle cx="50" cy="50" r="12" fill="url(#electricBlue)" filter="url(#glow)" opacity={1}>
-            <animate attributeName="r" values="10;14;10" dur="2s" repeatCount="indefinite" />
+          
+          {/* Outer pulsing ring */}
+          <circle cx="50" cy="50" r="46" fill="none" stroke="url(#coreGradient)" strokeWidth="0.5" opacity="0.3">
+            <animate attributeName="r" values="44;48;44" dur="3s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.3;0.5;0.3" dur="3s" repeatCount="indefinite"/>
           </circle>
-          {/* Inner ring */}
-          <circle cx="50" cy="50" r="22" fill="none" stroke="url(#electricBlue)" strokeWidth="1.5" opacity="0.6" />
-          {/* Orbital paths */}
-          <ellipse cx="50" cy="50" rx="32" ry="18" fill="none" stroke="url(#electricBlue)" strokeWidth="1" opacity="0.4" transform="rotate(-30 50 50)" />
-          <ellipse cx="50" cy="50" rx="32" ry="18" fill="none" stroke="url(#electricBlue)" strokeWidth="1" opacity="0.4" transform="rotate(30 50 50)" />
-          {/* Energy particles */}
-          <circle cx="50" cy="20" r="3" fill="#0ea5e9" filter="url(#glow)">
-            <animateMotion dur="3s" repeatCount="indefinite" path="M0,0 A30,30 0 1,1 0,60 A30,30 0 1,1 0,0" />
+          
+          {/* Neural network background */}
+          <g opacity="0.4">
+            {/* Hexagonal neural pattern */}
+            <polygon points="50,20 70,35 70,65 50,80 30,65 30,35" fill="none" stroke="#667eea" strokeWidth="0.5">
+              <animate attributeName="opacity" values="0.3;0.6;0.3" dur="4s" repeatCount="indefinite"/>
+            </polygon>
+            <polygon points="50,28 62,38 62,62 50,72 38,62 38,38" fill="none" stroke="#8b5cf6" strokeWidth="0.5">
+              <animate attributeName="opacity" values="0.4;0.7;0.4" dur="3s" repeatCount="indefinite"/>
+            </polygon>
+            
+            {/* Neural connection lines */}
+            <line x1="50" y1="20" x2="50" y2="35" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+            <line x1="70" y1="35" x2="58" y2="42" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+            <line x1="70" y1="65" x2="58" y2="58" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+            <line x1="50" y1="80" x2="50" y2="65" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+            <line x1="30" y1="65" x2="42" y2="58" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+            <line x1="30" y1="35" x2="42" y2="42" stroke="#0ea5e9" strokeWidth="0.5" opacity="0.5"/>
+          </g>
+          
+          {/* Central core glow */}
+          <circle cx="50" cy="50" r="20" fill="url(#glowGradient)">
+            <animate attributeName="r" values="18;22;18" dur="2s" repeatCount="indefinite"/>
           </circle>
-          <circle cx="50" cy="80" r="2" fill="#8b5cf6" filter="url(#glow)">
-            <animateMotion dur="4s" repeatCount="indefinite" path="M0,0 A30,30 0 1,0 0,-60 A30,30 0 1,0 0,0" />
+          
+          {/* Core ring */}
+          <circle cx="50" cy="50" r="15" fill="none" stroke="url(#coreGradient)" strokeWidth="2" filter="url(#softGlow)">
+            <animate attributeName="r" values="14;16;14" dur="2.5s" repeatCount="indefinite"/>
           </circle>
-          {/* Lightning bolt accent */}
-          <path d="M48 35 L52 35 L50 45 L55 45 L47 58 L49 50 L45 50 Z" fill="#0ea5e9" filter="url(#glow)" opacity={0.9}>
-            <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite" />
-          </path>
+          
+          {/* Inner core */}
+          <circle cx="50" cy="50" r="10" fill="#0c1222" stroke="url(#coreGradient)" strokeWidth="1"/>
+          
+          {/* Lightning bolt - the signature */}
+          <g filter="url(#strongGlow)">
+            <path 
+              d="M52 38 L48 38 L46 48 L42 48 L50 62 L48 52 L52 52 L54 44 L58 44 Z" 
+              fill="url(#lightningGradient)"
+            >
+              <animate attributeName="opacity" values="0.9;1;0.9" dur="0.5s" repeatCount="indefinite"/>
+            </path>
+          </g>
+          
+          {/* Orbiting energy particles */}
+          <g>
+            <circle r="2" fill="#0ea5e9" filter="url(#softGlow)">
+              <animateMotion dur="4s" repeatCount="indefinite">
+                <mpath href="#orbit1"/>
+              </animateMotion>
+              <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            
+            <circle r="1.5" fill="#8b5cf6" filter="url(#softGlow)">
+              <animateMotion dur="5s" repeatCount="indefinite">
+                <mpath href="#orbit2"/>
+              </animateMotion>
+              <animate attributeName="opacity" values="0.6;1;0.6" dur="2.5s" repeatCount="indefinite"/>
+            </circle>
+            
+            <circle r="1" fill="#22c55e" filter="url(#softGlow)">
+              <animateMotion dur="3s" repeatCount="indefinite">
+                <mpath href="#orbit3"/>
+              </animateMotion>
+              <animate attributeName="opacity" values="0.7;1;0.7" dur="1.5s" repeatCount="indefinite"/>
+            </circle>
+          </g>
+          
+          {/* Orbit paths (invisible) */}
+          <ellipse id="orbit1" cx="50" cy="50" rx="28" ry="12" transform="rotate(-30 50 50)" fill="none"/>
+          <ellipse id="orbit2" cx="50" cy="50" rx="25" ry="10" transform="rotate(30 50 50)" fill="none"/>
+          <circle id="orbit3" cx="50" cy="50" r="22" fill="none"/>
+          
+          {/* Energy pulses radiating out */}
+          <circle cx="50" cy="50" r="30" fill="none" stroke="#667eea" strokeWidth="0.5" opacity="0">
+            <animate attributeName="r" values="15;35" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.6;0" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="50" cy="50" r="30" fill="none" stroke="#0ea5e9" strokeWidth="0.5" opacity="0">
+            <animate attributeName="r" values="15;35" dur="2s" begin="1s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.6;0" dur="2s" begin="1s" repeatCount="indefinite"/>
+          </circle>
+          
+          {/* Sparkle accents */}
+          <g filter="url(#softGlow)">
+            <circle cx="35" cy="30" r="1" fill="#fff">
+              <animate attributeName="opacity" values="0;1;0" dur="3s" repeatCount="indefinite"/>
+              <animate attributeName="r" values="0.5;1.5;0.5" dur="3s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="68" cy="42" r="0.8" fill="#fff">
+              <animate attributeName="opacity" values="0;1;0" dur="2.5s" begin="0.5s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="62" cy="70" r="0.8" fill="#fff">
+              <animate attributeName="opacity" values="0;1;0" dur="4s" begin="1s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="32" cy="65" r="1" fill="#fff">
+              <animate attributeName="opacity" values="0;1;0" dur="3.5s" begin="1.5s" repeatCount="indefinite"/>
+            </circle>
+          </g>
         </svg>
       </div>
 
-      {/* Name only - status removed */}
+      {/* Name */}
       <div>
         <div style={{
           color: '#fff',
@@ -159,69 +199,6 @@ export default function OpieStatusWidget({
           Opie
         </div>
       </div>
-
-      <style>{`
-        @keyframes avatarRotate {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes opieOnline {
-          0%, 100% { 
-            box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);
-          }
-          50% { 
-            box-shadow: 0 0 24px rgba(34, 197, 94, 0.6);
-          }
-        }
-        @keyframes opieThinking {
-          0%, 100% { 
-            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
-          }
-          50% { 
-            box-shadow: 0 0 35px rgba(102, 126, 234, 0.8);
-          }
-        }
-        @keyframes opieWorking {
-          0%, 100% { 
-            box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
-          }
-          50% { 
-            box-shadow: 0 0 30px rgba(245, 158, 11, 0.8);
-          }
-        }
-        @keyframes thinkingGlow {
-          0%, 100% { 
-            opacity: 0.3;
-            transform: scale(1);
-          }
-          50% { 
-            opacity: 0.8;
-            transform: scale(1.1);
-          }
-        }
-        @keyframes workingGlow {
-          0%, 100% { 
-            opacity: 0.4;
-            transform: scale(1) rotate(0deg);
-          }
-          50% { 
-            opacity: 0.9;
-            transform: scale(1.05) rotate(180deg);
-          }
-        }
-        @keyframes iconPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.2); }
-        }
-        @keyframes iconSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes dotBounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }
