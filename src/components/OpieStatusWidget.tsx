@@ -1,5 +1,4 @@
 'use client';
-import { useState, useEffect } from 'react';
 import { useSystemStatus } from '../hooks/useRealTimeData';
 
 interface OpieStatusWidgetProps {
@@ -43,26 +42,34 @@ export default function OpieStatusWidget({
         return { 
           color: '#ef4444', 
           text: 'Offline',
+          icon: '💤',
           animation: 'none',
+          glowAnimation: 'none',
         };
       case 'thinking':
         return { 
           color: '#667eea', 
-          text: 'Thinking',
+          text: 'Thinking...',
+          icon: '🧠',
           animation: 'opieThinking 1.5s ease-in-out infinite',
+          glowAnimation: 'thinkingGlow 1.5s ease-in-out infinite',
         };
       case 'working':
         return { 
           color: '#f59e0b', 
           text: 'Working',
-          animation: 'opieWorking 1s ease-in-out infinite',
+          icon: '⚙️',
+          animation: 'opieWorking 0.8s ease-in-out infinite',
+          glowAnimation: 'workingGlow 0.8s ease-in-out infinite',
         };
       case 'online':
       default:
         return { 
           color: '#22c55e', 
           text: 'Online',
+          icon: '⚡',
           animation: 'opieOnline 3s ease-in-out infinite',
+          glowAnimation: 'none',
         };
     }
   };
@@ -87,37 +94,77 @@ export default function OpieStatusWidget({
     >
       {/* Status Orb / Avatar */}
       <div style={{
+        position: 'relative',
         width: orbSize,
         height: orbSize,
-        borderRadius: '50%',
-        background: `radial-gradient(circle at 30% 30%, ${config.color} 0%, ${config.color}80 50%, ${config.color}40 100%)`,
-        boxShadow: `0 0 ${orbSize/3}px ${config.color}60`,
-        animation: config.animation,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         flexShrink: 0,
       }}>
-        {/* Icon */}
-        <span style={{
-          fontSize: size === 'small' ? '14px' : size === 'medium' ? '18px' : '24px',
-          filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.7))',
-        }}>
-          ⚡
-        </span>
+        {/* Outer glow ring for thinking/working */}
+        {(currentStatus === 'thinking' || currentStatus === 'working') && (
+          <div style={{
+            position: 'absolute',
+            top: '-4px',
+            left: '-4px',
+            right: '-4px',
+            bottom: '-4px',
+            borderRadius: '50%',
+            border: `2px solid ${config.color}`,
+            animation: config.glowAnimation,
+            opacity: 0.6,
+          }} />
+        )}
         
-        {/* Highlight reflection */}
+        {/* Main orb */}
         <div style={{
-          position: 'absolute',
-          top: '12%',
-          left: '18%',
-          width: '22%',
-          height: '22%',
+          width: '100%',
+          height: '100%',
           borderRadius: '50%',
-          background: 'rgba(255,255,255,0.5)',
-          filter: 'blur(2px)',
-        }} />
+          background: `radial-gradient(circle at 30% 30%, ${config.color} 0%, ${config.color}80 50%, ${config.color}40 100%)`,
+          boxShadow: `0 0 ${orbSize/3}px ${config.color}60`,
+          animation: config.animation,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+        }}>
+          {/* Icon - changes based on status */}
+          <span style={{
+            fontSize: size === 'small' ? '16px' : size === 'medium' ? '22px' : '28px',
+            filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.7))',
+            animation: currentStatus === 'thinking' ? 'iconPulse 1s ease-in-out infinite' : 
+                       currentStatus === 'working' ? 'iconSpin 2s linear infinite' : 'none',
+          }}>
+            {config.icon}
+          </span>
+          
+          {/* Highlight reflection */}
+          <div style={{
+            position: 'absolute',
+            top: '12%',
+            left: '18%',
+            width: '22%',
+            height: '22%',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.5)',
+            filter: 'blur(2px)',
+          }} />
+        </div>
+
+        {/* Activity dots for working state */}
+        {currentStatus === 'working' && (
+          <div style={{
+            position: 'absolute',
+            bottom: '-8px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '3px',
+          }}>
+            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0s' }} />
+            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0.2s' }} />
+            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0.4s' }} />
+          </div>
+        )}
       </div>
 
       {/* Name and Status */}
@@ -136,8 +183,14 @@ export default function OpieStatusWidget({
           fontSize: size === 'small' ? '0.7rem' : size === 'medium' ? '0.8rem' : '0.9rem',
           fontWeight: 600,
           marginTop: '2px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
         }}>
           {config.text}
+          {currentStatus === 'working' && status?.agents?.active && (
+            <span style={{ opacity: 0.7 }}>({status.agents.active})</span>
+          )}
         </div>
       </div>
 
@@ -154,12 +207,12 @@ export default function OpieStatusWidget({
         }
         @keyframes opieThinking {
           0%, 100% { 
-            box-shadow: 0 0 16px rgba(102, 126, 234, 0.5);
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
             transform: scale(1);
           }
           50% { 
-            box-shadow: 0 0 28px rgba(102, 126, 234, 0.8);
-            transform: scale(1.06);
+            box-shadow: 0 0 35px rgba(102, 126, 234, 0.8);
+            transform: scale(1.08);
           }
         }
         @keyframes opieWorking {
@@ -167,18 +220,42 @@ export default function OpieStatusWidget({
             box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
             transform: scale(1);
           }
-          25% { 
-            box-shadow: 0 0 24px rgba(245, 158, 11, 0.7);
-            transform: scale(1.04);
-          }
           50% { 
-            box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
-            transform: scale(1.02);
-          }
-          75% { 
-            box-shadow: 0 0 28px rgba(245, 158, 11, 0.8);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.8);
             transform: scale(1.05);
           }
+        }
+        @keyframes thinkingGlow {
+          0%, 100% { 
+            opacity: 0.3;
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 0.8;
+            transform: scale(1.1);
+          }
+        }
+        @keyframes workingGlow {
+          0%, 100% { 
+            opacity: 0.4;
+            transform: scale(1) rotate(0deg);
+          }
+          50% { 
+            opacity: 0.9;
+            transform: scale(1.05) rotate(180deg);
+          }
+        }
+        @keyframes iconPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.2); }
+        }
+        @keyframes iconSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes dotBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40% { transform: translateY(-4px); opacity: 1; }
         }
       `}</style>
     </div>
