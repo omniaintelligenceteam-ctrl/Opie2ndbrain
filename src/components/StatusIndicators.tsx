@@ -66,6 +66,14 @@ export function StatusBar({ showDetails = false }: StatusBarProps) {
               }} />
               <span>API</span>
             </div>
+            <div style={barStyles.indicator} title="Security">
+              <div style={{
+                ...barStyles.indicatorDot,
+                background: status?.security?.secure ? '#22c55e' : 
+                           status?.security?.warnings ? '#f59e0b' : '#22c55e',
+              }} />
+              <span>Sec</span>
+            </div>
           </div>
           {latency !== null && (
             <span style={barStyles.latency}>{latency}ms</span>
@@ -273,6 +281,29 @@ export function SystemHealthPanel() {
             </div>
             {latency !== null && (
               <span style={healthStyles.serviceLatency}>{latency}ms</span>
+            )}
+          </div>
+
+          <div style={healthStyles.serviceCard}>
+            <div style={{
+              ...healthStyles.serviceDot,
+              background: status?.security?.secure ? '#22c55e' : 
+                         status?.security?.warnings ? '#f59e0b' : '#22c55e',
+            }} />
+            <div style={healthStyles.serviceInfo}>
+              <span style={healthStyles.serviceName}>Security</span>
+              <span style={healthStyles.serviceStatus}>
+                {status?.security?.status || 
+                 (status?.security?.warnings ? `${status.security.warnings} warning${status.security.warnings > 1 ? 's' : ''}` : 'Secure')}
+              </span>
+            </div>
+            {status?.security?.sslValid !== undefined && (
+              <span style={{
+                ...healthStyles.serviceLatency,
+                color: status.security.sslValid ? '#22c55e' : '#ef4444',
+              }}>
+                SSL {status.security.sslValid ? '✓' : '✗'}
+              </span>
             )}
           </div>
         </div>

@@ -270,6 +270,8 @@ export default function FloatingChat({
   const [isResizing, setIsResizing] = useState(false);
   const [showEmojiHint, setShowEmojiHint] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [isDetached, setIsDetached] = useState(false);
+  const detachedWindowRef = useRef<Window | null>(null);
   
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -345,6 +347,289 @@ export default function FloatingChat({
       };
     }
   }, [isResizing, handleMouseMove]);
+
+  // Handle detach/pop-out
+  const handleDetach = useCallback(() => {
+    const width = 420;
+    const height = 600;
+    const left = window.screen.width - width - 50;
+    const top = 50;
+    
+    // Create the popup window
+    const popup = window.open(
+      '',
+      'OpieChat',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
+    );
+    
+    if (!popup) {
+      alert('Please allow popups for this site to use the detached chat feature.');
+      return;
+    }
+    
+    detachedWindowRef.current = popup;
+    setIsDetached(true);
+    setMode('minimized'); // Minimize the main chat when detached
+    
+    // Write the HTML content to the popup
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Opie Chat</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d0d1a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+          }
+          #chat-root {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          }
+          .header {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+          }
+          .header-left { display: flex; align-items: center; gap: 12px; }
+          .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+          }
+          .header-info { display: flex; flex-direction: column; gap: 2px; }
+          .header-name { font-weight: 600; font-size: 1rem; display: flex; align-items: center; gap: 4px; }
+          .header-status { color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+          .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+          .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+          }
+          .message-row { display: flex; gap: 8px; }
+          .message-row.user { justify-content: flex-end; }
+          .message-row.assistant { justify-content: flex-start; }
+          .message-bubble {
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 80%;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+          }
+          .message-bubble.user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 18px 18px 4px 18px;
+          }
+          .message-bubble.assistant {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 18px 18px 18px 4px;
+          }
+          .input-area {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            background: rgba(0, 0, 0, 0.2);
+          }
+          .text-input {
+            flex: 1;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            color: #fff;
+            font-size: 0.9rem;
+            outline: none;
+            resize: none;
+            min-height: 48px;
+            max-height: 120px;
+            font-family: inherit;
+          }
+          .text-input:focus { border-color: rgba(102, 126, 234, 0.5); }
+          .send-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+          }
+          .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+          .send-btn svg { width: 20px; height: 20px; }
+          .typing-indicator { display: flex; gap: 4px; padding: 14px 18px; background: rgba(255, 255, 255, 0.08); border-radius: 18px; width: fit-content; }
+          .typing-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); animation: bounce 1.4s infinite; }
+          .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+          .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+          @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-4px); opacity: 1; } }
+          .sync-notice { padding: 8px 16px; background: rgba(102, 126, 234, 0.1); color: rgba(255, 255, 255, 0.6); font-size: 0.75rem; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        </style>
+      </head>
+      <body>
+        <div id="chat-root">
+          <div class="sync-notice">🔗 Connected to main window</div>
+          <div class="header">
+            <div class="header-left">
+              <img class="avatar" src="${window.location.origin}/opie-avatar.png" alt="Opie" onerror="this.style.display='none'" />
+              <div class="header-info">
+                <span class="header-name">Opie ⚡</span>
+                <span class="header-status"><span class="status-dot"></span> Online</span>
+              </div>
+            </div>
+          </div>
+          <div class="messages" id="messages"></div>
+          <div class="input-area">
+            <textarea class="text-input" id="input" placeholder="Type a message..." rows="1"></textarea>
+            <button class="send-btn" id="send-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <script>
+          const messagesEl = document.getElementById('messages');
+          const inputEl = document.getElementById('input');
+          const sendBtn = document.getElementById('send-btn');
+          
+          // Listen for messages from parent window
+          window.addEventListener('message', (event) => {
+            if (event.data.type === 'OPIE_CHAT_UPDATE') {
+              renderMessages(event.data.messages, event.data.isLoading);
+            }
+          });
+          
+          // Request initial state
+          if (window.opener) {
+            window.opener.postMessage({ type: 'OPIE_CHAT_REQUEST_STATE' }, '*');
+          }
+          
+          function renderMessages(messages, isLoading) {
+            messagesEl.innerHTML = messages.map(msg => \`
+              <div class="message-row \${msg.role}">
+                <div class="message-bubble \${msg.role}">\${escapeHtml(msg.text)}</div>
+              </div>
+            \`).join('');
+            
+            if (isLoading) {
+              messagesEl.innerHTML += '<div class="message-row assistant"><div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div></div>';
+            }
+            
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+          
+          function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+          }
+          
+          function sendMessage() {
+            const text = inputEl.value.trim();
+            if (text && window.opener) {
+              window.opener.postMessage({ type: 'OPIE_CHAT_SEND', text }, '*');
+              inputEl.value = '';
+              inputEl.style.height = 'auto';
+            }
+          }
+          
+          sendBtn.addEventListener('click', sendMessage);
+          inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage();
+            }
+          });
+          
+          inputEl.addEventListener('input', () => {
+            inputEl.style.height = 'auto';
+            inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+          });
+          
+          // Notify parent when closing
+          window.addEventListener('beforeunload', () => {
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OPIE_CHAT_DETACHED_CLOSED' }, '*');
+            }
+          });
+        </script>
+      </body>
+      </html>
+    `);
+    popup.document.close();
+  }, []);
+  
+  // Listen for messages from detached window
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'OPIE_CHAT_REQUEST_STATE') {
+        // Send current state to detached window
+        detachedWindowRef.current?.postMessage({
+          type: 'OPIE_CHAT_UPDATE',
+          messages: messages.map(m => ({ role: m.role, text: m.text })),
+          isLoading,
+        }, '*');
+      } else if (event.data.type === 'OPIE_CHAT_SEND') {
+        // Handle message sent from detached window
+        setInput(event.data.text);
+        setTimeout(() => onSend(event.data.text), 50);
+      } else if (event.data.type === 'OPIE_CHAT_DETACHED_CLOSED') {
+        setIsDetached(false);
+        detachedWindowRef.current = null;
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [messages, isLoading, onSend, setInput]);
+  
+  // Sync messages to detached window
+  useEffect(() => {
+    if (isDetached && detachedWindowRef.current && !detachedWindowRef.current.closed) {
+      detachedWindowRef.current.postMessage({
+        type: 'OPIE_CHAT_UPDATE',
+        messages: messages.map(m => ({ role: m.role, text: m.text })),
+        isLoading,
+      }, '*');
+    }
+  }, [messages, isLoading, isDetached]);
+  
+  // Check if detached window was closed
+  useEffect(() => {
+    if (!isDetached) return;
+    
+    const checkWindow = setInterval(() => {
+      if (detachedWindowRef.current?.closed) {
+        setIsDetached(false);
+        detachedWindowRef.current = null;
+        clearInterval(checkWindow);
+      }
+    }, 1000);
+    
+    return () => clearInterval(checkWindow);
+  }, [isDetached]);
 
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -487,6 +772,16 @@ export default function FloatingChat({
           </div>
           
           <div style={styles.headerActions}>
+            <button
+              onClick={handleDetach}
+              style={{
+                ...styles.headerButton,
+                ...(isDetached ? { background: 'rgba(102, 126, 234, 0.2)', color: '#667eea' } : {}),
+              }}
+              title={isDetached ? 'Chat detached (click to open another)' : 'Pop out chat'}
+            >
+              ⧉
+            </button>
             <button
               onClick={() => setMode(isFullscreen ? 'open' : 'fullscreen')}
               style={styles.headerButton}

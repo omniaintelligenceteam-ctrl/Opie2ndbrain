@@ -25,6 +25,14 @@ export interface SystemStatus {
     healthy: boolean;
     responseTime: number;
   };
+  security?: {
+    secure: boolean;
+    status?: string;
+    warnings?: number;
+    sslValid?: boolean;
+    authEnabled?: boolean;
+    lastScan?: string;
+  };
   agents: {
     active: number;
     idle: number;
