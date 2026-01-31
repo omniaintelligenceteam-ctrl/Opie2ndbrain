@@ -2,7 +2,18 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['gray-matter']
-  }
+  },
+  // Prevent aggressive caching during development
+  headers: async () => [
+    {
+      source: '/:path*',
+      headers: [
+        {
+          key: 'Cache-Control',
+          value: 'no-store, must-revalidate',
+        },
+      ],
+    },
+  ],
 }
 module.exports = nextConfig
-// Sat Jan 31 07:45:56 UTC 2026

@@ -2,28 +2,18 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that don't require authentication
-// Dashboard internal routes are public (URL is the security)
+// ALL dashboard internal routes are public (URL itself is the security)
 const PUBLIC_ROUTES = [
-  '/api/status',    // Health check endpoint
-  '/api/tts',       // TTS for voice features
-  '/api/chat',      // Chat interface
-  '/api/agents',    // Agent sessions dashboard
-  '/api/metrics',   // Dashboard metrics
-  '/api/crons',     // Cron jobs display
-  '/api/activity',  // Activity feed
-  '/_next',         // Next.js internals
+  '/api/',  // Allow ALL /api/* routes - this is a personal dashboard
+  '/_next',
   '/favicon',
   '/manifest',
 ];
 
-// Routes that require authentication (external-facing, sensitive)
+// Routes that require authentication (only truly external-facing)
 const PROTECTED_API_ROUTES = [
-  '/api/email',         // Send emails
-  '/api/calendar',      // Calendar access
-  '/api/workspace',     // Workspace modifications
-  '/api/memory',        // Memory writes
-  '/api/notifications', // Push notifications
-  '/api/analytics',     // Analytics data
+  '/api/email',    // Send emails externally
+  '/api/calendar', // Calendar modifications
 ];
 
 /**
