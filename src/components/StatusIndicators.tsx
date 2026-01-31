@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useSystemStatus, useConnectionStatus } from '../hooks/useRealTimeData';
+import { useSidebarStats } from '../hooks/useSidebarData';
 
 // =============================================================================
 // StatusBar - Compact status bar for header
@@ -515,17 +516,20 @@ const healthStyles: { [key: string]: React.CSSProperties } = {
 };
 
 // =============================================================================
-// LiveAgentCount - Compact agent counter
+// LiveAgentCount - Compact agent counter (uses real-time SSE data)
 // =============================================================================
 
 export function LiveAgentCount() {
-  const { status } = useSystemStatus(5000);
+  const { stats, connectionType } = useSidebarStats();
   
   return (
     <div style={agentCountStyles.container}>
       <span style={agentCountStyles.icon}>🤖</span>
-      <span style={agentCountStyles.count}>{status?.agents?.active ?? 0}</span>
+      <span style={agentCountStyles.count}>{stats.activeAgents}</span>
       <span style={agentCountStyles.label}>active</span>
+      {connectionType === 'sse' && (
+        <span style={{ color: '#22c55e', fontSize: '8px', marginLeft: '2px' }} title="Live">●</span>
+      )}
     </div>
   );
 }
@@ -554,17 +558,20 @@ const agentCountStyles: { [key: string]: React.CSSProperties } = {
 };
 
 // =============================================================================
-// LiveTaskCount - Compact task counter
+// LiveTaskCount - Compact task counter (uses real-time SSE data)
 // =============================================================================
 
 export function LiveTaskCount() {
-  const { status } = useSystemStatus(5000);
+  const { stats, connectionType } = useSidebarStats();
   
   return (
     <div style={taskCountStyles.container}>
       <span style={taskCountStyles.icon}>⚡</span>
-      <span style={taskCountStyles.count}>{status?.tasks?.running ?? 0}</span>
+      <span style={taskCountStyles.count}>{stats.runningTasks}</span>
       <span style={taskCountStyles.label}>running</span>
+      {connectionType === 'sse' && (
+        <span style={{ color: '#f59e0b', fontSize: '8px', marginLeft: '2px' }} title="Live">●</span>
+      )}
     </div>
   );
 }

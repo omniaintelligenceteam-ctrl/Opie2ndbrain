@@ -210,17 +210,18 @@ async function fetchSessions(): Promise<{ sessions: AgentSession[]; tasks: Task[
       };
       sessions.push(session);
       
-      // Convert running sessions to tasks
-      if (normalizedStatus === 'running' || normalizedStatus === 'complete' || normalizedStatus === 'failed') {
+      // Convert running sessions to tasks (only non-idle)
+      if (normalizedStatus !== 'idle') {
+        const taskStatus: 'running' | 'complete' | 'failed' = normalizedStatus;
         tasks.push({
           id: sessionId,
           agentId: getAgentType(label),
           agentName: label,
           agentEmoji: getAgentEmoji(label),
           label,
-          status: normalizedStatus === 'idle' ? 'complete' : normalizedStatus,
+          status: taskStatus,
           startTime: startedAt,
-          progress: normalizedStatus === 'running' ? 50 : normalizedStatus === 'complete' ? 100 : 0,
+          progress: taskStatus === 'running' ? 50 : taskStatus === 'complete' ? 100 : 0,
         });
       }
     }

@@ -75,22 +75,76 @@ export default function OpieStatusWidget({
       }}
       onClick={onClick}
     >
-      {/* Avatar */}
+      {/* Avatar - Sleek AI with Electric Blue Energy */}
       <div style={{
         width: orbSize,
         height: orbSize,
         flexShrink: 0,
+        position: 'relative',
       }}>
-        <img 
-          src="/opie-avatar.png" 
-          alt="Opie"
+        {/* Outer glow ring */}
+        <div style={{
+          position: 'absolute',
+          inset: -4,
+          borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, #0ea5e9, #667eea, #8b5cf6, #0ea5e9)',
+          animation: 'avatarRotate 4s linear infinite',
+          opacity: currentStatus === 'offline' ? 0.2 : 0.7,
+        }} />
+        {/* Inner dark circle */}
+        <div style={{
+          position: 'absolute',
+          inset: 2,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #0c1222 0%, #1a1a2e 100%)',
+          zIndex: 1,
+        }} />
+        {/* AI Core SVG */}
+        <svg
+          viewBox="0 0 100 100"
           style={{
+            position: 'absolute',
+            inset: 0,
             width: '100%',
             height: '100%',
-            borderRadius: '50%',
-            objectFit: 'cover',
+            zIndex: 2,
           }}
-        />
+        >
+          <defs>
+            <linearGradient id="electricBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#0ea5e9" />
+              <stop offset="50%" stopColor="#667eea" />
+              <stop offset="100%" stopColor="#8b5cf6" />
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          {/* Central eye/core */}
+          <circle cx="50" cy="50" r="12" fill="url(#electricBlue)" filter="url(#glow)" opacity={currentStatus === 'offline' ? 0.3 : 1}>
+            <animate attributeName="r" values="10;14;10" dur="2s" repeatCount="indefinite" />
+          </circle>
+          {/* Inner ring */}
+          <circle cx="50" cy="50" r="22" fill="none" stroke="url(#electricBlue)" strokeWidth="1.5" opacity="0.6" />
+          {/* Orbital paths */}
+          <ellipse cx="50" cy="50" rx="32" ry="18" fill="none" stroke="url(#electricBlue)" strokeWidth="1" opacity="0.4" transform="rotate(-30 50 50)" />
+          <ellipse cx="50" cy="50" rx="32" ry="18" fill="none" stroke="url(#electricBlue)" strokeWidth="1" opacity="0.4" transform="rotate(30 50 50)" />
+          {/* Energy particles */}
+          <circle cx="50" cy="20" r="3" fill="#0ea5e9" filter="url(#glow)">
+            <animateMotion dur="3s" repeatCount="indefinite" path="M0,0 A30,30 0 1,1 0,60 A30,30 0 1,1 0,0" />
+          </circle>
+          <circle cx="50" cy="80" r="2" fill="#8b5cf6" filter="url(#glow)">
+            <animateMotion dur="4s" repeatCount="indefinite" path="M0,0 A30,30 0 1,0 0,-60 A30,30 0 1,0 0,0" />
+          </circle>
+          {/* Lightning bolt accent */}
+          <path d="M48 35 L52 35 L50 45 L55 45 L47 58 L49 50 L45 50 Z" fill="#0ea5e9" filter="url(#glow)" opacity={currentStatus === 'offline' ? 0.3 : 0.9}>
+            <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite" />
+          </path>
+        </svg>
       </div>
 
       {/* Name and Status */}
@@ -118,6 +172,10 @@ export default function OpieStatusWidget({
       </div>
 
       <style>{`
+        @keyframes avatarRotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
         @keyframes opieOnline {
           0%, 100% { 
             box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);

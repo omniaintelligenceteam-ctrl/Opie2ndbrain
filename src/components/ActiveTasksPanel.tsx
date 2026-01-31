@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useSidebarTasks, Task as SidebarTask } from '@/hooks/useSidebarData';
 
 export interface Task {
   id: string;
@@ -96,9 +97,32 @@ const DEMO_TASKS: Task[] = [
   },
 ];
 
-export default function ActiveTasksPanel({ tasks = DEMO_TASKS, onTaskClick }: ActiveTasksPanelProps) {
+export default function ActiveTasksPanel({ tasks: propTasks, onTaskClick }: ActiveTasksPanelProps) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Use real-time SSE data for tasks
+  const { 
+    tasks: sseTasks, 
+    runningTasks: runningCount,
+    completedTasks: completedCount,
+    loading,
+    connectionType,
+    refresh,
+  } = useSidebarTasks();
+
+  // Convert SSE tasks to component Task format, or use props/demo as fallback
+  const tasks: Task[] = (sseTasks.length > 0 ? sseTasks.map(t => ({
+    id: t.id,
+    agentId: t.agentId,
+    agentName: t.agentName,
+    agentEmoji: t.agentEmoji,
+    label: t.label,
+    startTime: new Date(t.startTime),
+    status: t.status,
+    progress: t.progress,
+    output: t.output,
+  })) : propTasks) || DEMO_TASKS;
 
   useEffect(() => {
     // Set initial time on client only (avoids hydration mismatch)
@@ -296,6 +320,16 @@ export default function ActiveTasksPanel({ tasks = DEMO_TASKS, onTaskClick }: Ac
             <span style={styles.subtitle}>{runningTasks.length} running, {completedTasks.length} completed</span>
           </div>
         </div>
+        <div style={styles.headerRight}>
+          {connectionType === 'sse' && (
+            <span style={{ color: '#22c55e', fontSize: '0.7rem', marginRight: '8px' }} title="Real-time updates active">
+              ⚡ Live
+            </span>
+          )}
+          <button onClick={refresh} style={styles.refreshBtn} disabled={loading}>
+            {loading ? '⏳' : '🔄'}
+          </button>
+        </div>
       </div>
 
       <div style={styles.taskList}>
@@ -390,11 +424,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '14px',
+  },
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  refreshBtn: {
+    padding: '8px 12px',
+    background: 'rgba(255,255,255,0.05)',
+    border: 'none',
+    borderRadius: '8px',
+    color: 'rgba(255,255,255,0.7)',
+    cursor: 'pointer',
+    fontSize: '14px',
   },
   headerIcon: {
     fontSize: '28px',
