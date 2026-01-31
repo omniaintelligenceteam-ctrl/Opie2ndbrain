@@ -65,17 +65,15 @@ export async function POST(req: NextRequest) {
         // Pass personality parameters as headers for gateway support
         ...(personalityConfig && {
           'x-moltbot-temperature': String(personalityConfig.temperature),
-          'x-moltbot-max-tokens': String(personalityConfig.maxTokens),
         }),
       },
       body: JSON.stringify({
         model: 'moltbot:main',
         input,
         stream: false,
-        // Include personality in body for gateways that support it
+        // Note: max_tokens not supported by Moltbot gateway
         ...(personalityConfig && {
           temperature: personalityConfig.temperature,
-          max_tokens: personalityConfig.maxTokens,
         }),
       }),
     });
