@@ -1,4 +1,4 @@
-const CACHE_NAME = 'opie-2ndbrain-v1';
+const CACHE_NAME = 'opie-2ndbrain-v2';
 const STATIC_ASSETS = [
   '/',
   '/opie',
