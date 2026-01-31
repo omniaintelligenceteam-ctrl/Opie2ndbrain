@@ -5,6 +5,7 @@ import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityT
 // Force Node.js runtime for full env var access (Edge has 5KB limit issues)
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Allow up to 60 seconds for AI response (Pro plan: 300)
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
