@@ -5,3 +5,4 @@ Personal knowledge base and dashboard.
 ## Routes
 - `/` — Document browser
 - `/opie` — Dashboard
+
