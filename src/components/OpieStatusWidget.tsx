@@ -147,7 +147,7 @@ export default function OpieStatusWidget({
         </svg>
       </div>
 
-      {/* Name and Status */}
+      {/* Name only - status removed */}
       <div>
         <div style={{
           color: '#fff',
@@ -157,17 +157,6 @@ export default function OpieStatusWidget({
           lineHeight: 1.2,
         }}>
           Opie
-        </div>
-        <div style={{
-          color: config.color,
-          fontSize: size === 'small' ? '0.7rem' : size === 'medium' ? '0.8rem' : '0.9rem',
-          fontWeight: 600,
-          marginTop: '2px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-        }}>
-          {config.text}
         </div>
       </div>
 

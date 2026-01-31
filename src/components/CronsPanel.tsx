@@ -241,13 +241,13 @@ export default function CronsPanel({
 
   const handleToggle = async (cron: CronJob) => {
     const updated = { ...cron, enabled: !cron.enabled };
-    setCrons(prev => prev.map(c => c.id === cron.id ? updated : c));
     try {
       await fetch(`/api/crons/${cron.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
+      await refreshCrons();
     } catch (err) {
       console.error('Failed to update cron');
     }
@@ -255,10 +255,10 @@ export default function CronsPanel({
 
   const handleDelete = async (cronId: string) => {
     if (!confirm('Delete this cron job?')) return;
-    setCrons(prev => prev.filter(c => c.id !== cronId));
     setSelectedCron(null);
     try {
       await fetch(`/api/crons/${cronId}`, { method: 'DELETE' });
+      await refreshCrons();
     } catch (err) {
       console.error('Failed to delete cron');
     }
@@ -275,10 +275,23 @@ export default function CronsPanel({
       runCount: editingCron?.runCount || 0,
     };
     
-    if (editingCron) {
-      setCrons(prev => prev.map(c => c.id === editingCron.id ? newCron : c));
-    } else {
-      setCrons(prev => [newCron, ...prev]);
+    try {
+      if (editingCron) {
+        await fetch(`/api/crons/${editingCron.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCron),
+        });
+      } else {
+        await fetch('/api/crons', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCron),
+        });
+      }
+      await refreshCrons();
+    } catch (err) {
+      console.error('Failed to save cron');
     }
     
     setShowAddModal(false);
