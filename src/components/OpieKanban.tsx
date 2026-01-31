@@ -319,13 +319,28 @@ export default function OpieKanban(): React.ReactElement {
 
   const isSpeakingRef = useRef(false);
   const isLoadingRef = useRef(false);
+  
+  // Silence detection refs - send after 2.5s of silence
+  const SILENCE_TIMEOUT_MS = 2500;
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingTranscriptRef = useRef('');
+  
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
   useEffect(() => { setSessionId(getSessionId()); }, []);
 
+  // Function to stop TTS playback (for barge-in/interrupt)
+  const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsSpeaking(false);
+  }, []);
+
   const startRecognition = useCallback(() => {
-    if (recognitionRef.current && micOnRef.current && !isSpeakingRef.current) {
+    if (recognitionRef.current && micOnRef.current) {
       try { recognitionRef.current.start(); } catch(e) {}
     }
   }, []);
@@ -335,9 +350,16 @@ export default function OpieKanban(): React.ReactElement {
     audioRef.current = new Audio();
     audioRef.current.onended = () => {
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 500);
+      setTimeout(() => startRecognition(), 300);
     };
   }, [startRecognition]);
+  
+  // Clear silence timer on unmount
+  useEffect(() => {
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -347,16 +369,46 @@ export default function OpieKanban(): React.ReactElement {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
-      // Use refs to get current values, not stale closure values
-      if (isSpeakingRef.current || isLoadingRef.current) return;
+      // BARGE-IN: If AI is speaking and user starts talking, interrupt it immediately
+      if (isSpeakingRef.current) {
+        stopSpeaking();
+        // Clear any pending transcript and start fresh
+        pendingTranscriptRef.current = '';
+        setTranscript('');
+      }
+      
+      // Don't process if loading (waiting for AI response)
+      if (isLoadingRef.current) return;
+      
       let final = '';
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
-      if (final) { handleSend(final); setTranscript(''); }
-      else setTranscript(interim);
+      
+      // If browser detected end of speech (final result), send immediately
+      if (final) {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        pendingTranscriptRef.current = '';
+        handleSend(final);
+        setTranscript('');
+      } else if (interim) {
+        // Update display and pending transcript
+        setTranscript(interim);
+        pendingTranscriptRef.current = interim;
+        
+        // SILENCE DETECTION: Reset timer - send after 2.5s of no new speech
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          const textToSend = pendingTranscriptRef.current.trim();
+          if (textToSend && !isLoadingRef.current && !isSpeakingRef.current) {
+            pendingTranscriptRef.current = '';
+            setTranscript('');
+            handleSend(textToSend);
+          }
+        }, SILENCE_TIMEOUT_MS);
+      }
     };
     recognition.onend = () => {
       // Always try to restart if mic should be on, regardless of loading state
@@ -388,7 +440,7 @@ export default function OpieKanban(): React.ReactElement {
       }
     };
     recognitionRef.current = recognition;
-  }, []);
+  }, [stopSpeaking]);
 
   const toggleMic = () => {
     if (!micOn) {
@@ -402,12 +454,16 @@ export default function OpieKanban(): React.ReactElement {
       setMicOn(false);
       try { recognitionRef.current?.stop(); } catch(e) {}
       setTranscript('');
+      // Clear pending transcript and silence timer
+      pendingTranscriptRef.current = '';
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     }
   };
 
   const speak = async (text: string) => {
     setIsSpeaking(true);
-    try { recognitionRef.current?.stop(); } catch(e) {}
+    // DON'T stop recognition - keep it running for barge-in capability
+    // This lets user interrupt AI mid-speech
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
@@ -422,7 +478,7 @@ export default function OpieKanban(): React.ReactElement {
       }
     } catch (err) {
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 500);
+      setTimeout(() => startRecognition(), 300);
     }
   };
 
@@ -430,6 +486,10 @@ export default function OpieKanban(): React.ReactElement {
     const messageText = text || input;
     if (!messageText.trim() || isLoading) return;
     const userMsg = messageText.trim();
+    
+    // Clear any pending silence timer
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    pendingTranscriptRef.current = '';
     
     // Create user message with proper structure
     const userMessage: ChatMessage = {
@@ -450,8 +510,6 @@ export default function OpieKanban(): React.ReactElement {
         m.id === userMessage.id ? { ...m, status: 'sent' as const } : m
       ));
     }, 300);
-    
-    try { recognitionRef.current?.stop(); } catch(e) {}
     
     try {
       const res = await fetch('/api/chat', {
