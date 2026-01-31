@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
         'x-moltbot-agent-id': 'main',
-        'x-moltbot-session-key': sessionId || 'agent:main:voice'
+        'x-moltbot-session-key': 'agent:main:main'  // Use main session for full context
       },
       body: JSON.stringify({
         model: 'moltbot:main',
