@@ -577,23 +577,7 @@ export default function SidebarWidgets({ isExpanded }: SidebarWidgetsProps) {
 
   return (
     <div style={widgetsStyles.container}>
-      <CollapsibleSidebarSection 
-        title="Calendar" 
-        icon={<Calendar size={14} />}
-        badge={calendarCount}
-        defaultOpen={true}
-      >
-        <SidebarCalendarWidget />
-      </CollapsibleSidebarSection>
-
-      <CollapsibleSidebarSection 
-        title="Email" 
-        icon={<Mail size={14} />}
-        badge={emailCount}
-        defaultOpen={true}
-      >
-        <SidebarEmailWidget />
-      </CollapsibleSidebarSection>
+      {/* Calendar and Email widgets removed */}
 
       <CollapsibleSidebarSection 
         title="System Health" 
