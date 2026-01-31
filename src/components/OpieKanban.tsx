@@ -29,6 +29,9 @@ import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTim
 import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
+import AgentLeaderboard from './AgentLeaderboard';
+import ContextWindowVisualizer from './ContextWindowVisualizer';
+import AgentPersonalityPanel from './AgentPersonalityPanel';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -79,9 +82,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'skills', label: 'Skills', icon: '🛠️' },
   { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
-  // Removed: email, calendar
+  { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { id: 'context', label: 'Context', icon: '🧠' },
   { id: 'voice', label: 'Voice', icon: '🎤' },
-  { id: 'memory', label: 'Memory', icon: '🧠' },
+  { id: 'memory', label: 'Memory', icon: '📁' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -330,6 +334,7 @@ export default function OpieKanban(): React.ReactElement {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingTranscriptRef = useRef('');
   const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
+  const abortControllerRef = useRef<AbortController | null>(null);  // Cancel pending API requests
   
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
@@ -343,6 +348,15 @@ export default function OpieKanban(): React.ReactElement {
       audioRef.current.currentTime = 0;
     }
     setIsSpeaking(false);
+  }, []);
+
+  // Function to cancel pending API request (for interrupt while thinking)
+  const cancelPendingRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
   }, []);
 
   const startRecognition = useCallback(() => {
@@ -365,10 +379,11 @@ export default function OpieKanban(): React.ReactElement {
     };
   }, [startRecognition]);
   
-  // Clear silence timer on unmount
+  // Clear timers and abort pending requests on unmount
   useEffect(() => {
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
 
@@ -381,16 +396,17 @@ export default function OpieKanban(): React.ReactElement {
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
       // BARGE-IN: If AI is speaking and user starts talking, interrupt it immediately
+      // Don't clear transcript - let user finish their thought
       if (isSpeakingRef.current) {
         stopSpeaking();
-        accumulatedTranscriptRef.current = '';
-        pendingTranscriptRef.current = '';
-        setTranscript('');
       }
-      
-      // Don't process if loading (waiting for AI response)
-      if (isLoadingRef.current) return;
-      
+
+      // INTERRUPT THINKING: If AI is thinking and user starts talking, cancel the request
+      // This lets user add more context or correct themselves before getting an answer
+      if (isLoadingRef.current) {
+        cancelPendingRequest();
+      }
+
       // Build complete transcript from ALL results (not just from resultIndex)
       let finalText = '';
       let interimText = '';
@@ -564,16 +580,20 @@ export default function OpieKanban(): React.ReactElement {
     
     // Update user message status to sent
     setTimeout(() => {
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'sent' as const } : m
       ));
     }, 300);
-    
+
+    // Create abort controller for this request (allows user to interrupt while thinking)
+    abortControllerRef.current = new AbortController();
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg, sessionId }),
+        signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
@@ -600,20 +620,29 @@ export default function OpieKanban(): React.ReactElement {
       ));
       
       await speak(reply);
-    } catch (err) {
-      // Add error response
+    } catch (err: any) {
+      // If user interrupted while thinking, don't show error - just mark as cancelled
+      if (err?.name === 'AbortError') {
+        setMessages(prev => prev.map(m =>
+          m.id === userMessage.id ? { ...m, status: 'error' as const, text: userMsg + ' (cancelled - adding more context...)' } : m
+        ));
+        setIsLoading(false);
+        return;
+      }
+
+      // Add error response for actual errors
       const errorMessage: ChatMessage = {
         id: generateMessageId(),
         role: 'assistant',
         text: 'Sorry, something went wrong. Please try again.',
         timestamp: new Date(),
       };
-      
+
       // Mark user message as error
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'error' as const } : m
       ));
-      
+
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
       setTimeout(() => startRecognition(), 500);
@@ -1199,6 +1228,50 @@ export default function OpieKanban(): React.ReactElement {
         {/* Email View */}
         {/* Removed: Email and Calendar full views */}
 
+        {/* Leaderboard View */}
+        {activeView === 'leaderboard' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Agent Leaderboard
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Agent rankings' : 'Track agent performance and find the best agent for each task'}
+              </p>
+            </div>
+            <div style={{ maxWidth: 800 }}>
+              <AgentLeaderboard />
+            </div>
+          </div>
+        )}
+
+        {/* Context Window View */}
+        {activeView === 'context' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                Context Window
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Working memory' : 'See what\'s in the agent\'s working memory'}
+              </p>
+            </div>
+            <div style={{ maxWidth: 600 }}>
+              <ContextWindowVisualizer />
+            </div>
+          </div>
+        )}
+
         {/* Settings View */}
         {activeView === 'settings' && (
           <div style={{
@@ -1322,6 +1395,10 @@ export default function OpieKanban(): React.ReactElement {
                   <span style={{ ...styles.settingValue, color: '#22c55e' }}>Enabled</span>
                 </div>
               </div>
+            </div>
+            {/* Agent Personality Section */}
+            <div style={{ marginTop: isMobile ? '24px' : '32px', maxWidth: 600 }}>
+              <AgentPersonalityPanel />
             </div>
           </div>
         )}

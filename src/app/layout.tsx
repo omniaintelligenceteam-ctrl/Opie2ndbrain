@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { AgentPersonalityProvider } from '../contexts/AgentPersonalityContext'
+import { AgentPerformanceProvider } from '../contexts/AgentPerformanceContext'
 import GlobalStyles from '../components/GlobalStyles'
 
 export const metadata: Metadata = {
@@ -66,8 +68,12 @@ export default function RootLayout({
       </head>
       <body>
         <ThemeProvider>
-          <GlobalStyles />
-          {children}
+          <AgentPersonalityProvider>
+            <AgentPerformanceProvider>
+              <GlobalStyles />
+              {children}
+            </AgentPerformanceProvider>
+          </AgentPersonalityProvider>
         </ThemeProvider>
       </body>
     </html>

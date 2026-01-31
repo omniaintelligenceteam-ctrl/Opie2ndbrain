@@ -64,11 +64,19 @@ function extractLabel(sessionId: string, label?: string): string {
 
 function normalizeStatus(status?: string): 'running' | 'complete' | 'failed' | 'idle' {
   if (!status) return 'idle';
-  
+
   const lower = status.toLowerCase();
-  if (lower === 'running' || lower === 'active') return 'running';
-  if (lower === 'complete' || lower === 'completed' || lower === 'success') return 'complete';
-  if (lower === 'failed' || lower === 'error') return 'failed';
+  // Running states
+  if (lower === 'running' || lower === 'active' || lower === 'processing' ||
+      lower === 'busy' || lower === 'working' || lower === 'in_progress' ||
+      lower === 'in-progress' || lower === 'pending' || lower === 'executing' ||
+      lower === 'started' || lower === 'thinking') return 'running';
+  // Complete states
+  if (lower === 'complete' || lower === 'completed' || lower === 'success' ||
+      lower === 'done' || lower === 'finished') return 'complete';
+  // Failed states
+  if (lower === 'failed' || lower === 'error' || lower === 'cancelled' ||
+      lower === 'aborted' || lower === 'timeout') return 'failed';
   return 'idle';
 }
 

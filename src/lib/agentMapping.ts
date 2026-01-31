@@ -91,17 +91,28 @@ export const AGENT_NODES: AgentNodeConfig[] = [
 export const ALL_AGENT_IDS = AGENT_NODES.map(n => n.id);
 
 // Find which node an agent session belongs to
-export function matchSessionToNode(sessionLabel: string): AgentNodeConfig | null {
+export function matchSessionToNode(sessionLabel: string, sessionId?: string): AgentNodeConfig | null {
   const lowerLabel = sessionLabel.toLowerCase();
-  
+  const lowerId = (sessionId || '').toLowerCase();
+
   for (const node of AGENT_NODES) {
     for (const pattern of node.sessionPatterns) {
-      if (lowerLabel.includes(pattern)) {
+      // Match against label OR session ID
+      if (lowerLabel.includes(pattern) || lowerId.includes(pattern)) {
         return node;
       }
     }
   }
-  
+
+  // Fallback: try to match common task/agent patterns to a default node
+  // If it's clearly an agent/task but doesn't match specific patterns, assign to Research
+  const genericAgentPatterns = ['agent', 'task', 'subagent', 'worker', 'job', 'process'];
+  for (const pattern of genericAgentPatterns) {
+    if (lowerLabel.includes(pattern) || lowerId.includes(pattern)) {
+      return AGENT_NODES[0]; // Default to Research agent
+    }
+  }
+
   return null;
 }
 
@@ -144,9 +155,9 @@ export function mapSessionsToNodes(
 ): AgentNodeState[] {
   // Group sessions by node
   const nodeSessionMap = new Map<string, typeof sessions>();
-  
+
   for (const session of sessions) {
-    const node = matchSessionToNode(session.label);
+    const node = matchSessionToNode(session.label, session.id);
     if (node) {
       const existing = nodeSessionMap.get(node.id) || [];
       existing.push(session);

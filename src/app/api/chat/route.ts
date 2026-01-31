@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
+import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -18,7 +19,12 @@ const DEMO_RESPONSES = [
 ];
 
 export async function POST(req: NextRequest) {
-  const { message, sessionId, isVoice = true } = await req.json();
+  const { message, sessionId, isVoice = true, personality } = await req.json();
+
+  // Convert personality parameters to API config if provided
+  const personalityConfig = personality
+    ? parametersToApiConfig(personality as PersonalityParameters)
+    : null;
   
   if (!message) {
     return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
@@ -38,18 +44,34 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Build input with personality modifiers if provided
+    let input = isVoice ? VOICE_INSTRUCTIONS + message : message;
+    if (personalityConfig?.systemModifiers) {
+      input = `[Style: ${personalityConfig.systemModifiers}]\n\n${input}`;
+    }
+
     const res = await fetch(`${GATEWAY_URL}/v1/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
         'x-moltbot-agent-id': 'main',
-        'x-moltbot-session-key': 'agent:main:main'  // Use main session for full context
+        'x-moltbot-session-key': 'agent:main:main',  // Use main session for full context
+        // Pass personality parameters as headers for gateway support
+        ...(personalityConfig && {
+          'x-moltbot-temperature': String(personalityConfig.temperature),
+          'x-moltbot-max-tokens': String(personalityConfig.maxTokens),
+        }),
       },
       body: JSON.stringify({
         model: 'moltbot:main',
-        input: isVoice ? VOICE_INSTRUCTIONS + message : message,
-        stream: false
+        input,
+        stream: false,
+        // Include personality in body for gateways that support it
+        ...(personalityConfig && {
+          temperature: personalityConfig.temperature,
+          max_tokens: personalityConfig.maxTokens,
+        }),
       }),
     });
 

@@ -52,21 +52,24 @@ export default function OrchestrationStatus({
     setMounted(true);
   }, []);
 
-  const { 
-    nodes, 
-    activeAgentIds, 
-    activeCount, 
-    loading, 
-    error, 
+  const {
+    nodes,
+    activeAgentIds,
+    activeCount,
+    loading,
+    error,
     lastUpdated,
     sessions,
+    gatewayConnected,
+    source,
   } = useAgentSessions(pollInterval);
 
   const effectiveActiveAgents = overrideActiveAgents || activeAgentIds;
 
-  // Demo mode for showing the orchestration when no real agents
+  // Demo mode for showing the orchestration when no real agents AND gateway is connected
+  // If gateway is disconnected, don't show demo - show the cached/empty state
   useEffect(() => {
-    if (activeCount === 0 && !loading) {
+    if (activeCount === 0 && !loading && gatewayConnected) {
       setDemoMode(true);
       // Auto-disable demo after 10 seconds
       const timer = setTimeout(() => setDemoMode(false), 10000);
@@ -74,7 +77,7 @@ export default function OrchestrationStatus({
     } else {
       setDemoMode(false);
     }
-  }, [activeCount, loading]);
+  }, [activeCount, loading, gatewayConnected]);
 
   // Animation loop for flowing effects
   useEffect(() => {
@@ -633,18 +636,26 @@ export default function OrchestrationStatus({
           </div>
         </div>
         
-        {lastUpdated && (
-          <div style={styles.timestamp}>
-            Last sync: {mounted ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '...'}
-          </div>
-        )}
+        <div style={styles.timestamp}>
+          {!gatewayConnected && !loading && (
+            <span style={{ color: '#f59e0b', marginRight: '8px' }}>⚠️ Gateway offline</span>
+          )}
+          {lastUpdated && mounted ? (
+            <>Last sync: {new Date(lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</>
+          ) : loading ? (
+            'Connecting...'
+          ) : (
+            'Not connected'
+          )}
+          {source === 'cache' && ' (cached)'}
+        </div>
       </div>
 
       {/* Error Banner */}
-      {error && (
+      {error && !gatewayConnected && (
         <div style={styles.errorBanner}>
           <span>⚠️</span>
-          <span>Gateway connection issue — showing cached data</span>
+          <span>Gateway unavailable — {source === 'cache' ? 'showing cached data' : 'no data available'}</span>
         </div>
       )}
 
