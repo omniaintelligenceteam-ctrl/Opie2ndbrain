@@ -13,9 +13,8 @@ import { useSounds } from '../hooks/useSounds';
 import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
 import MemoryPanel from './MemoryPanel';
 import WorkspaceBrowser from './WorkspaceBrowser';
-import CalendarWidget from './CalendarWidget';
-import EmailWidget from './EmailWidget';
-import QuickActionsPanel from './QuickActionsPanel';
+// Removed: CalendarWidget, EmailWidget
+// Removed: QuickActionsPanel
 // AnalyticsDashboard removed - was showing placeholder data
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
@@ -80,8 +79,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'skills', label: 'Skills', icon: '🛠️' },
   { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
-  { id: 'email', label: 'Email', icon: '📧' },
-  { id: 'calendar', label: 'Calendar', icon: '📅' },
+  // Removed: email, calendar
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '🧠' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -924,12 +922,7 @@ export default function OpieKanban(): React.ReactElement {
                     <CollapsibleSection title="System Health" icon="🩺">
                       <SystemHealthPanel />
                     </CollapsibleSection>
-                    <CollapsibleSection title="Calendar" icon="📅">
-                      <CalendarWidget />
-                    </CollapsibleSection>
-                    <CollapsibleSection title="Email" icon="📧">
-                      <EmailWidget />
-                    </CollapsibleSection>
+                    {/* Removed: Calendar and Email widgets */}
                   </div>
                 </>
               ) : (
@@ -1144,44 +1137,7 @@ export default function OpieKanban(): React.ReactElement {
         )}
 
         {/* Email View */}
-        {activeView === 'email' && (
-          <div style={{
-            ...styles.viewContainer,
-            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
-            paddingTop: isMobile ? '72px' : undefined,
-            paddingBottom: isMobile ? '100px' : undefined,
-          }}>
-            <div style={styles.viewHeader}>
-              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                📧 Email
-              </h1>
-              <p style={styles.viewSubtitle}>
-                {isMobile ? 'Your inbox' : 'Manage your email inbox'}
-              </p>
-            </div>
-            <EmailWidget fullView={true} />
-          </div>
-        )}
-
-        {/* Calendar View */}
-        {activeView === 'calendar' && (
-          <div style={{
-            ...styles.viewContainer,
-            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
-            paddingTop: isMobile ? '72px' : undefined,
-            paddingBottom: isMobile ? '100px' : undefined,
-          }}>
-            <div style={styles.viewHeader}>
-              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                📅 Calendar
-              </h1>
-              <p style={styles.viewSubtitle}>
-                {isMobile ? 'Your schedule' : 'View and manage your calendar'}
-              </p>
-            </div>
-            <CalendarWidget fullView={true} />
-          </div>
-        )}
+        {/* Removed: Email and Calendar full views */}
 
         {/* Settings View */}
         {activeView === 'settings' && (

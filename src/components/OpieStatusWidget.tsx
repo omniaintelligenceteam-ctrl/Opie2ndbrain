@@ -37,41 +37,24 @@ export default function OpieStatusWidget({
   };
 
   const getStatusConfig = (currentStatus: OpieStatus) => {
-    switch (currentStatus) {
-      case 'offline':
-        return { 
-          color: '#ef4444', 
-          text: 'Offline',
-          icon: '💤',
-          animation: 'none',
-          glowAnimation: 'none',
-        };
-      case 'thinking':
-        return { 
-          color: '#667eea', 
-          text: 'Thinking...',
-          icon: '🧠',
-          animation: 'opieThinking 1.5s ease-in-out infinite',
-          glowAnimation: 'thinkingGlow 1.5s ease-in-out infinite',
-        };
-      case 'working':
-        return { 
-          color: '#f59e0b', 
-          text: 'Working',
-          icon: '⚙️',
-          animation: 'opieWorking 0.8s ease-in-out infinite',
-          glowAnimation: 'workingGlow 0.8s ease-in-out infinite',
-        };
-      case 'online':
-      default:
-        return { 
-          color: '#22c55e', 
-          text: 'Online',
-          icon: '⚡',
-          animation: 'opieOnline 3s ease-in-out infinite',
-          glowAnimation: 'none',
-        };
+    // Simplified: just Online or Offline
+    if (currentStatus === 'offline') {
+      return { 
+        color: '#ef4444', 
+        text: 'Offline',
+        icon: '⚡',
+        animation: 'none',
+        glowAnimation: 'none',
+      };
     }
+    // Everything else is Online
+    return { 
+      color: '#22c55e', 
+      text: 'Online',
+      icon: '⚡',
+      animation: 'opieOnline 3s ease-in-out infinite',
+      glowAnimation: 'none',
+    };
   };
 
   const currentStatus = getStatus();
@@ -99,20 +82,7 @@ export default function OpieStatusWidget({
         height: orbSize,
         flexShrink: 0,
       }}>
-        {/* Outer glow ring for thinking/working */}
-        {(currentStatus === 'thinking' || currentStatus === 'working') && (
-          <div style={{
-            position: 'absolute',
-            top: '-4px',
-            left: '-4px',
-            right: '-4px',
-            bottom: '-4px',
-            borderRadius: '50%',
-            border: `2px solid ${config.color}`,
-            animation: config.glowAnimation,
-            opacity: 0.6,
-          }} />
-        )}
+        {/* Simple status indicator */}
         
         {/* Main orb */}
         <div style={{
@@ -150,21 +120,7 @@ export default function OpieStatusWidget({
           }} />
         </div>
 
-        {/* Activity dots for working state */}
-        {currentStatus === 'working' && (
-          <div style={{
-            position: 'absolute',
-            bottom: '-8px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            gap: '3px',
-          }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0s' }} />
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0.2s' }} />
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: config.color, animation: 'dotBounce 1s ease-in-out infinite', animationDelay: '0.4s' }} />
-          </div>
-        )}
+        {/* Removed: activity dots */}
       </div>
 
       {/* Name and Status */}
@@ -188,9 +144,6 @@ export default function OpieStatusWidget({
           gap: '4px',
         }}>
           {config.text}
-          {currentStatus === 'working' && status?.agents?.active && (
-            <span style={{ opacity: 0.7 }}>({status.agents.active})</span>
-          )}
         </div>
       </div>
 
