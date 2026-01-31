@@ -318,10 +318,11 @@ export default function OpieKanban(): React.ReactElement {
   const isSpeakingRef = useRef(false);
   const isLoadingRef = useRef(false);
   
-  // Silence detection refs - send after 2.5s of silence
-  const SILENCE_TIMEOUT_MS = 2500;
+  // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
+  const SILENCE_TIMEOUT_MS = 3500;
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingTranscriptRef = useRef('');
+  const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
   
   useEffect(() => { micOnRef.current = micOn; }, [micOn]);
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
@@ -370,7 +371,7 @@ export default function OpieKanban(): React.ReactElement {
       // BARGE-IN: If AI is speaking and user starts talking, interrupt it immediately
       if (isSpeakingRef.current) {
         stopSpeaking();
-        // Clear any pending transcript and start fresh
+        accumulatedTranscriptRef.current = '';
         pendingTranscriptRef.current = '';
         setTranscript('');
       }
@@ -378,35 +379,42 @@ export default function OpieKanban(): React.ReactElement {
       // Don't process if loading (waiting for AI response)
       if (isLoadingRef.current) return;
       
-      let final = '';
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
+      // Build complete transcript from ALL results (not just from resultIndex)
+      let finalText = '';
+      let interimText = '';
+      
+      for (let i = 0; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          finalText += result[0].transcript + ' ';
+        } else {
+          interimText += result[0].transcript;
+        }
       }
       
-      // If browser detected end of speech (final result), send immediately
-      if (final) {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        pendingTranscriptRef.current = '';
-        handleSend(final);
-        setTranscript('');
-      } else if (interim) {
-        // Update display and pending transcript
-        setTranscript(interim);
-        pendingTranscriptRef.current = interim;
-        
-        // SILENCE DETECTION: Reset timer - send after 2.5s of no new speech
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          const textToSend = pendingTranscriptRef.current.trim();
-          if (textToSend && !isLoadingRef.current && !isSpeakingRef.current) {
-            pendingTranscriptRef.current = '';
-            setTranscript('');
-            handleSend(textToSend);
-          }
-        }, SILENCE_TIMEOUT_MS);
+      // Store accumulated finals (DON'T send yet - wait for silence!)
+      if (finalText.trim()) {
+        accumulatedTranscriptRef.current = finalText.trim();
       }
+      
+      // Display current state: accumulated + interim
+      const displayText = (accumulatedTranscriptRef.current + ' ' + interimText).trim();
+      setTranscript(displayText);
+      pendingTranscriptRef.current = displayText;
+      
+      // SILENCE DETECTION: Reset timer on ANY activity
+      // This is the ONLY thing that triggers a send
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      
+      silenceTimerRef.current = setTimeout(() => {
+        const textToSend = accumulatedTranscriptRef.current.trim() || pendingTranscriptRef.current.trim();
+        if (textToSend && !isLoadingRef.current && !isSpeakingRef.current) {
+          accumulatedTranscriptRef.current = '';
+          pendingTranscriptRef.current = '';
+          setTranscript('');
+          handleSend(textToSend);
+        }
+      }, SILENCE_TIMEOUT_MS);
     };
     recognition.onend = () => {
       // Always try to restart if mic should be on, regardless of loading state
