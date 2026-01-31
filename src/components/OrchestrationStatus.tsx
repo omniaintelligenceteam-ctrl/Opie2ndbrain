@@ -62,6 +62,7 @@ export default function OrchestrationStatus({
     sessions,
     gatewayConnected,
     source,
+    connectionType,
   } = useAgentSessions(pollInterval);
 
   const effectiveActiveAgents = overrideActiveAgents || activeAgentIds;
@@ -683,6 +684,9 @@ export default function OrchestrationStatus({
           {!gatewayConnected && !loading && (
             <span style={{ color: '#f59e0b', marginRight: '8px' }}>⚠️ Gateway offline</span>
           )}
+          {connectionType === 'sse' && (
+            <span style={{ color: '#22c55e', marginRight: '8px' }} title="Real-time updates via Server-Sent Events">⚡ Live</span>
+          )}
           {lastUpdated && mounted ? (
             <>Last sync: {new Date(lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</>
           ) : loading ? (
@@ -691,6 +695,7 @@ export default function OrchestrationStatus({
             'Not connected'
           )}
           {source === 'cache' && ' (cached)'}
+          {connectionType === 'polling' && ' (polling)'}
         </div>
       </div>
 
