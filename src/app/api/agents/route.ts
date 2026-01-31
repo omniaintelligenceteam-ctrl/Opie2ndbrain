@@ -118,9 +118,12 @@ async function tryFetchSessions(): Promise<GatewaySession[]> {
     
     const data = await res.json();
     
-    if (data.ok && data.result?.sessions) {
+    // Sessions are in data.result.details.sessions (tools/invoke response format)
+    const sessions = data.result?.details?.sessions || data.result?.sessions || [];
+    
+    if (data.ok && sessions.length > 0) {
       // Map gateway session format to our expected format
-      return data.result.sessions.map((s: Record<string, unknown>) => ({
+      return sessions.map((s: Record<string, unknown>) => ({
         sessionId: s.key || s.sessionId,
         key: s.key,
         label: s.label || s.displayName,
