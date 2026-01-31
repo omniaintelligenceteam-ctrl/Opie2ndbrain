@@ -17,7 +17,8 @@ interface ActivityFeedProps {
   isThinking?: boolean;
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, mounted: boolean): string {
+  if (!mounted) return '...';
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -27,7 +28,7 @@ function formatRelativeTime(dateStr: string): string {
   if (diffMins < 1) return 'just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function getActivityIcon(type: string, status?: string): string {
@@ -69,8 +70,14 @@ export default function ActivityFeed({
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
   const prevActivityRef = useRef<ActivityItem[]>([]);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchActivity = useCallback(async () => {
     try {
@@ -175,7 +182,7 @@ export default function ActivityFeed({
                   <div style={styles.activityHeader}>
                     <span style={styles.activityTitle}>{item.title}</span>
                     <span style={styles.activityTime}>
-                      {formatRelativeTime(item.timestamp)}
+                      {formatRelativeTime(item.timestamp, mounted)}
                     </span>
                   </div>
                   {item.description && (

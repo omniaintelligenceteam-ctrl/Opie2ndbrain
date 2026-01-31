@@ -96,15 +96,18 @@ const DEMO_TASKS: Task[] = [
 ];
 
 export default function ActiveTasksPanel({ tasks = DEMO_TASKS, onTaskClick }: ActiveTasksPanelProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   useEffect(() => {
+    // Set initial time on client only (avoids hydration mismatch)
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
   const formatRuntime = (startTime: Date): string => {
+    if (!currentTime) return '...';
     const diff = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
     if (diff < 60) return `${diff}s`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`;

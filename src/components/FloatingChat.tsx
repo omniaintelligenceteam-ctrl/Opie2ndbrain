@@ -37,11 +37,13 @@ function generateId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(date: Date, mounted: boolean): string {
+  if (!mounted) return '...';
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatRelativeTime(date: Date): string {
+function formatRelativeTime(date: Date, mounted: boolean): string {
+  if (!mounted) return '...';
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const minutes = Math.floor(diff / 60000);
@@ -271,7 +273,13 @@ export default function FloatingChat({
   const [showEmojiHint, setShowEmojiHint] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isDetached, setIsDetached] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const detachedWindowRef = useRef<Window | null>(null);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Refs
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -884,7 +892,7 @@ export default function FloatingChat({
                       ...styles.messageTimestamp,
                       flexDirection: isUser ? 'row-reverse' : 'row',
                     }}>
-                      <span>{formatTime(msg.timestamp)}</span>
+                      <span>{formatTime(msg.timestamp, mounted)}</span>
                       {isUser && <MessageStatus status={msg.status} />}
                     </div>
                   )}

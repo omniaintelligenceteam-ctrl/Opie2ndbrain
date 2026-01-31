@@ -165,6 +165,12 @@ export default function AgentsPanel({
   const [deployTask, setDeployTask] = useState('');
   const [selectedDefinition, setSelectedDefinition] = useState<AgentDefinition | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -266,7 +272,7 @@ export default function AgentsPanel({
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>Started</span>
               <span style={styles.infoValue}>
-                {new Date(selectedSession.startedAt).toLocaleString()}
+                {mounted ? new Date(selectedSession.startedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : '...'}
               </span>
             </div>
           </div>
@@ -507,7 +513,7 @@ export default function AgentsPanel({
               <div style={styles.sessionCardStats}>
                 <span>⏱️ {session.runtime}</span>
                 <span>📊 {formatTokens(session.tokens.total)} tokens</span>
-                <span>🕐 {new Date(session.startedAt).toLocaleTimeString()}</span>
+                <span>🕐 {mounted ? new Date(session.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '...'}</span>
               </div>
               <div style={styles.viewDetails}>Click to view details →</div>
             </div>

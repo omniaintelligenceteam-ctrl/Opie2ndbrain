@@ -32,89 +32,92 @@ interface EmailWidgetProps {
   fullView?: boolean;
 }
 
-// Demo emails for development
-const DEMO_EMAILS: Email[] = [
-  {
-    id: '1',
-    from: {
-      name: 'Sarah Chen',
-      email: 'sarah.chen@company.com',
-      avatar: undefined,
+// Demo emails generator - creates emails relative to current time (client-side only)
+function createDemoEmails(): Email[] {
+  const now = Date.now();
+  return [
+    {
+      id: '1',
+      from: {
+        name: 'Sarah Chen',
+        email: 'sarah.chen@company.com',
+        avatar: undefined,
+      },
+      subject: 'Q4 Marketing Budget - Needs Approval',
+      preview: 'Hey Wes, I\'ve attached the updated Q4 marketing budget proposal. Could you review and approve by EOD tomorrow? The main changes are in the digital advertising section...',
+      receivedAt: new Date(now - 1000 * 60 * 15),
+      isRead: false,
+      isStarred: true,
+      isImportant: true,
+      hasAttachment: true,
+      threadCount: 3,
+      source: 'gmail',
     },
-    subject: 'Q4 Marketing Budget - Needs Approval',
-    preview: 'Hey Wes, I\'ve attached the updated Q4 marketing budget proposal. Could you review and approve by EOD tomorrow? The main changes are in the digital advertising section...',
-    receivedAt: new Date(Date.now() - 1000 * 60 * 15),
-    isRead: false,
-    isStarred: true,
-    isImportant: true,
-    hasAttachment: true,
-    threadCount: 3,
-    source: 'gmail',
-  },
-  {
-    id: '2',
-    from: {
-      name: 'GitHub',
-      email: 'noreply@github.com',
+    {
+      id: '2',
+      from: {
+        name: 'GitHub',
+        email: 'noreply@github.com',
+      },
+      subject: '[omnia-platform] Pull Request #234 merged',
+      preview: 'The pull request "Feature: Add calendar integration" has been merged into main by alex-dev. View the changes on GitHub...',
+      receivedAt: new Date(now - 1000 * 60 * 45),
+      isRead: false,
+      isStarred: false,
+      isImportant: false,
+      labels: ['notifications'],
+      source: 'gmail',
     },
-    subject: '[omnia-platform] Pull Request #234 merged',
-    preview: 'The pull request "Feature: Add calendar integration" has been merged into main by alex-dev. View the changes on GitHub...',
-    receivedAt: new Date(Date.now() - 1000 * 60 * 45),
-    isRead: false,
-    isStarred: false,
-    isImportant: false,
-    labels: ['notifications'],
-    source: 'gmail',
-  },
-  {
-    id: '3',
-    from: {
-      name: 'David Park',
-      email: 'david@omnialightscape.com',
+    {
+      id: '3',
+      from: {
+        name: 'David Park',
+        email: 'david@omnialightscape.com',
+      },
+      subject: 'Re: Partnership Opportunity',
+      preview: 'Thanks for getting back to me! I think Tuesday at 2pm works great for a call. Looking forward to discussing how we can work together on the commercial lighting project...',
+      receivedAt: new Date(now - 1000 * 60 * 60 * 2),
+      isRead: true,
+      isStarred: false,
+      isImportant: true,
+      threadCount: 8,
+      source: 'gmail',
     },
-    subject: 'Re: Partnership Opportunity',
-    preview: 'Thanks for getting back to me! I think Tuesday at 2pm works great for a call. Looking forward to discussing how we can work together on the commercial lighting project...',
-    receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    isRead: true,
-    isStarred: false,
-    isImportant: true,
-    threadCount: 8,
-    source: 'gmail',
-  },
-  {
-    id: '4',
-    from: {
-      name: 'Stripe',
-      email: 'receipts@stripe.com',
+    {
+      id: '4',
+      from: {
+        name: 'Stripe',
+        email: 'receipts@stripe.com',
+      },
+      subject: 'Your receipt from ACME Corp',
+      preview: 'Receipt for $299.00 payment to ACME Corp. Transaction ID: ch_3abc123...',
+      receivedAt: new Date(now - 1000 * 60 * 60 * 5),
+      isRead: true,
+      isStarred: false,
+      isImportant: false,
+      labels: ['receipts'],
+      source: 'gmail',
     },
-    subject: 'Your receipt from ACME Corp',
-    preview: 'Receipt for $299.00 payment to ACME Corp. Transaction ID: ch_3abc123...',
-    receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    isRead: true,
-    isStarred: false,
-    isImportant: false,
-    labels: ['receipts'],
-    source: 'gmail',
-  },
-  {
-    id: '5',
-    from: {
-      name: 'Alex Rivera',
-      email: 'alex.rivera@design.co',
+    {
+      id: '5',
+      from: {
+        name: 'Alex Rivera',
+        email: 'alex.rivera@design.co',
+      },
+      subject: 'Logo designs v2 - Ready for review',
+      preview: 'Hey! Here are the revised logo designs based on your feedback. I\'ve made the font bolder and tried a couple different color variations. Let me know which direction you prefer!',
+      receivedAt: new Date(now - 1000 * 60 * 60 * 8),
+      isRead: false,
+      isStarred: false,
+      isImportant: false,
+      hasAttachment: true,
+      source: 'gmail',
     },
-    subject: 'Logo designs v2 - Ready for review',
-    preview: 'Hey! Here are the revised logo designs based on your feedback. I\'ve made the font bolder and tried a couple different color variations. Let me know which direction you prefer!',
-    receivedAt: new Date(Date.now() - 1000 * 60 * 60 * 8),
-    isRead: false,
-    isStarred: false,
-    isImportant: false,
-    hasAttachment: true,
-    source: 'gmail',
-  },
-];
+  ];
+}
 
 export default function EmailWidget({
-  emails = DEMO_EMAILS,
+  emails: propEmails,
   unreadCount: propUnreadCount,
   onEmailClick,
   onMarkRead,
@@ -125,13 +128,25 @@ export default function EmailWidget({
   fullView = false,
 }: EmailWidgetProps) {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
-  const [localEmails, setLocalEmails] = useState(emails);
+  const [localEmails, setLocalEmails] = useState<Email[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Initialize emails on client only (avoids hydration mismatch)
+  useEffect(() => {
+    setMounted(true);
+    if (propEmails) {
+      setLocalEmails(propEmails);
+    } else {
+      setLocalEmails(createDemoEmails());
+    }
+  }, [propEmails]);
 
   const unreadCount = propUnreadCount ?? localEmails.filter(e => !e.isRead).length;
 
   const formatTime = (date: Date): string => {
+    if (!mounted) return '...';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);

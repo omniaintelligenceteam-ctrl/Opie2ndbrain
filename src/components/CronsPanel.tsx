@@ -55,10 +55,10 @@ function parseSchedule(schedule: string): string {
   return schedule;
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, currentTime: Date | null): string {
+  if (!currentTime) return '...';
   const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
+  const diffMs = date.getTime() - currentTime.getTime();
   const diffMins = Math.round(diffMs / 60000);
   const diffHours = Math.round(diffMs / 3600000);
   const diffDays = Math.round(diffMs / 86400000);
@@ -71,86 +71,103 @@ function formatRelativeTime(dateStr: string): string {
   return `${Math.abs(diffDays)}d ago`;
 }
 
-// Demo data with priority levels
-const DEMO_CRONS: CronJob[] = [
-  {
-    id: 'cron-1',
-    name: 'Heartbeat Check',
-    description: 'Sends a heartbeat ping to verify system health and check for pending tasks.',
-    schedule: '*/30 * * * *',
-    command: 'moltbot heartbeat',
-    enabled: true,
-    priority: 'critical',
-    lastRun: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    lastStatus: 'success',
-    nextRun: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
-    runCount: 48,
-    avgRuntime: '2.3s',
-  },
-  {
-    id: 'cron-2',
-    name: 'Email Digest',
-    description: 'Checks inbox for new emails and generates a daily summary report.',
-    schedule: '0 9 * * *',
-    command: 'moltbot email digest',
-    enabled: true,
-    priority: 'normal',
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    lastStatus: 'success',
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 21).toISOString(),
-    runCount: 7,
-    avgRuntime: '45s',
-  },
-  {
-    id: 'cron-3',
-    name: 'Lead Research',
-    description: 'Automated lead research and enrichment from configured sources.',
-    schedule: '0 */4 * * *',
-    command: 'moltbot research leads',
-    enabled: false,
-    priority: 'low',
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    lastStatus: 'failed',
-    runCount: 12,
-    avgRuntime: '3m 20s',
-  },
-  {
-    id: 'cron-4',
-    name: 'Memory Sync',
-    description: 'Synchronizes memory files and backs up important context data.',
-    schedule: '0 0 * * *',
-    command: 'moltbot memory sync',
-    enabled: true,
-    priority: 'normal',
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-    lastStatus: 'success',
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 16).toISOString(),
-    runCount: 30,
-    avgRuntime: '1m 15s',
-  },
-];
+// Demo data generator - creates crons relative to current time (client-side only)
+function createDemoCrons(): CronJob[] {
+  const now = Date.now();
+  return [
+    {
+      id: 'cron-1',
+      name: 'Heartbeat Check',
+      description: 'Sends a heartbeat ping to verify system health and check for pending tasks.',
+      schedule: '*/30 * * * *',
+      command: 'moltbot heartbeat',
+      enabled: true,
+      priority: 'critical',
+      lastRun: new Date(now - 1000 * 60 * 15).toISOString(),
+      lastStatus: 'success',
+      nextRun: new Date(now + 1000 * 60 * 15).toISOString(),
+      runCount: 48,
+      avgRuntime: '2.3s',
+    },
+    {
+      id: 'cron-2',
+      name: 'Email Digest',
+      description: 'Checks inbox for new emails and generates a daily summary report.',
+      schedule: '0 9 * * *',
+      command: 'moltbot email digest',
+      enabled: true,
+      priority: 'normal',
+      lastRun: new Date(now - 1000 * 60 * 60 * 3).toISOString(),
+      lastStatus: 'success',
+      nextRun: new Date(now + 1000 * 60 * 60 * 21).toISOString(),
+      runCount: 7,
+      avgRuntime: '45s',
+    },
+    {
+      id: 'cron-3',
+      name: 'Lead Research',
+      description: 'Automated lead research and enrichment from configured sources.',
+      schedule: '0 */4 * * *',
+      command: 'moltbot research leads',
+      enabled: false,
+      priority: 'low',
+      lastRun: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
+      lastStatus: 'failed',
+      runCount: 12,
+      avgRuntime: '3m 20s',
+    },
+    {
+      id: 'cron-4',
+      name: 'Memory Sync',
+      description: 'Synchronizes memory files and backs up important context data.',
+      schedule: '0 0 * * *',
+      command: 'moltbot memory sync',
+      enabled: true,
+      priority: 'normal',
+      lastRun: new Date(now - 1000 * 60 * 60 * 8).toISOString(),
+      lastStatus: 'success',
+      nextRun: new Date(now + 1000 * 60 * 60 * 16).toISOString(),
+      runCount: 30,
+      avgRuntime: '1m 15s',
+    },
+  ];
+}
 
-const DEMO_HISTORY: CronHistory[] = [
-  { id: 'h1', cronId: 'cron-1', startedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(), completedAt: new Date(Date.now() - 1000 * 60 * 14.5).toISOString(), status: 'success', output: 'Heartbeat OK. No pending tasks.', runtime: '2.1s' },
-  { id: 'h2', cronId: 'cron-1', startedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(), completedAt: new Date(Date.now() - 1000 * 60 * 44.5).toISOString(), status: 'success', output: 'Heartbeat OK. 2 pending tasks processed.', runtime: '2.5s' },
-  { id: 'h3', cronId: 'cron-1', startedAt: new Date(Date.now() - 1000 * 60 * 75).toISOString(), completedAt: new Date(Date.now() - 1000 * 60 * 74.5).toISOString(), status: 'success', output: 'Heartbeat OK.', runtime: '2.2s' },
-  { id: 'h4', cronId: 'cron-1', startedAt: new Date(Date.now() - 1000 * 60 * 105).toISOString(), completedAt: new Date(Date.now() - 1000 * 60 * 104).toISOString(), status: 'failed', output: 'Error: Connection timeout', runtime: '30s' },
-];
+// Demo history generator
+function createDemoHistory(): CronHistory[] {
+  const now = Date.now();
+  return [
+    { id: 'h1', cronId: 'cron-1', startedAt: new Date(now - 1000 * 60 * 15).toISOString(), completedAt: new Date(now - 1000 * 60 * 14.5).toISOString(), status: 'success', output: 'Heartbeat OK. No pending tasks.', runtime: '2.1s' },
+    { id: 'h2', cronId: 'cron-1', startedAt: new Date(now - 1000 * 60 * 45).toISOString(), completedAt: new Date(now - 1000 * 60 * 44.5).toISOString(), status: 'success', output: 'Heartbeat OK. 2 pending tasks processed.', runtime: '2.5s' },
+    { id: 'h3', cronId: 'cron-1', startedAt: new Date(now - 1000 * 60 * 75).toISOString(), completedAt: new Date(now - 1000 * 60 * 74.5).toISOString(), status: 'success', output: 'Heartbeat OK.', runtime: '2.2s' },
+    { id: 'h4', cronId: 'cron-1', startedAt: new Date(now - 1000 * 60 * 105).toISOString(), completedAt: new Date(now - 1000 * 60 * 104).toISOString(), status: 'failed', output: 'Error: Connection timeout', runtime: '30s' },
+  ];
+}
 
 export default function CronsPanel({ 
   pollInterval = 30000,
   onCronCountChange,
 }: CronsPanelProps = {}) {
-  const [crons, setCrons] = useState<CronJob[]>(DEMO_CRONS);
+  const [crons, setCrons] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCron, setSelectedCron] = useState<CronJob | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCron, setEditingCron] = useState<CronJob | null>(null);
-  const [history, setHistory] = useState<CronHistory[]>(DEMO_HISTORY);
+  const [history, setHistory] = useState<CronHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [runningCrons, setRunningCrons] = useState<Set<string>>(new Set());
   const [filterPriority, setFilterPriority] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+
+  // Initialize demo data on client only (avoids hydration mismatch)
+  useEffect(() => {
+    setCurrentTime(new Date());
+    setCrons(createDemoCrons());
+    setHistory(createDemoHistory());
+    const interval = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(interval);
+  }, []);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -398,13 +415,13 @@ export default function CronsPanel({
             <div style={styles.scheduleStat}>
               <span style={styles.scheduleStatLabel}>Next Run</span>
               <span style={styles.scheduleStatValue}>
-                {cron.nextRun && cron.enabled ? formatRelativeTime(cron.nextRun) : '—'}
+                {cron.nextRun && cron.enabled ? formatRelativeTime(cron.nextRun, currentTime) : '—'}
               </span>
             </div>
             <div style={styles.scheduleStat}>
               <span style={styles.scheduleStatLabel}>Last Run</span>
               <span style={styles.scheduleStatValue}>
-                {cron.lastRun ? formatRelativeTime(cron.lastRun) : 'Never'}
+                {cron.lastRun ? formatRelativeTime(cron.lastRun, currentTime) : 'Never'}
               </span>
             </div>
             <div style={styles.scheduleStat}>
@@ -602,10 +619,10 @@ export default function CronsPanel({
                 </div>
                 <div style={styles.cronCardStats}>
                   {cron.nextRun && cron.enabled && (
-                    <span>Next: {formatRelativeTime(cron.nextRun)}</span>
+                    <span>Next: {formatRelativeTime(cron.nextRun, currentTime)}</span>
                   )}
                   {cron.lastRun && (
-                    <span>{getStatusIcon(cron.lastStatus)} {formatRelativeTime(cron.lastRun)}</span>
+                    <span>{getStatusIcon(cron.lastStatus)} {formatRelativeTime(cron.lastRun, currentTime)}</span>
                   )}
                   <span>Runs: {cron.runCount || 0}</span>
                 </div>

@@ -37,6 +37,12 @@ export default function MemoryPanel({ onFileSelect }: MemoryPanelProps) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load memory files
@@ -173,7 +179,7 @@ export default function MemoryPanel({ onFileSelect }: MemoryPanelProps) {
   };
 
   const formatDate = (isoString?: string) => {
-    if (!isoString) return '';
+    if (!isoString || !mounted) return '...';
     const date = new Date(isoString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };

@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { useSystemStatus, useConnectionStatus } from '../hooks/useRealTimeData';
 
 // =============================================================================
@@ -150,6 +151,12 @@ const barStyles: { [key: string]: React.CSSProperties } = {
 export function SystemHealthPanel() {
   const { status, loading, error, refresh } = useSystemStatus(5000);
   const { isOnline, latency, lastPing } = useConnectionStatus();
+  const [mounted, setMounted] = useState(false);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const formatUptime = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`;
@@ -340,7 +347,7 @@ export function SystemHealthPanel() {
 
       {/* Last Updated */}
       <div style={healthStyles.footer}>
-        Last updated: {lastPing ? lastPing.toLocaleTimeString() : 'Checking...'}
+        Last updated: {lastPing && mounted ? lastPing.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Checking...'}
       </div>
     </div>
   );

@@ -21,70 +21,81 @@ interface CalendarWidgetProps {
   fullView?: boolean;
 }
 
-// Demo events for development
-const DEMO_EVENTS: CalendarEvent[] = [
-  {
-    id: '1',
-    title: 'Team Standup',
-    start: new Date(new Date().setHours(9, 0, 0, 0)),
-    end: new Date(new Date().setHours(9, 30, 0, 0)),
-    location: 'Zoom',
-    color: '#667eea',
-    source: 'google',
-  },
-  {
-    id: '2',
-    title: 'Client Call - OmniLightscape',
-    start: new Date(new Date().setHours(11, 0, 0, 0)),
-    end: new Date(new Date().setHours(12, 0, 0, 0)),
-    location: 'Google Meet',
-    color: '#22c55e',
-    source: 'google',
-  },
-  {
-    id: '3',
-    title: 'Lunch with Alex',
-    start: new Date(new Date().setHours(12, 30, 0, 0)),
-    end: new Date(new Date().setHours(13, 30, 0, 0)),
-    location: 'Blue Bottle Coffee',
-    color: '#f59e0b',
-    source: 'google',
-  },
-  {
-    id: '4',
-    title: 'Review Q4 Projections',
-    start: new Date(new Date().setHours(15, 0, 0, 0)),
-    end: new Date(new Date().setHours(16, 0, 0, 0)),
-    description: 'Prepare slides for board meeting',
-    color: '#764ba2',
-    source: 'google',
-  },
-  {
-    id: '5',
-    title: 'Gym Session',
-    start: new Date(Date.now() + 86400000 + 1000 * 60 * 60 * 7), // Tomorrow 7am
-    end: new Date(Date.now() + 86400000 + 1000 * 60 * 60 * 8),
-    location: 'Equinox',
-    color: '#ef4444',
-    source: 'google',
-  },
-];
+// Demo events generator - creates events relative to current time (client-side only)
+function createDemoEvents(): CalendarEvent[] {
+  const now = new Date();
+  return [
+    {
+      id: '1',
+      title: 'Team Standup',
+      start: new Date(new Date(now).setHours(9, 0, 0, 0)),
+      end: new Date(new Date(now).setHours(9, 30, 0, 0)),
+      location: 'Zoom',
+      color: '#667eea',
+      source: 'google',
+    },
+    {
+      id: '2',
+      title: 'Client Call - OmniLightscape',
+      start: new Date(new Date(now).setHours(11, 0, 0, 0)),
+      end: new Date(new Date(now).setHours(12, 0, 0, 0)),
+      location: 'Google Meet',
+      color: '#22c55e',
+      source: 'google',
+    },
+    {
+      id: '3',
+      title: 'Lunch with Alex',
+      start: new Date(new Date(now).setHours(12, 30, 0, 0)),
+      end: new Date(new Date(now).setHours(13, 30, 0, 0)),
+      location: 'Blue Bottle Coffee',
+      color: '#f59e0b',
+      source: 'google',
+    },
+    {
+      id: '4',
+      title: 'Review Q4 Projections',
+      start: new Date(new Date(now).setHours(15, 0, 0, 0)),
+      end: new Date(new Date(now).setHours(16, 0, 0, 0)),
+      description: 'Prepare slides for board meeting',
+      color: '#764ba2',
+      source: 'google',
+    },
+    {
+      id: '5',
+      title: 'Gym Session',
+      start: new Date(now.getTime() + 86400000 + 1000 * 60 * 60 * 7), // Tomorrow 7am
+      end: new Date(now.getTime() + 86400000 + 1000 * 60 * 60 * 8),
+      location: 'Equinox',
+      color: '#ef4444',
+      source: 'google',
+    },
+  ];
+}
 
 export default function CalendarWidget({ 
-  events = DEMO_EVENTS, 
+  events: propEvents, 
   onEventClick,
   isConnected = true,
   onConnect,
   fullView = false,
 }: CalendarWidgetProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [demoEvents, setDemoEvents] = useState<CalendarEvent[]>([]);
 
   useEffect(() => {
+    // Set initial time and demo events on client only (avoids hydration mismatch)
+    setCurrentTime(new Date());
+    if (!propEvents) {
+      setDemoEvents(createDemoEvents());
+    }
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [propEvents]);
+
+  const events = propEvents || demoEvents;
 
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -104,15 +115,18 @@ export default function CalendarWidget({
   };
 
   const isEventNow = (event: CalendarEvent): boolean => {
+    if (!currentTime) return false;
     return currentTime >= event.start && currentTime <= event.end;
   };
 
   const isEventSoon = (event: CalendarEvent): boolean => {
+    if (!currentTime) return false;
     const diff = event.start.getTime() - currentTime.getTime();
     return diff > 0 && diff <= 30 * 60 * 1000; // Within 30 minutes
   };
 
   const getTimeUntil = (event: CalendarEvent): string => {
+    if (!currentTime) return '...';
     const diff = event.start.getTime() - currentTime.getTime();
     if (diff <= 0) return 'Now';
     const minutes = Math.floor(diff / 60000);
@@ -123,9 +137,10 @@ export default function CalendarWidget({
   };
 
   // Sort events and filter to upcoming (next 48 hours)
-  const upcomingEvents = events
-    .filter(e => e.end >= currentTime && e.start <= new Date(Date.now() + 48 * 60 * 60 * 1000))
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const upcomingEvents = currentTime 
+    ? events.filter(e => e.end >= currentTime && e.start <= new Date(currentTime.getTime() + 48 * 60 * 60 * 1000))
+        .sort((a, b) => a.start.getTime() - b.start.getTime())
+    : [];
 
   // Group by date
   const groupedEvents: { [key: string]: CalendarEvent[] } = {};

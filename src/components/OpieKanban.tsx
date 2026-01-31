@@ -99,7 +99,13 @@ function KanbanColumn({
   isMobile?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const MAX_VISIBLE_ITEMS = 8;
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Show only last 8 items by default for all columns
   const visibleTasks = !showAll && column.tasks.length > MAX_VISIBLE_ITEMS
@@ -189,12 +195,13 @@ function KanbanColumn({
             <span style={styles.kanbanTaskText}>{task}</span>
             {/* Add timestamps for all items based on column type */}
             <span style={styles.taskTimestamp}>
-              {column.id === 'done' 
-                ? `Completed ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString()}`
-                : column.id === 'progress'
-                  ? `Started ${new Date(Date.now() - (visibleTasks.length - index) * 86400000).toLocaleDateString()}`
-                  : `Added ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 0.5).toLocaleDateString()}`
-              }
+              {mounted ? (
+                column.id === 'done' 
+                  ? `Completed ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                  : column.id === 'progress'
+                    ? `Started ${new Date(Date.now() - (visibleTasks.length - index) * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                    : `Added ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 0.5).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+              ) : '...'}
             </span>
           </div>
         ))}

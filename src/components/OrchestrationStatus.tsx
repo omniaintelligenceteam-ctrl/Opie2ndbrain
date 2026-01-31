@@ -45,6 +45,12 @@ export default function OrchestrationStatus({
   const [selectedAgent, setSelectedAgent] = useState<AgentNodeState | null>(null);
   const [animationPhase, setAnimationPhase] = useState(0);
   const [demoMode, setDemoMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Track mounted state for hydration-safe date formatting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const { 
     nodes, 
@@ -552,7 +558,7 @@ export default function OrchestrationStatus({
             <div style={styles.detailStat}>
               <span style={styles.detailStatValue}>
                 {selectedAgent.lastActivity 
-                  ? new Date(selectedAgent.lastActivity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  ? (mounted ? new Date(selectedAgent.lastActivity).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '...')
                   : '--:--'}
               </span>
               <span style={styles.detailStatLabel}>Last Active</span>
@@ -629,7 +635,7 @@ export default function OrchestrationStatus({
         
         {lastUpdated && (
           <div style={styles.timestamp}>
-            Last sync: {new Date(lastUpdated).toLocaleTimeString()}
+            Last sync: {mounted ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '...'}
           </div>
         )}
       </div>
