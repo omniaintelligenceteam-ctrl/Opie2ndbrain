@@ -84,78 +84,82 @@ function normalizeStatus(status?: string): 'running' | 'complete' | 'failed' | '
   return 'idle';
 }
 
-// Try to fetch sessions via WebSocket-style RPC over HTTP (if supported)
+// Fetch sessions via /tools/invoke API (the proper gateway endpoint)
 async function tryFetchSessions(): Promise<GatewaySession[]> {
   // Skip network calls entirely in Vercel with localhost gateway
   if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
     return [];
   }
   
-  const methods = [
-    // Try direct sessions endpoint
-    async () => {
-      const res = await fetch(`${GATEWAY_URL}/sessions`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+  try {
+    // Use the /tools/invoke endpoint to call sessions_list
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+      },
+      body: JSON.stringify({
+        tool: 'sessions_list',
+        args: {
+          activeMinutes: 60,  // Sessions active in last hour
+          messageLimit: 1,    // Include last message for status
         },
-        signal: AbortSignal.timeout(5000),
-      });
-      
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json();
-        return data.sessions || data;
-      }
-      return null;
-    },
-    // Try API v1 endpoint  
-    async () => {
-      const res = await fetch(`${GATEWAY_URL}/api/v1/sessions`, {
-        headers: {
-          'Accept': 'application/json',
-          ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        return data.sessions || data;
-      }
-      return null;
-    },
-    // Try internal RPC endpoint
-    async () => {
-      const res = await fetch(`${GATEWAY_URL}/_internal/sessions`, {
-        headers: {
-          'Accept': 'application/json',
-          ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        return data.sessions || data;
-      }
-      return null;
-    },
-  ];
-
-  for (const method of methods) {
-    try {
-      const result = await method();
-      if (result && Array.isArray(result)) {
-        return result;
-      }
-    } catch {
-      // Try next method
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      console.warn('Gateway returned non-JSON for sessions_list');
+      return [];
     }
+    
+    const data = await res.json();
+    
+    if (data.ok && data.result?.sessions) {
+      // Map gateway session format to our expected format
+      return data.result.sessions.map((s: Record<string, unknown>) => ({
+        sessionId: s.key || s.sessionId,
+        key: s.key,
+        label: s.label || s.displayName,
+        status: determineSessionStatus(s),
+        lastActivityAt: s.updatedAt ? new Date(s.updatedAt as number).toISOString() : undefined,
+        startedAt: s.createdAt ? new Date(s.createdAt as number).toISOString() : undefined,
+        model: s.model as string,
+        tokensUsed: s.totalTokens as number,
+        inputTokens: s.contextTokens as number,
+        outputTokens: (s.totalTokens as number) - (s.contextTokens as number || 0),
+      }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Failed to fetch sessions via tools/invoke:', error);
+    return [];
+  }
+}
+
+// Determine session status based on session data
+function determineSessionStatus(session: Record<string, unknown>): string {
+  // Check if aborted
+  if (session.abortedLastRun) return 'failed';
+  
+  // Check for recent activity (within last 30 seconds = likely running)
+  const updatedAt = session.updatedAt as number;
+  if (updatedAt && Date.now() - updatedAt < 30000) {
+    return 'running';
   }
   
-  return [];
+  // Check kind
+  const kind = session.kind as string;
+  if (kind === 'other' || kind === 'subagent') {
+    // Subagents that aren't recently active are likely complete
+    return 'complete';
+  }
+  
+  return 'idle';
 }
 
 // Check if a session is likely an agent session (vs main chat)
@@ -253,29 +257,51 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const { sessionId } = body;
+    const { sessionId, sessionKey } = body;
     
-    if (!sessionId) {
-      return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
+    const key = sessionKey || sessionId;
+    if (!key) {
+      return NextResponse.json({ error: 'sessionId or sessionKey required' }, { status: 400 });
     }
 
-    // Try to fetch specific session details
-    const res = await fetch(`${GATEWAY_URL}/sessions/${encodeURIComponent(sessionId)}`, {
+    // Use /tools/invoke to call sessions_history
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
         ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
       },
-      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify({
+        tool: 'sessions_history',
+        args: {
+          sessionKey: key,
+          limit: 20,
+          includeTools: false,
+        },
+      }),
+      signal: AbortSignal.timeout(10000),
     });
     
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json({ error: 'Gateway returned non-JSON response' }, { status: 502 });
     }
     
     const data = await res.json();
     
+    if (!data.ok) {
+      return NextResponse.json({ 
+        error: data.error?.message || 'Session not found',
+        details: data.error,
+      }, { status: 404 });
+    }
+    
     return NextResponse.json({
-      session: data,
+      session: {
+        key,
+        history: data.result,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

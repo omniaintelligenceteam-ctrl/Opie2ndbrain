@@ -18,6 +18,59 @@ export class GatewayUnavailableError extends Error {
   }
 }
 
+// Invoke a gateway tool via /tools/invoke endpoint
+// This is the proper way to interact with the gateway
+export interface ToolInvokeResult<T = unknown> {
+  ok: boolean;
+  result?: T;
+  error?: {
+    type: string;
+    message: string;
+  };
+}
+
+export async function invokeGatewayTool<T = unknown>(
+  tool: string,
+  args: Record<string, unknown> = {},
+  options: { timeout?: number } = {}
+): Promise<ToolInvokeResult<T>> {
+  const { timeout = 10000 } = options;
+  
+  // In Vercel with localhost gateway, return error immediately
+  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
+    return { ok: false, error: { type: 'unavailable', message: 'Gateway unavailable' } };
+  }
+  
+  try {
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+      },
+      body: JSON.stringify({ tool, args }),
+      signal: AbortSignal.timeout(timeout),
+    });
+    
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return { ok: false, error: { type: 'invalid_response', message: 'Gateway returned non-JSON' } };
+    }
+    
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    return { 
+      ok: false, 
+      error: { 
+        type: 'network', 
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      } 
+    };
+  }
+}
+
 export async function gatewayFetch<T = unknown>(
   path: string,
   options: GatewayFetchOptions = {}
@@ -71,7 +124,7 @@ export async function gatewayFetch<T = unknown>(
   }
 }
 
-export async function gatewayHealth(): Promise<{ connected: boolean; latency: number; reason?: string }> {
+export async function gatewayHealth(): Promise<{ connected: boolean; latency: number; reason?: string; model?: string; sessions?: number }> {
   const start = Date.now();
   
   // In Vercel with localhost gateway, immediately return unavailable
@@ -84,26 +137,57 @@ export async function gatewayHealth(): Promise<{ connected: boolean; latency: nu
   }
   
   try {
-    // Try multiple endpoints to check gateway health
-    const endpoints = ['/api/status', '/status', '/health', '/'];
+    // Use /tools/invoke with session_status - most reliable endpoint
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+      },
+      body: JSON.stringify({
+        tool: 'session_status',
+        args: {},
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
     
-    for (const endpoint of endpoints) {
-      try {
-        const res = await fetch(`${GATEWAY_URL}${endpoint}`, {
-          method: 'HEAD', // Use HEAD to reduce payload
-          headers: GATEWAY_TOKEN ? { 'Authorization': `Bearer ${GATEWAY_TOKEN}` } : {},
-          signal: AbortSignal.timeout(3000),
-        });
-        if (res.ok) {
-          return { connected: true, latency: Date.now() - start };
-        }
-      } catch (e) {
-        // Try next endpoint
-        continue;
-      }
+    const latency = Date.now() - start;
+    
+    // Check if response is JSON
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      // Gateway is up but may have auth issues or wrong endpoint
+      return { 
+        connected: false, 
+        latency, 
+        reason: 'Gateway returned non-JSON response' 
+      };
     }
-    return { connected: false, latency: Date.now() - start, reason: 'No endpoint responded' };
-  } catch {
-    return { connected: false, latency: Date.now() - start, reason: 'Connection failed' };
+    
+    const data = await res.json();
+    
+    if (res.ok && data.ok) {
+      return { 
+        connected: true, 
+        latency,
+        model: data.result?.model,
+        sessions: data.result?.activeSessions,
+      };
+    }
+    
+    // Gateway responded but with error
+    return {
+      connected: res.status !== 401 && res.status !== 403, // Auth errors = not connected
+      latency,
+      reason: data.error?.message || `HTTP ${res.status}`,
+    };
+  } catch (error) {
+    const latency = Date.now() - start;
+    return { 
+      connected: false, 
+      latency, 
+      reason: error instanceof Error ? error.message : 'Connection failed' 
+    };
   }
 }
