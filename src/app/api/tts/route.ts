@@ -15,7 +15,7 @@ const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, provider = 'edge', voice } = await request.json();
+    const { text, provider = 'azure', voice } = await request.json();
     
     if (!text || typeof text !== 'string') {
       console.error('[TTS] Invalid text input');
@@ -24,14 +24,16 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TTS] Generating speech: provider=${provider}, chars=${text.length}`);
 
-    switch (provider as TTSProvider) {
+    switch (provider) {
       case 'openai':
         return await generateOpenAI(text, voice || 'nova');
       case 'elevenlabs':
         return await generateElevenLabs(text, voice);
       case 'edge':
-      default:
         return await generateEdgeTTS(text, voice || 'en-US-GuyNeural');
+      case 'azure':
+      default:
+        return await generateAzureTTS(text, voice || 'en-US-GuyNeural');
     }
   } catch (error) {
     console.error('[TTS] Unexpected error:', error);
@@ -43,8 +45,13 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     providers: {
+      azure: {
+        name: 'Azure Speech (500k free/month)',
+        voices: EDGE_VOICES, // Same Microsoft neural voices
+        default: 'en-US-GuyNeural',
+      },
       edge: {
-        name: 'Edge TTS (Free)',
+        name: 'Edge TTS (Free/Unofficial)',
         voices: EDGE_VOICES,
         default: 'en-US-GuyNeural',
       },
@@ -59,7 +66,54 @@ export async function GET() {
         default: 'default',
       },
     },
+    default: 'azure',
   });
+}
+
+async function generateAzureTTS(text: string, voice: string): Promise<Response> {
+  const apiKey = process.env.AZURE_SPEECH_KEY;
+  const region = process.env.AZURE_SPEECH_REGION || 'eastus';
+  
+  if (!apiKey) {
+    console.error('[TTS/Azure] AZURE_SPEECH_KEY not configured');
+    return NextResponse.json({ error: 'Azure Speech key not configured' }, { status: 500 });
+  }
+
+  const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+  
+  // Build SSML
+  const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
+    <voice name='${voice}'>${text.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c] || c))}</voice>
+  </speak>`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': apiKey,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3',
+        'User-Agent': 'Opie2ndBrain',
+      },
+      body: ssml,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[TTS/Azure] Error ${response.status}: ${errorText}`);
+      return NextResponse.json({ error: 'Azure TTS failed', details: errorText }, { status: response.status });
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    console.log(`[TTS/Azure] Success: ${audioBuffer.byteLength} bytes`);
+    
+    return new Response(audioBuffer, {
+      headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-cache' },
+    });
+  } catch (error) {
+    console.error('[TTS/Azure] Request failed:', error);
+    return NextResponse.json({ error: 'Azure TTS request failed' }, { status: 500 });
+  }
 }
 
 async function generateOpenAI(text: string, voice: string): Promise<Response> {
