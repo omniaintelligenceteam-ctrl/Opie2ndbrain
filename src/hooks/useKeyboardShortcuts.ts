@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 
-export type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings';
+export type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings' | 'email' | 'calendar';
 
 interface KeyboardShortcutsOptions {
   onNavigate?: (view: ViewId) => void;

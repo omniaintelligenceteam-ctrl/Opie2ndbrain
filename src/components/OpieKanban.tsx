@@ -80,6 +80,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'skills', label: 'Skills', icon: '🛠️' },
   { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
+  { id: 'email', label: 'Email', icon: '📧' },
+  { id: 'calendar', label: 'Calendar', icon: '📅' },
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '🧠' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -802,23 +804,7 @@ export default function OpieKanban(): React.ReactElement {
             paddingTop: isMobile ? '72px' : undefined,
             paddingBottom: isMobile ? '100px' : undefined,
           }}>
-            {/* NEW LAYOUT: Kanban Board at Top (Full Width) */}
-            <div style={styles.kanbanSection}>
-              <h2 style={styles.kanbanTitle}>
-                📋 Project Board
-              </h2>
-              <div style={styles.kanbanBoard}>
-                {columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    isMobile={isMobile}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Hero Section: Greeting + Orchestration Side by Side */}
+            {/* TOP: Hero Section - Greeting + Orchestration Side by Side */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : '1fr 1.2fr',
@@ -847,9 +833,25 @@ export default function OpieKanban(): React.ReactElement {
                 )}
               </div>
             </div>
+
+            {/* BELOW: Kanban Board (Full Width) */}
+            <div style={styles.kanbanSection}>
+              <h2 style={styles.kanbanTitle}>
+                📋 Project Board
+              </h2>
+              <div style={styles.kanbanBoard}>
+                {columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    isMobile={isMobile}
+                  />
+                ))}
+              </div>
+            </div>
             
-            {/* Activity Feed - Full Width (Widgets moved to sidebar) */}
-            <div>
+            {/* Activity Feed - Full Width */}
+            <div style={{ marginTop: '24px' }}>
               {isMobile ? (
                 <>
                   <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
@@ -1080,6 +1082,46 @@ export default function OpieKanban(): React.ReactElement {
                 <WorkspaceBrowser />
               </div>
             )}
+          </div>
+        )}
+
+        {/* Email View */}
+        {activeView === 'email' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                📧 Email
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Your inbox' : 'Manage your email inbox'}
+              </p>
+            </div>
+            <EmailWidget fullView={true} />
+          </div>
+        )}
+
+        {/* Calendar View */}
+        {activeView === 'calendar' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                📅 Calendar
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Your schedule' : 'View and manage your calendar'}
+              </p>
+            </div>
+            <CalendarWidget fullView={true} />
           </div>
         )}
 

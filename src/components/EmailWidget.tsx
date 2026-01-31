@@ -29,6 +29,7 @@ interface EmailWidgetProps {
   onReply?: (emailId: string) => void;
   isConnected?: boolean;
   onConnect?: () => void;
+  fullView?: boolean;
 }
 
 // Demo emails for development
@@ -121,6 +122,7 @@ export default function EmailWidget({
   onReply,
   isConnected = true,
   onConnect,
+  fullView = false,
 }: EmailWidgetProps) {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [localEmails, setLocalEmails] = useState(emails);
@@ -312,7 +314,7 @@ export default function EmailWidget({
         <span style={styles.syncIndicator} title="Synced with Gmail">🟢</span>
       </div>
 
-      <div style={styles.emailList}>
+      <div style={{...styles.emailList, ...(fullView ? { maxHeight: 'none' } : {})}}>
         {localEmails.length === 0 ? (
           <div style={styles.emptyState}>
             <span style={styles.emptyIcon}>📭</span>
@@ -320,7 +322,7 @@ export default function EmailWidget({
             <p style={styles.emptyText}>You're all caught up</p>
           </div>
         ) : (
-          localEmails.slice(0, 5).map(email => (
+          (fullView ? localEmails : localEmails.slice(0, 5)).map(email => (
             <div
               key={email.id}
               style={{

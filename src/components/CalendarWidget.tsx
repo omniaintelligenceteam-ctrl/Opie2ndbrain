@@ -18,6 +18,7 @@ interface CalendarWidgetProps {
   onEventClick?: (event: CalendarEvent) => void;
   isConnected?: boolean;
   onConnect?: () => void;
+  fullView?: boolean;
 }
 
 // Demo events for development
@@ -73,7 +74,8 @@ export default function CalendarWidget({
   events = DEMO_EVENTS, 
   onEventClick,
   isConnected = true,
-  onConnect
+  onConnect,
+  fullView = false,
 }: CalendarWidgetProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -252,7 +254,7 @@ export default function CalendarWidget({
         <span style={styles.syncIndicator} title="Synced with Google Calendar">🟢</span>
       </div>
 
-      <div style={styles.eventList}>
+      <div style={{...styles.eventList, ...(fullView ? { maxHeight: 'none' } : {})}}>
         {upcomingEvents.length === 0 ? (
           <div style={styles.emptyState}>
             <span style={styles.emptyIcon}>🎉</span>
