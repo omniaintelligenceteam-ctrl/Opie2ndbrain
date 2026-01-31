@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 
+// Force Node.js runtime for full env var access (Edge has 5KB limit issues)
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
 - NO formatting: no tables, no bullets, no markdown, no lists.

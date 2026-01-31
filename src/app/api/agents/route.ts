@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+
+// Force Node.js runtime for full env var access
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
 
 interface GatewaySession {

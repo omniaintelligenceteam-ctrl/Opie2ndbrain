@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+
+// Force Node.js runtime for full env var access
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 import { gatewayFetch, IS_VERCEL, GATEWAY_URL } from '@/lib/gateway';
 
 interface CronJob {

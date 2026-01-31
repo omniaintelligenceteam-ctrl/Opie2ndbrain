@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+
+// Force Node.js runtime for full env var access
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 import { gatewayFetch, gatewayHealth, GATEWAY_URL, IS_VERCEL } from '@/lib/gateway';
 
 const SERVER_START = Date.now();
