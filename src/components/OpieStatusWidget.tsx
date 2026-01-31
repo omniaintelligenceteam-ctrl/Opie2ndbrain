@@ -82,14 +82,14 @@ export default function OpieStatusWidget({
         flexShrink: 0,
         position: 'relative',
       }}>
-        {/* Outer glow ring */}
+        {/* Outer glow ring - always animated */}
         <div style={{
           position: 'absolute',
           inset: -4,
           borderRadius: '50%',
           background: 'conic-gradient(from 0deg, #0ea5e9, #667eea, #8b5cf6, #0ea5e9)',
           animation: 'avatarRotate 4s linear infinite',
-          opacity: currentStatus === 'offline' ? 0.2 : 0.7,
+          opacity: 0.7,
         }} />
         {/* Inner dark circle */}
         <div style={{
@@ -125,7 +125,7 @@ export default function OpieStatusWidget({
             </filter>
           </defs>
           {/* Central eye/core */}
-          <circle cx="50" cy="50" r="12" fill="url(#electricBlue)" filter="url(#glow)" opacity={currentStatus === 'offline' ? 0.3 : 1}>
+          <circle cx="50" cy="50" r="12" fill="url(#electricBlue)" filter="url(#glow)" opacity={1}>
             <animate attributeName="r" values="10;14;10" dur="2s" repeatCount="indefinite" />
           </circle>
           {/* Inner ring */}
@@ -141,7 +141,7 @@ export default function OpieStatusWidget({
             <animateMotion dur="4s" repeatCount="indefinite" path="M0,0 A30,30 0 1,0 0,-60 A30,30 0 1,0 0,0" />
           </circle>
           {/* Lightning bolt accent */}
-          <path d="M48 35 L52 35 L50 45 L55 45 L47 58 L49 50 L45 50 Z" fill="#0ea5e9" filter="url(#glow)" opacity={currentStatus === 'offline' ? 0.3 : 0.9}>
+          <path d="M48 35 L52 35 L50 45 L55 45 L47 58 L49 50 L45 50 Z" fill="#0ea5e9" filter="url(#glow)" opacity={0.9}>
             <animate attributeName="opacity" values="0.6;1;0.6" dur="1.5s" repeatCount="indefinite" />
           </path>
         </svg>
