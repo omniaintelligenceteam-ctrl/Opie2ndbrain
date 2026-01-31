@@ -84,8 +84,9 @@ export async function POST(req: NextRequest) {
       const errorText = await res.text();
       console.error('Gateway error:', res.status, errorText);
       return NextResponse.json({ 
-        reply: 'Sorry, hit an error. Try again?',
-        error: true
+        reply: `Gateway error ${res.status}: ${errorText.slice(0, 200)}`,
+        error: true,
+        debug: { status: res.status, text: errorText.slice(0, 500) }
       });
     }
 
@@ -110,12 +111,13 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ reply });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Fetch error:', error);
     // Return a friendly response instead of 500 error
     return NextResponse.json({ 
-      reply: 'Connection hiccup. The gateway might be restarting - try again in a moment!',
-      error: true
+      reply: `Connection error: ${error?.message || 'unknown'}`,
+      error: true,
+      debug: { name: error?.name, message: error?.message, cause: error?.cause }
     });
   }
 }
