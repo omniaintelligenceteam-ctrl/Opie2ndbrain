@@ -21,17 +21,17 @@ const PROTECTED_API_ROUTES = [
  */
 function validateApiKey(apiKey: string | null): boolean {
   const configuredKey = process.env.DASHBOARD_API_KEY;
-  
+
   // In development, if no key is configured, allow all requests
   if (!configuredKey && process.env.NODE_ENV === 'development') {
     return true;
   }
-  
+
   // No key configured in production = deny all (fail secure)
   if (!configuredKey) {
     return false;
   }
-  
+
   // Validate the provided key
   return apiKey === configuredKey;
 }
@@ -60,37 +60,37 @@ function extractApiKey(request: NextRequest): string | null {
   if (headerKey) {
     return headerKey;
   }
-  
+
   // Check query parameter as fallback
   const url = new URL(request.url);
   const queryKey = url.searchParams.get('apiKey');
   if (queryKey) {
     return queryKey;
   }
-  
+
   return null;
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
+
   // Skip auth for public routes
   if (isPublicRoute(pathname)) {
     return NextResponse.next();
   }
-  
+
   // Only check auth for API routes that need protection
   if (isProtectedRoute(pathname)) {
     const apiKey = extractApiKey(request);
-    
+
     if (!validateApiKey(apiKey)) {
       // Return 401 Unauthorized
       return NextResponse.json(
-        { 
+        {
           error: 'Unauthorized',
           message: 'Valid API key required. Provide via x-api-key header or ?apiKey query parameter.',
         },
-        { 
+        {
           status: 401,
           headers: {
             'WWW-Authenticate': 'ApiKey realm="Dashboard API"',
@@ -99,7 +99,7 @@ export function middleware(request: NextRequest) {
       );
     }
   }
-  
+
   // Allow request to proceed
   return NextResponse.next();
 }
