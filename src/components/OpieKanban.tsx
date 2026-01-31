@@ -337,7 +337,7 @@ export default function OpieKanban(): React.ReactElement {
   const isLoadingRef = useRef(false);
   
   // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
-  const SILENCE_TIMEOUT_MS = 3500;
+  const SILENCE_TIMEOUT_MS = 1000;
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingTranscriptRef = useRef('');
   const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
@@ -660,9 +660,7 @@ export default function OpieKanban(): React.ReactElement {
     }
   };
 
-  const handleDeployAgent = (agentId: string, taskLabel: string) => {
-    setLocalActiveAgents(prev => prev.includes(agentId) ? prev : [...prev, agentId]);
-    
+  const handleDeployAgent = async (agentId: string, taskLabel: string) => {
     const agentInfo: { [key: string]: { name: string; emoji: string } } = {
       research: { name: 'Research Agent', emoji: '🔍' },
       code: { name: 'Code Agent', emoji: '💻' },
@@ -677,19 +675,64 @@ export default function OpieKanban(): React.ReactElement {
       success: { name: 'Success Agent', emoji: '🌟' },
     };
 
+    // Create task entry immediately for UI feedback
+    const taskId = Date.now().toString();
     const newTask: Task = {
-      id: Date.now().toString(),
+      id: taskId,
       agentId,
       agentName: agentInfo[agentId]?.name || 'Agent',
       agentEmoji: agentInfo[agentId]?.emoji || '🤖',
       label: taskLabel,
       startTime: new Date(),
       status: 'running',
-      output: 'Starting task...',
+      output: 'Spawning agent...',
     };
 
     setTasks(prev => [newTask, ...prev]);
+    setLocalActiveAgents(prev => prev.includes(agentId) ? prev : [...prev, agentId]);
     handleViewChange('tasks');
+
+    // Actually spawn the agent via API
+    try {
+      const response = await fetch('/api/agents/spawn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentType: agentId,
+          task: taskLabel,
+          label: `${agentId}-${taskId}`,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update task with session ID
+        setTasks(prev => prev.map(t => 
+          t.id === taskId 
+            ? { ...t, output: `Agent spawned: ${data.sessionId}`, sessionId: data.sessionId }
+            : t
+        ));
+        // Refresh agent sessions
+        refreshAgents();
+      } else {
+        // Mark task as failed
+        setTasks(prev => prev.map(t => 
+          t.id === taskId 
+            ? { ...t, status: 'failed', output: data.error || 'Spawn failed' }
+            : t
+        ));
+        setLocalActiveAgents(prev => prev.filter(id => id !== agentId));
+      }
+    } catch (error) {
+      // Mark task as failed
+      setTasks(prev => prev.map(t => 
+        t.id === taskId 
+          ? { ...t, status: 'failed', output: error instanceof Error ? error.message : 'Network error' }
+          : t
+      ));
+      setLocalActiveAgents(prev => prev.filter(id => id !== agentId));
+    }
   };
 
   // Enhanced Kanban columns with more realistic data and auto-expansion support

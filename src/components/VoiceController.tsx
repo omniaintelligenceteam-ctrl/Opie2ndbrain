@@ -2,8 +2,8 @@
 
 import { useRef, useEffect, useCallback } from 'react';
 
-// Silence detection timeout (3.5 seconds)
-const SILENCE_TIMEOUT_MS = 3500;
+// Silence detection timeout (1 second)
+const SILENCE_TIMEOUT_MS = 1000;
 
 export interface VoiceControllerProps {
   micOn: boolean;

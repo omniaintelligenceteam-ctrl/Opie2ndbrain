@@ -11,6 +11,7 @@ export interface Task {
   status: 'running' | 'complete' | 'failed';
   output?: string;
   progress?: number;
+  sessionId?: string;
   logs?: { timestamp: string; message: string; level: 'info' | 'warn' | 'error' }[];
   steps?: { name: string; status: 'pending' | 'running' | 'complete' | 'failed' }[];
 }

@@ -59,7 +59,7 @@ export default function OpieStatusWidget({
 
   const currentStatus = getStatus();
   const config = getStatusConfig(currentStatus);
-  const orbSize = size === 'small' ? 36 : size === 'medium' ? 48 : 64;
+  const orbSize = size === 'small' ? 48 : size === 'medium' ? 64 : 80;
 
   return (
     <div 
@@ -75,14 +75,12 @@ export default function OpieStatusWidget({
       }}
       onClick={onClick}
     >
-      {/* Avatar with Status Indicator */}
+      {/* Avatar */}
       <div style={{
-        position: 'relative',
         width: orbSize,
         height: orbSize,
         flexShrink: 0,
       }}>
-        {/* Avatar Image */}
         <img 
           src="/opie-avatar.png" 
           alt="Opie"
@@ -91,24 +89,8 @@ export default function OpieStatusWidget({
             height: '100%',
             borderRadius: '50%',
             objectFit: 'cover',
-            border: `3px solid ${config.color}`,
-            boxShadow: `0 0 ${orbSize/3}px ${config.color}60`,
-            animation: config.animation,
           }}
         />
-        
-        {/* Status Dot */}
-        <div style={{
-          position: 'absolute',
-          bottom: '2px',
-          right: '2px',
-          width: size === 'small' ? '10px' : size === 'medium' ? '14px' : '18px',
-          height: size === 'small' ? '10px' : size === 'medium' ? '14px' : '18px',
-          borderRadius: '50%',
-          background: config.color,
-          border: '2px solid #1a1a2e',
-          boxShadow: `0 0 8px ${config.color}`,
-        }} />
       </div>
 
       {/* Name and Status */}
@@ -139,31 +121,25 @@ export default function OpieStatusWidget({
         @keyframes opieOnline {
           0%, 100% { 
             box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);
-            transform: scale(1);
           }
           50% { 
             box-shadow: 0 0 24px rgba(34, 197, 94, 0.6);
-            transform: scale(1.02);
           }
         }
         @keyframes opieThinking {
           0%, 100% { 
             box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
-            transform: scale(1);
           }
           50% { 
             box-shadow: 0 0 35px rgba(102, 126, 234, 0.8);
-            transform: scale(1.08);
           }
         }
         @keyframes opieWorking {
           0%, 100% { 
             box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
-            transform: scale(1);
           }
           50% { 
             box-shadow: 0 0 30px rgba(245, 158, 11, 0.8);
-            transform: scale(1.05);
           }
         }
         @keyframes thinkingGlow {

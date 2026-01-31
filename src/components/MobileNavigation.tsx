@@ -323,6 +323,7 @@ export function MobileHeader({
               background: statusColors[status],
               boxShadow: `0 0 8px ${statusColors[status]}`,
               animation: status === 'listening' ? 'pulse 1.5s infinite' : 'none',
+              transition: 'background 0.3s ease, box-shadow 0.3s ease',
             }}
           />
           <span style={{ color: statusColors[status], fontSize: '0.75rem', fontWeight: 500 }}>
