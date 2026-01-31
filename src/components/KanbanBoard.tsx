@@ -1,27 +1,44 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, DragEvent } from 'react';
+
+interface KanbanTask {
+  id: string;
+  text: string;
+}
 
 interface KanbanColumn {
   id: string;
   title: string;
   color: string;
-  tasks: string[];
+  tasks: KanbanTask[];
 }
 
 interface KanbanColumnProps {
   column: KanbanColumn;
   isMobile?: boolean;
+  onDragStart: (e: DragEvent, taskId: string, columnId: string) => void;
+  onDragOver: (e: DragEvent) => void;
+  onDrop: (e: DragEvent, columnId: string) => void;
+  onDeleteTask: (columnId: string, taskId: string) => void;
 }
 
 const MAX_VISIBLE_ITEMS = 8;
 
 /**
- * Individual Kanban column with collapsible functionality
+ * Individual Kanban column with drag-drop and delete functionality
  */
-function KanbanColumnComponent({ column, isMobile = false }: KanbanColumnProps): React.ReactElement {
+function KanbanColumnComponent({ 
+  column, 
+  isMobile = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDeleteTask,
+}: KanbanColumnProps): React.ReactElement {
   const [showAll, setShowAll] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -52,8 +69,26 @@ function KanbanColumnComponent({ column, isMobile = false }: KanbanColumnProps):
     return `Added ${formatted}`;
   };
 
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+    onDragOver(e);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    setIsDragOver(false);
+    onDrop(e, column.id);
+  };
+
   return (
     <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         ...styles.kanbanColumnGrid,
         borderTop: `3px solid ${column.color}`,
@@ -61,6 +96,10 @@ function KanbanColumnComponent({ column, isMobile = false }: KanbanColumnProps):
         maxHeight: showAll ? '500px' : 'auto',
         display: 'flex',
         flexDirection: 'column',
+        background: isDragOver 
+          ? `linear-gradient(135deg, ${column.color}15, ${column.color}08)` 
+          : 'rgba(255,255,255,0.02)',
+        transition: 'background 0.2s ease',
       }}
     >
       <div style={styles.kanbanHeader}>
@@ -109,7 +148,9 @@ function KanbanColumnComponent({ column, isMobile = false }: KanbanColumnProps):
       >
         {visibleTasks.map((task, index) => (
           <div
-            key={`${column.id}-${index}`}
+            key={task.id}
+            draggable
+            onDragStart={(e) => onDragStart(e, task.id, column.id)}
             style={{
               ...styles.kanbanTask,
               ...(!showAll && column.tasks.length > MAX_VISIBLE_ITEMS && index < 3 ? {
@@ -118,12 +159,31 @@ function KanbanColumnComponent({ column, isMobile = false }: KanbanColumnProps):
             }}
             className="kanban-task-hover"
           >
-            <span style={styles.kanbanTaskText}>{task}</span>
+            {/* Delete button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteTask(column.id, task.id);
+              }}
+              style={styles.deleteButton}
+              className="delete-button-hover"
+              title="Delete task"
+            >
+              ×
+            </button>
+            <span style={styles.kanbanTaskText}>{task.text}</span>
             <span style={styles.taskTimestamp}>
               {getTimestamp(index)}
             </span>
+            <div style={styles.dragHandle}>⋮⋮</div>
           </div>
         ))}
+        
+        {column.tasks.length === 0 && (
+          <div style={styles.emptyColumn}>
+            Drop tasks here
+          </div>
+        )}
       </div>
       
       {showAll && hiddenCount > 0 && (
@@ -146,20 +206,23 @@ export interface KanbanBoardProps {
   isMobile?: boolean;
 }
 
-// Default columns - can be made configurable later
-const DEFAULT_COLUMNS: KanbanColumn[] = [
+// Generate unique IDs for tasks
+const generateId = () => `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+// Default columns with IDs
+const createDefaultColumns = (): KanbanColumn[] => [
   { 
     id: 'todo', 
     title: 'To Do', 
     color: '#f59e0b', 
     tasks: [
-      'Memory Integration with Vector DB',
-      'HeyGen Avatar Integration', 
-      'Email Automation Pipeline',
-      'Voice Recognition Improvements',
-      'Mobile PWA Optimization',
-      'Agent Performance Analytics',
-      'Security Audit & Compliance'
+      { id: generateId(), text: 'Memory Integration with Vector DB' },
+      { id: generateId(), text: 'HeyGen Avatar Integration' },
+      { id: generateId(), text: 'Email Automation Pipeline' },
+      { id: generateId(), text: 'Voice Recognition Improvements' },
+      { id: generateId(), text: 'Mobile PWA Optimization' },
+      { id: generateId(), text: 'Agent Performance Analytics' },
+      { id: generateId(), text: 'Security Audit & Compliance' },
     ]
   },
   { 
@@ -167,10 +230,10 @@ const DEFAULT_COLUMNS: KanbanColumn[] = [
     title: 'In Progress', 
     color: '#667eea', 
     tasks: [
-      'Voice Chat Enhancement',
-      'Agent Dashboard Redesign',
-      'Real-time Orchestration View',
-      'Kanban Board Implementation'
+      { id: generateId(), text: 'Voice Chat Enhancement' },
+      { id: generateId(), text: 'Agent Dashboard Redesign' },
+      { id: generateId(), text: 'Real-time Orchestration View' },
+      { id: generateId(), text: 'Kanban Board Implementation' },
     ]
   },
   { 
@@ -178,43 +241,139 @@ const DEFAULT_COLUMNS: KanbanColumn[] = [
     title: 'Done', 
     color: '#22c55e', 
     tasks: [
-      'Dashboard UI Design System',
-      'Chat API Integration', 
-      'TTS Integration with ElevenLabs',
-      'Skill Catalog Architecture',
-      'Authentication System',
-      'Database Schema Design',
-      'Docker Containerization',
-      'CI/CD Pipeline Setup',
-      'Initial Agent Framework',
-      'Basic Voice Commands',
-      'Settings Panel',
-      'Navigation System',
-      'Theme System Implementation',
-      'Mobile Responsive Design',
-      'Error Handling Framework'
+      { id: generateId(), text: 'Dashboard UI Design System' },
+      { id: generateId(), text: 'Chat API Integration' },
+      { id: generateId(), text: 'TTS Integration with ElevenLabs' },
+      { id: generateId(), text: 'Skill Catalog Architecture' },
+      { id: generateId(), text: 'Authentication System' },
+      { id: generateId(), text: 'Database Schema Design' },
+      { id: generateId(), text: 'Docker Containerization' },
+      { id: generateId(), text: 'CI/CD Pipeline Setup' },
+      { id: generateId(), text: 'Initial Agent Framework' },
+      { id: generateId(), text: 'Basic Voice Commands' },
+      { id: generateId(), text: 'Settings Panel' },
+      { id: generateId(), text: 'Navigation System' },
+      { id: generateId(), text: 'Theme System Implementation' },
+      { id: generateId(), text: 'Mobile Responsive Design' },
+      { id: generateId(), text: 'Error Handling Framework' },
     ]
   }
 ];
 
 /**
- * Kanban board component with three columns: To Do, In Progress, Done
+ * Kanban board component with drag-drop and delete functionality
  */
 export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.ReactElement {
+  const [columns, setColumns] = useState<KanbanColumn[]>(createDefaultColumns);
+  const [draggedTask, setDraggedTask] = useState<{ taskId: string; fromColumn: string } | null>(null);
+
+  const handleDragStart = (e: DragEvent, taskId: string, columnId: string) => {
+    setDraggedTask({ taskId, fromColumn: columnId });
+    e.dataTransfer.effectAllowed = 'move';
+    // Add visual feedback
+    const target = e.target as HTMLElement;
+    target.style.opacity = '0.5';
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: DragEvent, toColumnId: string) => {
+    e.preventDefault();
+    
+    if (!draggedTask) return;
+    
+    const { taskId, fromColumn } = draggedTask;
+    
+    if (fromColumn === toColumnId) {
+      setDraggedTask(null);
+      return;
+    }
+
+    setColumns(prevColumns => {
+      const newColumns = [...prevColumns];
+      
+      // Find source and destination columns
+      const sourceColIndex = newColumns.findIndex(c => c.id === fromColumn);
+      const destColIndex = newColumns.findIndex(c => c.id === toColumnId);
+      
+      if (sourceColIndex === -1 || destColIndex === -1) return prevColumns;
+      
+      // Find and remove task from source
+      const taskIndex = newColumns[sourceColIndex].tasks.findIndex(t => t.id === taskId);
+      if (taskIndex === -1) return prevColumns;
+      
+      const [task] = newColumns[sourceColIndex].tasks.splice(taskIndex, 1);
+      
+      // Add task to destination
+      newColumns[destColIndex].tasks.push(task);
+      
+      return newColumns;
+    });
+    
+    setDraggedTask(null);
+  };
+
+  const handleDeleteTask = (columnId: string, taskId: string) => {
+    setColumns(prevColumns => {
+      return prevColumns.map(column => {
+        if (column.id === columnId) {
+          return {
+            ...column,
+            tasks: column.tasks.filter(task => task.id !== taskId),
+          };
+        }
+        return column;
+      });
+    });
+  };
+
   return (
     <div style={styles.kanbanSection}>
       <h2 style={styles.kanbanTitle}>
         📋 Project Board
       </h2>
+      <p style={styles.kanbanSubtitle}>Drag tasks between columns • Click × to delete</p>
       <div style={styles.kanbanBoard}>
-        {DEFAULT_COLUMNS.map((column) => (
+        {columns.map((column) => (
           <KanbanColumnComponent
             key={column.id}
             column={column}
             isMobile={isMobile}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDeleteTask={handleDeleteTask}
           />
         ))}
       </div>
+      
+      <style>{`
+        .kanban-task-hover {
+          position: relative;
+        }
+        .kanban-task-hover:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          border-color: rgba(255,255,255,0.15) !important;
+        }
+        .kanban-task-hover:hover .delete-button-hover {
+          opacity: 1;
+        }
+        .kanban-task-hover:active {
+          cursor: grabbing;
+        }
+        .delete-button-hover {
+          opacity: 0;
+          transition: opacity 0.2s ease;
+        }
+        .delete-button-hover:hover {
+          background: #ef4444 !important;
+          color: white !important;
+        }
+      `}</style>
     </div>
   );
 }
@@ -231,8 +390,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#fff',
     fontSize: '1.5rem',
     fontWeight: 700,
-    margin: '0 0 20px 0',
+    margin: '0 0 4px 0',
     letterSpacing: '-0.02em',
+  },
+  kanbanSubtitle: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: '0.8rem',
+    margin: '0 0 20px 0',
   },
   kanbanBoard: {
     display: 'grid',
@@ -273,12 +437,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'rgba(255,255,255,0.03)',
     borderRadius: '10px',
     padding: '12px',
+    paddingRight: '32px',
     border: '1px solid rgba(255,255,255,0.06)',
     transition: 'all 0.2s ease',
-    cursor: 'pointer',
+    cursor: 'grab',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+    position: 'relative',
   },
   kanbanTaskText: {
     color: 'rgba(255,255,255,0.8)',
@@ -293,6 +459,41 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 400,
     marginTop: '4px',
     fontStyle: 'italic',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: '6px',
+    right: '6px',
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '14px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+    padding: 0,
+    transition: 'all 0.2s ease',
+  },
+  dragHandle: {
+    position: 'absolute',
+    bottom: '8px',
+    right: '8px',
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: '10px',
+    letterSpacing: '-2px',
+  },
+  emptyColumn: {
+    padding: '24px',
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: '0.85rem',
+    border: '2px dashed rgba(255,255,255,0.1)',
+    borderRadius: '10px',
   },
   hiddenItemsIndicator: {
     padding: '8px 12px',

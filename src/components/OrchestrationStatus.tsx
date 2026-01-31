@@ -135,6 +135,55 @@ export default function OrchestrationStatus({
       <div style={styles.ambientGlow} />
       <div style={styles.gridPattern} />
       
+      {/* Nebula effect */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: `
+          radial-gradient(ellipse 80% 50% at 20% 40%, rgba(102,126,234,0.15) 0%, transparent 50%),
+          radial-gradient(ellipse 60% 40% at 80% 60%, rgba(139,92,246,0.12) 0%, transparent 50%),
+          radial-gradient(ellipse 40% 30% at 50% 80%, rgba(6,182,212,0.08) 0%, transparent 50%)
+        `,
+        animation: 'nebula-drift 20s ease-in-out infinite',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
+      
+      {/* Floating particles */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        {[...Array(12)].map((_, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: `${2 + Math.random() * 3}px`,
+            height: `${2 + Math.random() * 3}px`,
+            background: i % 3 === 0 ? '#667eea' : i % 3 === 1 ? '#8b5cf6' : '#06b6d4',
+            borderRadius: '50%',
+            left: `${10 + Math.random() * 80}%`,
+            top: `${10 + Math.random() * 80}%`,
+            opacity: 0.4 + Math.random() * 0.4,
+            boxShadow: `0 0 ${4 + Math.random() * 6}px currentColor`,
+            animation: `float-particle ${8 + Math.random() * 12}s ease-in-out infinite`,
+            animationDelay: `${Math.random() * 5}s`,
+          }} />
+        ))}
+      </div>
+      
+      {/* Scan line effect */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '2px',
+        background: 'linear-gradient(90deg, transparent, rgba(102,126,234,0.5), transparent)',
+        animation: 'scanline 4s linear infinite',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
+      
       {/* Enhanced Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -144,9 +193,6 @@ export default function OrchestrationStatus({
           </div>
           <div>
             <h2 style={styles.title}>Agent Orchestration Network</h2>
-            <p style={styles.subtitle}>
-              {demoMode ? '✨ Live visualization ready - deploy agents to see activity' : 'Real-time distributed agent coordination'}
-            </p>
           </div>
         </div>
         <div style={styles.headerRight}>
@@ -347,17 +393,25 @@ export default function OrchestrationStatus({
           {/* Main orb */}
           <div style={{
             ...styles.centralOrb,
+            background: `
+              radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 50%),
+              radial-gradient(circle at 70% 70%, rgba(102,126,234,0.3) 0%, transparent 40%),
+              linear-gradient(135deg, #1a1a3e 0%, #0d0d1a 50%, #1a1a3e 100%)
+            `,
             boxShadow: demoMode ? `
               0 0 40px ${COLORS.primary}80,
               0 0 80px ${COLORS.primary}40,
               0 0 120px ${COLORS.secondary}30,
               0 0 160px ${COLORS.accent}20,
-              inset 0 0 40px ${COLORS.primary}50
+              inset 0 0 40px ${COLORS.primary}50,
+              inset 0 0 80px ${COLORS.secondary}30
             ` : `
-              0 0 ${30 + Math.sin(animationPhase / 20) * 10}px ${COLORS.primary}60,
-              0 0 ${60 + Math.cos(animationPhase / 15) * 20}px ${COLORS.primary}30,
-              0 0 ${100 + Math.sin(animationPhase / 10) * 30}px ${COLORS.secondary}20,
-              inset 0 0 30px ${COLORS.primary}40
+              0 0 ${30 + Math.sin(animationPhase / 20) * 10}px ${COLORS.primary}80,
+              0 0 ${60 + Math.cos(animationPhase / 15) * 20}px ${COLORS.primary}50,
+              0 0 ${100 + Math.sin(animationPhase / 10) * 30}px ${COLORS.secondary}30,
+              0 0 ${140 + Math.cos(animationPhase / 8) * 40}px ${COLORS.accent}15,
+              inset 0 0 30px ${COLORS.primary}50,
+              inset 0 0 60px ${COLORS.secondary}20
             `,
           }}>
             <span style={{
@@ -760,6 +814,43 @@ export default function OrchestrationStatus({
         @keyframes electric-pulse {
           0%, 100% { opacity: 0; }
           50% { opacity: 0.8; }
+        }
+        @keyframes nebula-drift {
+          0%, 100% { 
+            transform: translate(0, 0) scale(1);
+            filter: hue-rotate(0deg);
+          }
+          33% { 
+            transform: translate(2%, -2%) scale(1.02);
+            filter: hue-rotate(10deg);
+          }
+          66% { 
+            transform: translate(-2%, 2%) scale(0.98);
+            filter: hue-rotate(-10deg);
+          }
+        }
+        @keyframes float-particle {
+          0%, 100% { 
+            transform: translate(0, 0) scale(1);
+            opacity: 0.4;
+          }
+          25% { 
+            transform: translate(10px, -15px) scale(1.2);
+            opacity: 0.8;
+          }
+          50% { 
+            transform: translate(-5px, -25px) scale(0.8);
+            opacity: 0.6;
+          }
+          75% { 
+            transform: translate(-15px, -10px) scale(1.1);
+            opacity: 0.7;
+          }
+        }
+        @keyframes energy-arc {
+          0% { stroke-dashoffset: 100; opacity: 0; }
+          50% { opacity: 1; }
+          100% { stroke-dashoffset: 0; opacity: 0; }
         }
       `}</style>
     </div>
