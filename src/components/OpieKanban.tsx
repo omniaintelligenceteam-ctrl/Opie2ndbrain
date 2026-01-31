@@ -351,6 +351,11 @@ export default function OpieKanban(): React.ReactElement {
       setIsSpeaking(false);
       setTimeout(() => startRecognition(), 300);
     };
+    audioRef.current.onerror = (e) => {
+      console.error('[Audio] Playback error:', e);
+      setIsSpeaking(false);
+      setTimeout(() => startRecognition(), 300);
+    };
   }, [startRecognition]);
   
   // Clear silence timer on unmount
@@ -476,13 +481,53 @@ export default function OpieKanban(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
+      
+      // Check if response is OK
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[TTS] API error:', res.status, errorData);
+        setIsSpeaking(false);
+        setTimeout(() => startRecognition(), 300);
+        return;
+      }
+      
+      // Check content type to ensure we got audio
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('audio')) {
+        console.error('[TTS] Invalid content type:', contentType);
+        setIsSpeaking(false);
+        setTimeout(() => startRecognition(), 300);
+        return;
+      }
+      
       const blob = await res.blob();
+      
+      // Validate blob size (audio should be more than a few hundred bytes)
+      if (blob.size < 1000) {
+        console.error('[TTS] Audio blob too small:', blob.size, 'bytes');
+        setIsSpeaking(false);
+        setTimeout(() => startRecognition(), 300);
+        return;
+      }
+      
+      console.log('[TTS] Received audio:', blob.size, 'bytes');
       const url = URL.createObjectURL(blob);
+      
       if (audioRef.current) {
         audioRef.current.src = url;
-        await audioRef.current.play();
+        try {
+          await audioRef.current.play();
+          console.log('[Audio] Playback started');
+        } catch (playError) {
+          console.error('[Audio] Play failed (autoplay policy?):', playError);
+          setIsSpeaking(false);
+          setTimeout(() => startRecognition(), 300);
+          // Clean up the URL
+          URL.revokeObjectURL(url);
+        }
       }
     } catch (err) {
+      console.error('[TTS] Fetch error:', err);
       setIsSpeaking(false);
       setTimeout(() => startRecognition(), 300);
     }

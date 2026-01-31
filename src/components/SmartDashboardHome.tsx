@@ -193,9 +193,11 @@ export default function SmartDashboardHome({
   const { memories, loading: memoriesLoading } = useRecentMemories(5);
   // Poll connection more frequently for real latency (every 3 seconds)
   const { isOnline, latency } = useConnectionStatus();
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Set initial time on client only (avoids hydration mismatch)
+    setCurrentTime(new Date());
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
   }, []);
@@ -228,16 +230,16 @@ export default function SmartDashboardHome({
           <p style={styles.suggestion}>{suggestion}</p>
           <div style={styles.timestamp}>
             <span style={styles.timestampIcon}>📅</span>
-            {currentTime.toLocaleDateString('en-US', { 
+            {currentTime ? currentTime.toLocaleDateString('en-US', { 
               weekday: 'long', 
               month: 'long', 
               day: 'numeric' 
-            })}
+            }) : '...'}
             <span style={styles.timestampDot}>•</span>
-            {currentTime.toLocaleTimeString('en-US', { 
+            {currentTime ? currentTime.toLocaleTimeString('en-US', { 
               hour: 'numeric', 
               minute: '2-digit' 
-            })}
+            }) : '...'}
           </div>
         </div>
 
