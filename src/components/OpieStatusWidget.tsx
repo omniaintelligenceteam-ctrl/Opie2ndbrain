@@ -75,52 +75,40 @@ export default function OpieStatusWidget({
       }}
       onClick={onClick}
     >
-      {/* Status Orb / Avatar */}
+      {/* Avatar with Status Indicator */}
       <div style={{
         position: 'relative',
         width: orbSize,
         height: orbSize,
         flexShrink: 0,
       }}>
-        {/* Simple status indicator */}
-        
-        {/* Main orb */}
-        <div style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: '50%',
-          background: `radial-gradient(circle at 30% 30%, ${config.color} 0%, ${config.color}80 50%, ${config.color}40 100%)`,
-          boxShadow: `0 0 ${orbSize/3}px ${config.color}60`,
-          animation: config.animation,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-        }}>
-          {/* Icon - changes based on status */}
-          <span style={{
-            fontSize: size === 'small' ? '16px' : size === 'medium' ? '22px' : '28px',
-            filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.7))',
-            animation: currentStatus === 'thinking' ? 'iconPulse 1s ease-in-out infinite' : 
-                       currentStatus === 'working' ? 'iconSpin 2s linear infinite' : 'none',
-          }}>
-            {config.icon}
-          </span>
-          
-          {/* Highlight reflection */}
-          <div style={{
-            position: 'absolute',
-            top: '12%',
-            left: '18%',
-            width: '22%',
-            height: '22%',
+        {/* Avatar Image */}
+        <img 
+          src="/opie-avatar.png" 
+          alt="Opie"
+          style={{
+            width: '100%',
+            height: '100%',
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.5)',
-            filter: 'blur(2px)',
-          }} />
-        </div>
-
-        {/* Removed: activity dots */}
+            objectFit: 'cover',
+            border: `3px solid ${config.color}`,
+            boxShadow: `0 0 ${orbSize/3}px ${config.color}60`,
+            animation: config.animation,
+          }}
+        />
+        
+        {/* Status Dot */}
+        <div style={{
+          position: 'absolute',
+          bottom: '2px',
+          right: '2px',
+          width: size === 'small' ? '10px' : size === 'medium' ? '14px' : '18px',
+          height: size === 'small' ? '10px' : size === 'medium' ? '14px' : '18px',
+          borderRadius: '50%',
+          background: config.color,
+          border: '2px solid #1a1a2e',
+          boxShadow: `0 0 8px ${config.color}`,
+        }} />
       </div>
 
       {/* Name and Status */}
