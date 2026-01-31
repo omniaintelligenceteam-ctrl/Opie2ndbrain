@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, DragEvent } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface KanbanTask {
   id: string;
@@ -17,9 +17,9 @@ interface KanbanColumn {
 interface KanbanColumnProps {
   column: KanbanColumn;
   isMobile?: boolean;
-  onDragStart: (e: DragEvent, taskId: string, columnId: string) => void;
-  onDragOver: (e: DragEvent) => void;
-  onDrop: (e: DragEvent, columnId: string) => void;
+  onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string, columnId: string) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>, columnId: string) => void;
   onDeleteTask: (columnId: string, taskId: string) => void;
 }
 
@@ -69,7 +69,7 @@ function KanbanColumnComponent({
     return `Added ${formatted}`;
   };
 
-  const handleDragOver = (e: DragEvent) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(true);
     onDragOver(e);
@@ -79,7 +79,7 @@ function KanbanColumnComponent({
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: DragEvent) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     setIsDragOver(false);
     onDrop(e, column.id);
   };
@@ -267,7 +267,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
   const [columns, setColumns] = useState<KanbanColumn[]>(createDefaultColumns);
   const [draggedTask, setDraggedTask] = useState<{ taskId: string; fromColumn: string } | null>(null);
 
-  const handleDragStart = (e: DragEvent, taskId: string, columnId: string) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string, columnId: string) => {
     setDraggedTask({ taskId, fromColumn: columnId });
     e.dataTransfer.effectAllowed = 'move';
     // Add visual feedback
@@ -275,12 +275,12 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
     target.style.opacity = '0.5';
   };
 
-  const handleDragOver = (e: DragEvent) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: DragEvent, toColumnId: string) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, toColumnId: string) => {
     e.preventDefault();
     
     if (!draggedTask) return;
