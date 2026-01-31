@@ -32,6 +32,7 @@ import { AGENT_NODES } from '../lib/agentMapping';
 import AgentLeaderboard from './AgentLeaderboard';
 import ContextWindowVisualizer from './ContextWindowVisualizer';
 import AgentPersonalityPanel from './AgentPersonalityPanel';
+import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
 
 // Persistence helpers
 function getSessionId(): string {
@@ -288,6 +289,7 @@ export default function OpieKanban(): React.ReactElement {
   const { theme, themeName, toggleTheme } = useTheme();
   const { soundsEnabled, toggleSounds, playNotification, playSuccess } = useSounds();
   const bottomNavVisible = useBottomNav();
+  const { currentParameters: personalityParams } = useAgentPersonality();
 
   // Load saved state on mount
   useEffect(() => {
@@ -592,7 +594,11 @@ export default function OpieKanban(): React.ReactElement {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, sessionId }),
+        body: JSON.stringify({ 
+          message: userMsg, 
+          sessionId,
+          personality: personalityParams, // Pass personality slider values
+        }),
         signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
