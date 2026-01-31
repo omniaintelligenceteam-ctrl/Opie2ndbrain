@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { gatewayFetch } from '@/lib/gateway';
 
+// Force dynamic - don't prerender at build time
+export const dynamic = 'force-dynamic';
+
 interface ActivityItem {
   id: string;
   type: 'message' | 'task' | 'agent' | 'cron' | 'system';
