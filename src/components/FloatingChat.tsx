@@ -757,40 +757,52 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Robot avatar (image has ring built-in)
+  // Closed - Robot avatar (smaller container, zoomed in on head)
   if (mode === 'closed') {
     return (
       <>
-        <img
+        <div
           onClick={() => { setMode('open'); setHasInteracted(true); }}
-          src="/opie-avatar.png"
-          alt="Chat with Opie"
           style={{
             position: 'fixed',
             bottom: 16,
             right: 16,
-            width: 140,
-            height: 140,
-            objectFit: 'contain',
+            width: 70,
+            height: 70,
             cursor: 'pointer',
             zIndex: 1000,
-            filter: 'drop-shadow(0 0 20px rgba(59, 130, 246, 0.4))',
+            borderRadius: '50%',
+            overflow: 'hidden',
+            filter: 'drop-shadow(0 0 15px rgba(59, 130, 246, 0.5))',
             transition: 'transform 0.2s ease, filter 0.2s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.05)';
-            e.currentTarget.style.filter = 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.6))';
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.filter = 'drop-shadow(0 0 25px rgba(59, 130, 246, 0.7))';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.filter = 'drop-shadow(0 0 20px rgba(59, 130, 246, 0.4))';
+            e.currentTarget.style.filter = 'drop-shadow(0 0 15px rgba(59, 130, 246, 0.5))';
           }}
-        />
+        >
+          <img
+            src="/opie-avatar.png"
+            alt="Chat with Opie"
+            style={{
+              width: '180%',
+              height: '180%',
+              objectFit: 'cover',
+              objectPosition: 'center 25%',
+              marginLeft: '-40%',
+              marginTop: '-20%',
+            }}
+          />
+        </div>
         {unreadCount > 0 && (
           <span style={{
             ...styles.unreadBadge,
             position: 'fixed',
-            bottom: 140,
+            bottom: 78,
             right: 16,
           }}>{unreadCount}</span>
         )}
