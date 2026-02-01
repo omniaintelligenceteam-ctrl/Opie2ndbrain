@@ -14,13 +14,14 @@ export interface ChatMessage {
 }
 
 type ChatMode = 'closed' | 'minimized' | 'open' | 'fullscreen';
-type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
+type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'working';
 
 interface FloatingChatProps {
   messages: ChatMessage[];
   input: string;
   setInput: (val: string) => void;
   isLoading: boolean;
+  isWorking?: boolean;
   onSend: (text?: string) => void;
   micOn: boolean;
   onMicToggle: () => void;
@@ -139,6 +140,7 @@ function StatusIndicator({ state, size = 8 }: { state: VoiceState; size?: number
     listening: '#22c55e',
     processing: '#667eea',
     speaking: '#f59e0b',
+    working: '#f97316',
   };
   
   const shouldPulse = state === 'listening' || state === 'processing';
@@ -258,6 +260,7 @@ export default function FloatingChat({
   input,
   setInput,
   isLoading,
+  isWorking = false,
   onSend,
   micOn,
   onMicToggle,
@@ -292,14 +295,16 @@ export default function FloatingChat({
     if (isSpeaking) return 'speaking';
     if (isLoading) return 'processing';
     if (micOn) return 'listening';
+    if (isWorking) return 'working';
     return 'idle';
-  }, [micOn, isLoading, isSpeaking]);
+  }, [micOn, isLoading, isSpeaking, isWorking]);
 
   const statusText = useMemo(() => {
     switch (voiceState) {
       case 'listening': return '🎤 Listening...';
       case 'processing': return '✨ Thinking...';
       case 'speaking': return '🔊 Speaking...';
+      case 'working': return '🔧 Working...';
       default: return '● Online';
     }
   }, [voiceState]);
