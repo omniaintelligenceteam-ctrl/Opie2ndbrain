@@ -784,7 +784,8 @@ export default function FloatingChat({
 
   // Open / Fullscreen - Full chat
   const isFullscreen = mode === 'fullscreen';
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  // Use mounted state to avoid hydration mismatch
+  const isMobile = mounted && typeof window !== 'undefined' && window.innerWidth < 768;
 
   return (
     <>
