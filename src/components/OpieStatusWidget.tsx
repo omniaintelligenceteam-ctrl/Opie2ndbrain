@@ -24,20 +24,19 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
   }, []);
 
   return (
-    <div 
+    <div
       onClick={handleClick}
       style={{
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
         padding: '12px',
         minWidth: logoSize + 24,
         minHeight: logoSize + 24,
-        contain: 'strict',
-        contentVisibility: 'auto',
       }}
     >
-      <img 
-        src="/opie-logo-neon.png" 
+      <img
+        src="/opie-logo-neon.png"
         alt="Opie"
         width={logoSize}
         height={logoSize}
@@ -47,10 +46,6 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
           width: logoSize,
           height: logoSize,
           objectFit: 'contain',
-          transform: 'translate3d(0,0,0)',
-          backfaceVisibility: 'hidden',
-          willChange: 'transform',
-          isolation: 'isolate',
         }}
       />
     </div>
