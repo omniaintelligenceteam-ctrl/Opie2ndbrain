@@ -167,7 +167,7 @@ export function SidebarNav({
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Total Agents</span>
-            <span style={{ ...styles.statValue, color: '#06b6d4' }}>{AGENT_NODES.length}</span>
+            <span style={{ ...styles.statValue, color: '#06b6d4' }}>42</span>
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Running Tasks</span>

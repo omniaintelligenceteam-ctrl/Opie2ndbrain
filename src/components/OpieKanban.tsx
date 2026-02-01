@@ -892,7 +892,7 @@ export default function OpieKanban(): React.ReactElement {
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Total Agents</span>
-            <span style={{ ...styles.statValue, color: '#06b6d4' }}>{AGENT_NODES.length}</span>
+            <span style={{ ...styles.statValue, color: '#06b6d4' }}>42</span>
           </div>
           <div style={styles.statRow}>
             <span style={styles.statLabel}>Running Tasks</span>
@@ -1820,7 +1820,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: 0,
     left: 0,
     height: '100vh',
-    background: '#0d0d1a',
+    background: '#020514',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
     borderRight: '1px solid rgba(255,255,255,0.06)',

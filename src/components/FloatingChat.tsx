@@ -672,7 +672,7 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Big robot face button
+  // Closed - Big robot face button with glow
   if (mode === 'closed') {
     return (
       <>
@@ -681,20 +681,16 @@ export default function FloatingChat({
           onClick={() => { setMode('open'); setHasInteracted(true); }}
           style={{
             position: 'fixed',
-            bottom: 24,
-            right: 24,
-            width: 140,
-            height: 140,
-            borderRadius: '50%',
-            background: 'transparent',
+            bottom: 16,
+            right: 16,
+            width: 180,
+            height: 180,
+            background: 'none',
             border: 'none',
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             zIndex: 1000,
             padding: 0,
-            overflow: 'visible',
+            margin: 0,
           }}
           aria-label="Open chat"
         >
@@ -702,12 +698,11 @@ export default function FloatingChat({
             src="/opie-avatar.png"
             alt="Chat with Opie"
             style={{
-              width: 140,
-              height: 140,
-              borderRadius: '50%',
-              objectFit: 'cover',
-              boxShadow: '0 4px 30px rgba(102, 126, 234, 0.4), 0 0 60px rgba(102, 126, 234, 0.2)',
-              transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              filter: 'drop-shadow(0 0 20px rgba(102, 126, 234, 0.5)) drop-shadow(0 0 40px rgba(102, 126, 234, 0.3))',
             }}
           />
           {unreadCount > 0 && (

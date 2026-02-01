@@ -23,10 +23,10 @@ export interface Category {
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
-  journals: '📔', concepts: '💡', conversations: '💬', projects: '🚀', insights: '✨',
+  journals: '📔', concepts: '💡', conversations: '💬', projects: '🚀', insights: '✨', memory: '🧠', crons: '⏰',
 }
 
-const CATEGORIES = ['journals', 'concepts', 'conversations', 'projects', 'insights']
+const CATEGORIES = ['journals', 'concepts', 'conversations', 'projects', 'insights', 'memory', 'crons']
 
 function getExcerpt(content: string, length = 150): string {
   const plainText = content.replace(/^#+\s+.*$/gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_`~]/g, '').replace(/\n+/g, ' ').trim()

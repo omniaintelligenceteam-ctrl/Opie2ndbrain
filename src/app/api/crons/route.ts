@@ -3,13 +3,12 @@ import { NextResponse } from 'next/server';
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { gatewayFetch, IS_VERCEL, GATEWAY_URL } from '@/lib/gateway';
+import { invokeGatewayTool, IS_VERCEL, GATEWAY_URL } from '@/lib/gateway';
 
 interface CronJob {
   id: string;
   name: string;
   schedule: string;
-  command: string;
   enabled: boolean;
   priority?: 'critical' | 'normal' | 'low';
   lastRun?: string;
@@ -22,10 +21,26 @@ interface CronJob {
 
 export async function GET() {
   try {
-    const data = await gatewayFetch<{ crons?: CronJob[] }>('/crons', {
-      fallback: { crons: [] }
-    });
-    return NextResponse.json(data);
+    // Use /tools/invoke to call the cron list action
+    const data = await invokeGatewayTool('cron', { action: 'list', includeDisabled: true });
+    
+    // Transform the response to match expected format
+    const jobs = data?.jobs || [];
+    const crons: CronJob[] = jobs.map((job: any) => ({
+      id: job.id || job.jobId,
+      name: job.name || 'Unnamed Job',
+      schedule: formatSchedule(job.schedule),
+      enabled: job.enabled !== false,
+      priority: job.priority || 'normal',
+      lastRun: job.lastRun,
+      lastStatus: job.lastStatus,
+      nextRun: job.nextRun,
+      runCount: job.runCount || 0,
+      avgRuntime: job.avgRuntime,
+      description: job.description,
+    }));
+    
+    return NextResponse.json({ crons });
   } catch (error) {
     console.error('Failed to fetch crons:', error);
     
@@ -35,6 +50,22 @@ export async function GET() {
       error: 'Gateway unavailable',
     });
   }
+}
+
+function formatSchedule(schedule: any): string {
+  if (!schedule) return 'Unknown';
+  if (typeof schedule === 'string') return schedule;
+  
+  if (schedule.kind === 'cron') return schedule.expr || 'Cron';
+  if (schedule.kind === 'every') {
+    const ms = schedule.everyMs;
+    if (ms >= 3600000) return `Every ${ms / 3600000}h`;
+    if (ms >= 60000) return `Every ${ms / 60000}m`;
+    return `Every ${ms / 1000}s`;
+  }
+  if (schedule.kind === 'at') return `Once at ${new Date(schedule.atMs).toLocaleString()}`;
+  
+  return JSON.stringify(schedule);
 }
 
 export async function POST(request: Request) {
@@ -50,10 +81,7 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const data = await gatewayFetch('/crons', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    const data = await invokeGatewayTool('cron', { action: 'add', job: body });
     return NextResponse.json(data);
   } catch (error) {
     console.error('Failed to create cron:', error);

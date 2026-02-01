@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain } from 'lucide-react'
+import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain, Clock } from 'lucide-react'
 import { Category, Document } from '../lib/documents'
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  journals: <Calendar size={16} />, concepts: <Lightbulb size={16} />, conversations: <MessageSquare size={16} />, projects: <Rocket size={16} />, insights: <Sparkles size={16} />,
+  journals: <Calendar size={16} />, concepts: <Lightbulb size={16} />, conversations: <MessageSquare size={16} />, projects: <Rocket size={16} />, insights: <Sparkles size={16} />, memory: <Brain size={16} />, crons: <Clock size={16} />,
 }
 
 interface SidebarProps {
