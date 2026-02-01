@@ -78,6 +78,7 @@ function getLevelLabel(level: string): string {
 
 interface AgentsPanelProps {
   onDeploy?: (agentId: string, task: string) => void;
+  activeAgents?: string[];
 }
 
 export default function AgentsPanel({ onDeploy }: AgentsPanelProps) {
