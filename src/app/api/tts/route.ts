@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    console.log(`[TTS] Generating speech: provider=${provider}, chars=${text.length}`);
+    console.log(`[TTS] Generating speech: provider=${provider}, chars=${text.length}, text="${text.slice(0, 200)}"`);
 
     switch (provider) {
       case 'openai':
@@ -81,9 +81,17 @@ async function generateAzureTTS(text: string, voice: string): Promise<Response> 
 
   const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
   
+  // Clean text for SSML: escape XML entities and remove emojis/special chars that might break parsing
+  const cleanText = text
+    .replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FAFF}]/gu, '') // Remove emojis
+    .replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c] || c))
+    .trim();
+  
+  console.log(`[TTS/Azure] Clean text (${cleanText.length} chars): "${cleanText.slice(0, 100)}"`);
+  
   // Build SSML
   const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
-    <voice name='${voice}'>${text.replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c] || c))}</voice>
+    <voice name='${voice}'>${cleanText}</voice>
   </speak>`;
 
   try {
