@@ -563,9 +563,9 @@ export default function OpieKanban(): React.ReactElement {
     }
   };
 
-  const handleSend = async (text?: string) => {
+  const handleSend = async (text?: string, image?: string) => {
     const messageText = text || input;
-    if (!messageText.trim() || isLoading) return;
+    if ((!messageText.trim() && !image) || isLoading) return;
     const userMsg = messageText.trim();
     
     // Clear any pending silence timer
@@ -576,9 +576,10 @@ export default function OpieKanban(): React.ReactElement {
     const userMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'user',
-      text: userMsg,
+      text: userMsg || (image ? '[Image]' : ''),
       timestamp: new Date(),
       status: 'sending',
+      image: image,
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -600,9 +601,10 @@ export default function OpieKanban(): React.ReactElement {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: userMsg, 
+          message: userMsg || 'What do you see in this image?', 
           sessionId,
-          personality: personalityParams, // Pass personality slider values
+          personality: personalityParams,
+          image: image, // Include image in API call
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -1821,8 +1823,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     height: '100vh',
     background: '#020514',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
     borderRight: '1px solid rgba(255,255,255,0.06)',
     display: 'flex',
     flexDirection: 'column',

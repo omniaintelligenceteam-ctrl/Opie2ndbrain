@@ -11,6 +11,7 @@ export interface ChatMessage {
   text: string;
   timestamp: Date;
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+  image?: string; // Base64 or URL of attached image
 }
 
 type ChatMode = 'closed' | 'minimized' | 'open' | 'fullscreen';
@@ -22,7 +23,7 @@ interface FloatingChatProps {
   setInput: (val: string) => void;
   isLoading: boolean;
   isWorking?: boolean;
-  onSend: (text?: string) => void;
+  onSend: (text?: string, image?: string) => void;
   micOn: boolean;
   onMicToggle: () => void;
   isSpeaking: boolean;
@@ -277,7 +278,9 @@ export default function FloatingChat({
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isDetached, setIsDetached] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
   const detachedWindowRef = useRef<Window | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Track mounted state for hydration-safe date formatting
   useEffect(() => {
@@ -644,12 +647,43 @@ export default function FloatingChat({
     return () => clearInterval(checkWindow);
   }, [isDetached]);
 
+  // Handle image selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+    
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (input.trim()) {
-        onSend();
+      if (input.trim() || pendingImage) {
+        onSend(input, pendingImage || undefined);
+        setPendingImage(null);
         setHasInteracted(true);
       }
     }
@@ -658,10 +692,11 @@ export default function FloatingChat({
     }
   };
 
-  // Handle send with local text
+  // Handle send with local text and optional image
   const handleSendClick = () => {
-    if (input.trim()) {
-      onSend();
+    if (input.trim() || pendingImage) {
+      onSend(input, pendingImage || undefined);
+      setPendingImage(null);
       setHasInteracted(true);
     }
   };
@@ -909,10 +944,18 @@ export default function FloatingChat({
                         : (isGrouped ? '18px 18px 18px 4px' : '18px 18px 18px 4px'),
                     }}
                   >
-                    {renderMessageText(msg.text)}
+                    {msg.image && (
+                      <img 
+                        src={msg.image} 
+                        alt="Attached" 
+                        style={styles.messageImage}
+                        onClick={() => window.open(msg.image, '_blank')}
+                      />
+                    )}
+                    {msg.text && renderMessageText(msg.text)}
                     
                     {/* Copy button on hover for assistant */}
-                    {!isUser && (
+                    {!isUser && msg.text && (
                       <CopyButton text={msg.text} />
                     )}
                   </div>
@@ -954,6 +997,20 @@ export default function FloatingChat({
           <div ref={chatEndRef} />
         </div>
 
+        {/* Pending Image Preview */}
+        {pendingImage && (
+          <div style={styles.pendingImageContainer}>
+            <img src={pendingImage} alt="Pending" style={styles.pendingImage} />
+            <button
+              onClick={() => setPendingImage(null)}
+              style={styles.removePendingImage}
+              title="Remove image"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Input Area */}
         <div style={styles.inputArea}>
           {/* Voice button */}
@@ -990,6 +1047,22 @@ export default function FloatingChat({
             </button>
           )}
 
+          {/* Image upload button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={styles.imageButton}
+            title="Attach image"
+          >
+            📷
+          </button>
+
           {/* Text input */}
           <div style={styles.inputWrapper}>
             <textarea
@@ -1018,11 +1091,11 @@ export default function FloatingChat({
           {/* Send button */}
           <button
             onClick={handleSendClick}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || (!input.trim() && !pendingImage)}
             style={{
               ...styles.sendButton,
-              opacity: input.trim() && !isLoading ? 1 : 0.5,
-              cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed',
+              opacity: (input.trim() || pendingImage) && !isLoading ? 1 : 0.5,
+              cursor: (input.trim() || pendingImage) && !isLoading ? 'pointer' : 'not-allowed',
             }}
             title="Send message"
           >
@@ -1460,6 +1533,59 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  imageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: '50%',
+    border: 'none',
+    background: 'rgba(102, 126, 234, 0.2)',
+    color: '#fff',
+    fontSize: '18px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    transition: 'all 0.2s ease',
+  },
+  pendingImageContainer: {
+    padding: '8px 16px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'rgba(0, 0, 0, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    position: 'relative',
+  },
+  pendingImage: {
+    maxWidth: 120,
+    maxHeight: 80,
+    borderRadius: 8,
+    objectFit: 'cover',
+  },
+  removePendingImage: {
+    position: 'absolute',
+    top: 4,
+    right: 12,
+    width: 24,
+    height: 24,
+    borderRadius: '50%',
+    border: 'none',
+    background: 'rgba(239, 68, 68, 0.8)',
+    color: '#fff',
+    fontSize: '12px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  messageImage: {
+    maxWidth: '100%',
+    maxHeight: 200,
+    borderRadius: 8,
+    marginTop: 8,
+    objectFit: 'contain',
   },
   inputWrapper: {
     flex: 1,
