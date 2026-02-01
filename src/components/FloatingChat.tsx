@@ -712,20 +712,20 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Just the robot head, bigger, no background
+  // Closed - Just the neon logo, no dark background
   if (mode === 'closed') {
     return (
       <>
         <img
           onClick={() => { setMode('open'); setHasInteracted(true); }}
-          src="/opie-avatar.png"
+          src="/opie-logo-neon.png"
           alt="Chat with Opie"
           style={{
             position: 'fixed',
             bottom: 16,
             right: 16,
-            width: 150,
-            height: 150,
+            width: 180,
+            height: 180,
             objectFit: 'contain',
             cursor: 'pointer',
             zIndex: 1000,
