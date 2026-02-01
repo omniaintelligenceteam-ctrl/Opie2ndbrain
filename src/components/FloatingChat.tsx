@@ -712,48 +712,33 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Just the robot head, no container
+  // Closed - Just the robot head, bigger, no background
   if (mode === 'closed') {
     return (
       <>
-        <button
+        <img
           onClick={() => { setMode('open'); setHasInteracted(true); }}
+          src="/opie-avatar.png"
+          alt="Chat with Opie"
           style={{
             position: 'fixed',
-            bottom: 20,
-            right: 20,
-            width: 120,
-            height: 120,
-            background: 'none',
-            backgroundColor: 'transparent',
-            border: 'none',
-            outline: 'none',
-            boxShadow: 'none',
+            bottom: 16,
+            right: 16,
+            width: 150,
+            height: 150,
+            objectFit: 'contain',
             cursor: 'pointer',
             zIndex: 1000,
-            padding: 0,
-            margin: 0,
           }}
-          aria-label="Open chat"
-        >
-          <img
-            src="/opie-avatar.png"
-            alt="Chat with Opie"
-            style={{
-              width: 120,
-              height: 120,
-              objectFit: 'contain',
-              display: 'block',
-            }}
-          />
-          {unreadCount > 0 && (
-            <span style={{
-              ...styles.unreadBadge,
-              top: 0,
-              right: 0,
-            }}>{unreadCount}</span>
-          )}
-        </button>
+        />
+        {unreadCount > 0 && (
+          <span style={{
+            ...styles.unreadBadge,
+            position: 'fixed',
+            bottom: 140,
+            right: 16,
+          }}>{unreadCount}</span>
+        )}
       </>
     );
   }
