@@ -1820,7 +1820,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: 0,
     left: 0,
     height: '100vh',
-    background: 'rgba(13, 13, 21, 0.95)',
+    background: '#0d0d1a',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
     borderRight: '1px solid rgba(255,255,255,0.06)',

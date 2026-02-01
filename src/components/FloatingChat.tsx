@@ -672,21 +672,51 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Floating button
+  // Closed - Big robot face button
   if (mode === 'closed') {
     return (
       <>
         <style>{animationStyles}</style>
         <button
           onClick={() => { setMode('open'); setHasInteracted(true); }}
-          style={styles.floatingButton}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            width: 140,
+            height: 140,
+            borderRadius: '50%',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 0,
+            overflow: 'visible',
+          }}
           aria-label="Open chat"
         >
-          <Avatar size={40} />
+          <img
+            src="/opie-avatar.png"
+            alt="Chat with Opie"
+            style={{
+              width: 140,
+              height: 140,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              boxShadow: '0 4px 30px rgba(102, 126, 234, 0.4), 0 0 60px rgba(102, 126, 234, 0.2)',
+              transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+            }}
+          />
           {unreadCount > 0 && (
-            <span style={styles.unreadBadge}>{unreadCount}</span>
+            <span style={{
+              ...styles.unreadBadge,
+              top: 0,
+              right: 0,
+            }}>{unreadCount}</span>
           )}
-          <span style={styles.floatingButtonGlow} />
         </button>
       </>
     );

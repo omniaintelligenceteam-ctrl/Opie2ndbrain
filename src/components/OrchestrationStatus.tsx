@@ -390,24 +390,44 @@ export default function OrchestrationStatus({
             </>
           )}
           
-          {/* Main orb - Lightning Bolt Image */}
+          {/* Main orb */}
           <div style={{
             ...styles.centralOrb,
-            background: 'transparent',
-            boxShadow: 'none',
-            width: '120px',
-            height: '120px',
+            background: `
+              radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 50%),
+              radial-gradient(circle at 70% 70%, rgba(102,126,234,0.3) 0%, transparent 40%),
+              linear-gradient(135deg, #1a1a3e 0%, #0d0d1a 50%, #1a1a3e 100%)
+            `,
+            boxShadow: demoMode ? `
+              0 0 40px ${COLORS.primary}80,
+              0 0 80px ${COLORS.primary}40,
+              0 0 120px ${COLORS.secondary}30,
+              0 0 160px ${COLORS.accent}20,
+              inset 0 0 40px ${COLORS.primary}50,
+              inset 0 0 80px ${COLORS.secondary}30
+            ` : `
+              0 0 ${30 + Math.sin(animationPhase / 20) * 10}px ${COLORS.primary}80,
+              0 0 ${60 + Math.cos(animationPhase / 15) * 20}px ${COLORS.primary}50,
+              0 0 ${100 + Math.sin(animationPhase / 10) * 30}px ${COLORS.secondary}30,
+              0 0 ${140 + Math.cos(animationPhase / 8) * 40}px ${COLORS.accent}15,
+              inset 0 0 30px ${COLORS.primary}50,
+              inset 0 0 60px ${COLORS.secondary}20
+            `,
           }}>
-            <img 
-              src="/opie-bolt.png" 
-              alt="Opie"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-                animation: demoMode ? 'float 3s ease-in-out infinite' : 'none',
-              }}
-            />
+            <span style={{
+              ...styles.centralIcon,
+              fontSize: demoMode ? '32px' : '28px',
+              animation: demoMode ? 'float 3s ease-in-out infinite' : 'none',
+            }}>⚡</span>
+            <span style={{
+              ...styles.centralLabel,
+              background: demoMode 
+                ? 'linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>Opie</span>
           </div>
           
           {/* Status indicators */}
