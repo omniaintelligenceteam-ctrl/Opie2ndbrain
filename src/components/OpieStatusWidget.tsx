@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useCallback } from 'react';
 
 interface OpieStatusWidgetProps {
   size?: 'small' | 'medium' | 'large';
@@ -8,41 +8,35 @@ interface OpieStatusWidgetProps {
   onClick?: () => void;
 }
 
-// Custom comparison - only re-render if size or showDetails changes
-// Ignore onClick since it's often a new function reference
-function arePropsEqual(prev: OpieStatusWidgetProps, next: OpieStatusWidgetProps) {
-  return prev.size === next.size && prev.showDetails === next.showDetails;
-}
-
+// Completely static component - never re-renders after initial mount
 const OpieStatusWidget = memo(function OpieStatusWidget({ 
   size = 'medium',
   onClick 
 }: OpieStatusWidgetProps) {
   const logoSize = size === 'small' ? 120 : size === 'medium' ? 180 : 240;
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  // Ensure image is always visible after load
-  useEffect(() => {
-    if (imgRef.current) {
-      imgRef.current.style.opacity = '1';
-    }
+  
+  // Store onClick in ref to avoid re-renders from new function references
+  const onClickRef = useRef(onClick);
+  onClickRef.current = onClick;
+  
+  const handleClick = useCallback(() => {
+    onClickRef.current?.();
   }, []);
 
   return (
     <div 
+      onClick={handleClick}
       style={{
         display: 'flex',
         alignItems: 'center',
         padding: '12px',
         minWidth: logoSize + 24,
         minHeight: logoSize + 24,
-        // Container stability
-        contain: 'layout style',
+        contain: 'strict',
+        contentVisibility: 'auto',
       }}
-      onClick={onClick}
     >
       <img 
-        ref={imgRef}
         src="/opie-logo-neon.png" 
         alt="Opie"
         width={logoSize}
@@ -53,21 +47,17 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
           width: logoSize,
           height: logoSize,
           objectFit: 'contain',
-          // Aggressive anti-flicker
           transform: 'translate3d(0,0,0)',
           backfaceVisibility: 'hidden',
-          WebkitBackfaceVisibility: 'hidden',
-          perspective: 1000,
-          // Prevent any opacity changes
-          opacity: 1,
-          // Keep on GPU layer
           willChange: 'transform',
-          // No transitions that could cause flicker
-          transition: 'none',
+          isolation: 'isolate',
         }}
       />
     </div>
   );
-}, arePropsEqual);
+}, (prev, next) => {
+  // Only re-render if size changes - ignore everything else
+  return prev.size === next.size;
+});
 
 export default OpieStatusWidget;
