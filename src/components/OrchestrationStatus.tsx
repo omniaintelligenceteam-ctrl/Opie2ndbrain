@@ -152,25 +152,6 @@ export default function OrchestrationStatus({
         zIndex: 0,
       }} />
       
-      {/* Floating particles */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-        {[...Array(12)].map((_, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            width: `${2 + Math.random() * 3}px`,
-            height: `${2 + Math.random() * 3}px`,
-            background: i % 3 === 0 ? '#667eea' : i % 3 === 1 ? '#8b5cf6' : '#06b6d4',
-            borderRadius: '50%',
-            left: `${10 + Math.random() * 80}%`,
-            top: `${10 + Math.random() * 80}%`,
-            opacity: 0.4 + Math.random() * 0.4,
-            boxShadow: `0 0 ${4 + Math.random() * 6}px currentColor`,
-            animation: `float-particle ${8 + Math.random() * 12}s ease-in-out infinite`,
-            animationDelay: `${Math.random() * 5}s`,
-          }} />
-        ))}
-      </div>
-      
       {/* Scan line effect */}
       <div style={{
         position: 'absolute',

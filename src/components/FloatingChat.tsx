@@ -677,11 +677,10 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Big robot face button with glow
+  // Closed - Big robot face button (static)
   if (mode === 'closed') {
     return (
       <>
-        <style>{animationStyles}</style>
         <button
           onClick={() => { setMode('open'); setHasInteracted(true); }}
           style={{
@@ -707,7 +706,6 @@ export default function FloatingChat({
               height: '100%',
               objectFit: 'contain',
               display: 'block',
-              filter: 'drop-shadow(0 0 20px rgba(102, 126, 234, 0.5)) drop-shadow(0 0 40px rgba(102, 126, 234, 0.3))',
             }}
           />
           {unreadCount > 0 && (
