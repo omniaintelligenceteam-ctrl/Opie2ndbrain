@@ -1,990 +1,253 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { AGENT_NODES } from '../lib/agentMapping';
+import { useState } from 'react';
 
-interface AgentSession {
-  id: string;
-  label: string;
-  status: 'running' | 'complete' | 'failed' | 'idle';
-  startedAt: string;
-  runtime: string;
-  tokens: {
-    input: number;
-    output: number;
-    total: number;
-  };
-  model: string;
-  error?: string;
-  output?: string;
-}
-
-interface AgentDefinition {
+interface Agent {
   id: string;
   name: string;
   emoji: string;
-  role: string;
-  goal: string;
-  backstory: string;
-  tier: 1 | 2 | 3;
-  skills: string[];
-  category: 'core' | 'specialist';
+  description: string;
+  level: 'core' | 'advanced' | 'specialist';
 }
 
-// Enhanced agent definitions mapped from orchestration nodes + additional details
-const AGENT_DEFINITIONS: AgentDefinition[] = [
-  {
-    id: 'research',
-    name: 'Research Agent',
-    emoji: '🔍',
-    role: 'Intelligence Gatherer',
-    goal: 'Find accurate, actionable information from any source',
-    backstory: 'Built for deep web research, competitive analysis, and fact verification.',
-    tier: 1,
-    skills: ['web_search', 'web_fetch', 'memory', 'analysis', 'atlas-research'],
-    category: 'core',
-  },
-  {
-    id: 'code',
-    name: 'Code Agent',
-    emoji: '💻',
-    role: 'Software Engineer',
-    goal: 'Write, debug, and optimize code across any language',
-    backstory: 'Expert software developer capable of full-stack development.',
-    tier: 1,
-    skills: ['coding', 'git', 'testing', 'review', 'debugging', 'codeforge'],
-    category: 'core',
-  },
-  {
-    id: 'content',
-    name: 'Content Agent',
-    emoji: '✍️',
-    role: 'Content Strategist',
-    goal: 'Create compelling content that converts',
-    backstory: 'Master of written communication. Creates blog posts, emails, social content.',
-    tier: 1,
-    skills: ['writing', 'editing', 'seo', 'copywriting', 'lumina-content', 'humanizer'],
-    category: 'core',
-  },
-  {
-    id: 'analyst',
-    name: 'Analyst Agent',
-    emoji: '📊',
-    role: 'Data Analyst',
-    goal: 'Turn data into actionable insights',
-    backstory: 'Specializes in data analysis, visualization, and reporting.',
-    tier: 1,
-    skills: ['analytics', 'visualization', 'research', 'reporting', 'synthesis', 'decision-intelligence'],
-    category: 'core',
-  },
-  {
-    id: 'proposal',
-    name: 'Proposal Agent',
-    emoji: '📝',
-    role: 'Business Strategist',
-    goal: 'Create winning proposals and estimates',
-    backstory: 'Specializes in crafting compelling business proposals, estimates, and bids.',
-    tier: 2,
-    skills: ['proposal-writing', 'estimation', 'project-planning', 'director-guidance'],
-    category: 'specialist',
-  },
-  {
-    id: 'sales',
-    name: 'Sales Agent',
-    emoji: '💰',
-    role: 'Revenue Generator',
-    goal: 'Close deals and drive revenue growth',
-    backstory: 'Expert sales professional with CRM integration and lead qualification.',
-    tier: 2,
-    skills: ['sales-tactics', 'lead-qualification', 'crm', 'hunter-sales', 'negotiation'],
-    category: 'specialist',
-  },
-  {
-    id: 'qa',
-    name: 'QA Agent',
-    emoji: '✅',
-    role: 'Quality Assurance',
-    goal: 'Ensure excellence through rigorous testing',
-    backstory: 'Quality guardian that tests, reviews, and validates all outputs.',
-    tier: 2,
-    skills: ['testing', 'review', 'quality-control', 'devils-advocate', 'accountability'],
-    category: 'specialist',
-  },
-  {
-    id: 'outreach',
-    name: 'Outreach Agent',
-    emoji: '📧',
-    role: 'Communication Specialist',
-    goal: 'Build relationships through effective outreach',
-    backstory: 'Handles email campaigns, follow-ups, and customer communication.',
-    tier: 2,
-    skills: ['email', 'crm', 'templates', 'network-intelligence', 'stakeholder-orchestration', 'emotional-intelligence'],
-    category: 'core',
-  },
+// All 42 agents with descriptions and levels
+const ALL_AGENTS: Agent[] = [
+  // Core Agents
+  { id: 'opie-main', name: 'Opie Main', emoji: '⚡', description: 'Primary orchestrating agent', level: 'core' },
+  { id: 'research-agent', name: 'Research', emoji: '🔍', description: 'Deep research and analysis', level: 'core' },
+  { id: 'code-agent', name: 'Code', emoji: '💻', description: 'Software development and debugging', level: 'core' },
+  { id: 'content-agent', name: 'Content', emoji: '✍️', description: 'Content creation and copywriting', level: 'core' },
+  { id: 'analyst-agent', name: 'Analyst', emoji: '📊', description: 'Data analysis and insights', level: 'core' },
+  { id: 'sales-agent', name: 'Sales', emoji: '💰', description: 'Sales strategy and outreach', level: 'core' },
+  { id: 'proposal-agent', name: 'Proposal', emoji: '📝', description: 'Proposals and estimates', level: 'core' },
+  // Advanced Agents
+  { id: 'crisis-commander-agent', name: 'Crisis Commander', emoji: '🚨', description: 'Emergency response coordination', level: 'advanced' },
+  { id: 'decision-intelligence-agent', name: 'Decision Intelligence', emoji: '🎯', description: 'Strategic decision making', level: 'advanced' },
+  { id: 'director-agent', name: 'Director', emoji: '🎬', description: 'Project direction and oversight', level: 'advanced' },
+  { id: 'negotiator-agent', name: 'Negotiator', emoji: '🤝', description: 'Deal negotiation strategies', level: 'advanced' },
+  { id: 'synthesis-agent', name: 'Synthesis', emoji: '🧬', description: 'Combine insights into action', level: 'advanced' },
+  { id: 'devils-advocate-agent', name: "Devil's Advocate", emoji: '😈', description: 'Challenge assumptions and ideas', level: 'advanced' },
+  { id: 'forward-thinking-agent', name: 'Forward Thinking', emoji: '🔮', description: 'Future planning and strategy', level: 'advanced' },
+  { id: 'scenario-architect-agent', name: 'Scenario Architect', emoji: '🏗️', description: 'Model future scenarios', level: 'advanced' },
+  { id: 'emotional-intelligence-agent', name: 'Emotional Intelligence', emoji: '💗', description: 'Understand emotional context', level: 'advanced' },
+  { id: 'stakeholder-orchestrator-agent', name: 'Stakeholder Orchestrator', emoji: '🎭', description: 'Manage stakeholder relationships', level: 'advanced' },
+  { id: 'network-intelligence-agent', name: 'Network Intelligence', emoji: '🌐', description: 'Map and leverage networks', level: 'advanced' },
+  { id: 'mockup-specialist', name: 'Mockup Specialist', emoji: '🎨', description: 'Create visual mockups', level: 'advanced' },
+  { id: 'success-agent', name: 'Success', emoji: '🏆', description: 'Customer success strategies', level: 'advanced' },
+  { id: 'contractor-expert', name: 'Contractor Expert', emoji: '🔧', description: 'Contractor industry knowledge', level: 'advanced' },
+  { id: 'business-acumen-agent', name: 'Business Acumen', emoji: '💼', description: 'Business strategy and operations', level: 'advanced' },
+  // Specialist Agents
+  { id: 'accountability-agent', name: 'Accountability', emoji: '📋', description: 'Track commitments and follow-ups', level: 'specialist' },
+  { id: 'delegation-master-agent', name: 'Delegation Master', emoji: '👥', description: 'Optimal task delegation', level: 'specialist' },
+  { id: 'energy-guardian-agent', name: 'Energy Guardian', emoji: '⚡', description: 'Manage energy and focus', level: 'specialist' },
+  { id: 'humanizer-agent', name: 'Humanizer', emoji: '🤝', description: 'Make content more human', level: 'specialist' },
+  { id: 'ideas-agent', name: 'Ideas', emoji: '💡', description: 'Generate creative ideas', level: 'specialist' },
+  { id: 'learning-accelerator-agent', name: 'Learning Accelerator', emoji: '📚', description: 'Accelerate skill acquisition', level: 'specialist' },
+  { id: 'lead-tracker-agent', name: 'Lead Tracker', emoji: '📈', description: 'Track and manage leads', level: 'specialist' },
+  { id: 'meeting-master-agent', name: 'Meeting Master', emoji: '📅', description: 'Optimize meetings', level: 'specialist' },
+  { id: 'onboarding-buddy-agent', name: 'Onboarding Buddy', emoji: '👋', description: 'Guide new user onboarding', level: 'specialist' },
+  { id: 'photo-analyzer-agent', name: 'Photo Analyzer', emoji: '📷', description: 'Analyze images and photos', level: 'specialist' },
+  { id: 'prioritization-agent', name: 'Prioritization', emoji: '📌', description: 'Prioritize tasks and goals', level: 'specialist' },
+  { id: 'prompt-agent', name: 'Prompt', emoji: '✨', description: 'Craft effective prompts', level: 'specialist' },
+  { id: 'prompt-architect-agent', name: 'Prompt Architect', emoji: '🏛️', description: 'Design prompt systems', level: 'specialist' },
+  { id: 'qa-validator-agent', name: 'QA Validator', emoji: '✅', description: 'Quality assurance testing', level: 'specialist' },
+  { id: 'writing-agent', name: 'Writing', emoji: '✏️', description: 'Long-form writing', level: 'specialist' },
+  { id: 'analyst-template', name: 'Analyst Template', emoji: '📊', description: 'Template for analysis agents', level: 'specialist' },
+  { id: 'code-template', name: 'Code Template', emoji: '💻', description: 'Template for code agents', level: 'specialist' },
+  { id: 'content-template', name: 'Content Template', emoji: '✍️', description: 'Template for content agents', level: 'specialist' },
+  { id: 'outreach-template', name: 'Outreach Template', emoji: '📧', description: 'Template for outreach agents', level: 'specialist' },
+  { id: 'research-template', name: 'Research Template', emoji: '🔍', description: 'Template for research agents', level: 'specialist' },
 ];
 
-interface AgentsPanelProps {
-  onDeploy?: (agentId: string, task: string) => void;
-  activeAgents?: string[];
-  pollInterval?: number;
-}
-
-function formatTokens(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return String(num);
-}
-
-function getStatusColor(status: AgentSession['status']): string {
-  switch (status) {
-    case 'running': return '#f59e0b';
-    case 'complete': return '#22c55e';
-    case 'failed': return '#ef4444';
+function getLevelColor(level: string): string {
+  switch (level) {
+    case 'core': return '#22c55e';
+    case 'advanced': return '#667eea';
+    case 'specialist': return '#f59e0b';
     default: return '#6b7280';
   }
 }
 
-function getStatusIcon(status: AgentSession['status']): string {
-  switch (status) {
-    case 'running': return '⏳';
-    case 'complete': return '✅';
-    case 'failed': return '❌';
-    default: return '💤';
+function getLevelLabel(level: string): string {
+  switch (level) {
+    case 'core': return 'Core';
+    case 'advanced': return 'Advanced';
+    case 'specialist': return 'Specialist';
+    default: return level;
   }
 }
 
-export default function AgentsPanel({ 
-  onDeploy, 
-  activeAgents = [],
-  pollInterval = 1500, // Real-time updates every 1.5 seconds
-}: AgentsPanelProps) {
-  const [sessions, setSessions] = useState<AgentSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedSession, setSelectedSession] = useState<AgentSession | null>(null);
-  const [view, setView] = useState<'sessions' | 'deploy'>('sessions');
+interface AgentsPanelProps {
+  onDeploy?: (agentId: string, task: string) => void;
+}
+
+export default function AgentsPanel({ onDeploy }: AgentsPanelProps) {
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [deployTask, setDeployTask] = useState('');
-  const [selectedDefinition, setSelectedDefinition] = useState<AgentDefinition | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  // Track mounted state for hydration-safe date formatting
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const fetchSessions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/agents');
-      if (!res.ok) throw new Error('Failed to fetch agents');
-      
-      const data = await res.json();
-      setSessions(data.sessions || []);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch sessions:', err);
-      setError('Failed to load agent sessions');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSessions();
-    const interval = setInterval(fetchSessions, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchSessions, pollInterval]);
 
   const handleDeploy = () => {
-    if (selectedDefinition && deployTask.trim() && onDeploy) {
-      onDeploy(selectedDefinition.id, deployTask);
+    if (selectedAgent && deployTask.trim() && onDeploy) {
+      onDeploy(selectedAgent.id, deployTask);
       setDeployTask('');
-      setSelectedDefinition(null);
-      setView('sessions');
+      setSelectedAgent(null);
     }
   };
 
-  const filteredSessions = filterStatus 
-    ? sessions.filter(s => s.status === filterStatus)
-    : sessions;
-
-  const runningCount = sessions.filter(s => s.status === 'running').length;
-  const completedCount = sessions.filter(s => s.status === 'complete').length;
-  const failedCount = sessions.filter(s => s.status === 'failed').length;
-
-  // Session Detail View
-  if (selectedSession) {
-    return (
-      <div style={styles.container}>
-        <button onClick={() => setSelectedSession(null)} style={styles.backButton}>
-          ← Back to Sessions
-        </button>
-
-        {/* Session Header */}
-        <div style={styles.detailHeader}>
-          <div style={styles.sessionIcon}>
-            {getStatusIcon(selectedSession.status)}
-          </div>
-          <div style={styles.sessionHeaderInfo}>
-            <h2 style={styles.sessionTitle}>{selectedSession.label}</h2>
-            <div style={styles.sessionMeta}>
-              <span style={{
-                ...styles.statusBadge,
-                background: `${getStatusColor(selectedSession.status)}20`,
-                color: getStatusColor(selectedSession.status),
-              }}>
-                {selectedSession.status.toUpperCase()}
-              </span>
-              <span style={styles.modelBadge}>{selectedSession.model}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div style={styles.statsGrid}>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{selectedSession.runtime}</span>
-            <span style={styles.statLabel}>Runtime</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{formatTokens(selectedSession.tokens.input)}</span>
-            <span style={styles.statLabel}>Input Tokens</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{formatTokens(selectedSession.tokens.output)}</span>
-            <span style={styles.statLabel}>Output Tokens</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={{ ...styles.statNumber, color: '#667eea' }}>
-              {formatTokens(selectedSession.tokens.total)}
-            </span>
-            <span style={styles.statLabel}>Total Tokens</span>
-          </div>
-        </div>
-
-        {/* Session Details */}
-        <div style={styles.detailSection}>
-          <h3 style={styles.sectionTitle}>📋 Session Info</h3>
-          <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Session ID</span>
-              <code style={styles.infoValue}>{selectedSession.id}</code>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Started</span>
-              <span style={styles.infoValue}>
-                {mounted ? new Date(selectedSession.startedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : '...'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Error Display */}
-        {selectedSession.error && (
-          <div style={styles.errorSection}>
-            <h3 style={styles.sectionTitle}>⚠️ Error</h3>
-            <pre style={styles.errorContent}>{selectedSession.error}</pre>
-          </div>
-        )}
-
-        {/* Output/Transcript */}
-        {selectedSession.output && (
-          <div style={styles.detailSection}>
-            <h3 style={styles.sectionTitle}>📝 Output</h3>
-            <pre style={styles.outputContent}>{selectedSession.output}</pre>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Deploy View
-  if (view === 'deploy') {
-    return (
-      <div style={styles.container}>
-        <button onClick={() => setView('sessions')} style={styles.backButton}>
-          ← Back to Sessions
-        </button>
-
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <span style={styles.headerIcon}>🚀</span>
-            <div>
-              <h2 style={styles.title}>Deploy Agent</h2>
-              <span style={styles.subtitle}>Choose an agent type and task</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={styles.deployGrid}>
-          {AGENT_DEFINITIONS.map(def => (
-            <div
-              key={def.id}
-              onClick={() => setSelectedDefinition(def)}
-              style={{
-                ...styles.agentCard,
-                borderColor: selectedDefinition?.id === def.id ? '#667eea' : 'transparent',
-                background: selectedDefinition?.id === def.id 
-                  ? 'rgba(102,126,234,0.1)' 
-                  : 'rgba(255,255,255,0.03)',
-              }}
-            >
-              <div style={styles.agentCardHeader}>
-                <span style={styles.agentEmoji}>{def.emoji}</span>
-                <div style={styles.agentCardInfo}>
-                  <div style={styles.agentCardName}>{def.name}</div>
-                  <div style={styles.agentCardRole}>{def.role}</div>
-                </div>
-              </div>
-              <p style={styles.agentCardGoal}>{def.goal}</p>
-              <div style={styles.agentSkills}>
-                {def.skills.slice(0, 3).map(s => (
-                  <span key={s} style={styles.skillTag}>{s}</span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {selectedDefinition && (
-          <div style={styles.deploySection}>
-            <h3 style={styles.sectionTitle}>
-              📝 Task for {selectedDefinition.emoji} {selectedDefinition.name}
-            </h3>
-            <textarea
-              placeholder="Describe the task you want this agent to handle..."
-              value={deployTask}
-              onChange={(e) => setDeployTask(e.target.value)}
-              style={styles.deployInput}
-            />
-            <button
-              onClick={handleDeploy}
-              disabled={!deployTask.trim()}
-              style={{
-                ...styles.deployButton,
-                opacity: !deployTask.trim() ? 0.5 : 1,
-              }}
-            >
-              🚀 Deploy Agent
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Sessions List View (default)
   return (
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <span style={styles.headerIcon}>🤖</span>
-          <div>
-            <h2 style={styles.title}>Live Agent Sessions</h2>
-            <span style={styles.subtitle}>
-              {runningCount} running • {completedCount} complete • {failedCount} failed
-              <span style={{ 
-                color: loading ? '#f59e0b' : '#22c55e', 
-                marginLeft: '8px',
-                fontSize: '0.7rem',
-                fontWeight: 600 
+        <span style={styles.headerIcon}>🤖</span>
+        <h2 style={styles.title}>Agents</h2>
+      </div>
+
+      {/* Agents List */}
+      <div style={styles.agentsList}>
+        {ALL_AGENTS.map(agent => (
+          <div
+            key={agent.id}
+            onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
+            style={{
+              ...styles.agentCard,
+              ...(selectedAgent?.id === agent.id ? styles.agentCardSelected : {}),
+            }}
+          >
+            <div style={styles.agentCardHeader}>
+              <span style={styles.agentEmoji}>{agent.emoji}</span>
+              <div style={styles.agentInfo}>
+                <div style={styles.agentName}>{agent.name}</div>
+                <div style={styles.agentDesc}>{agent.description}</div>
+              </div>
+              <span style={{
+                ...styles.levelBadge,
+                background: `${getLevelColor(agent.level)}20`,
+                color: getLevelColor(agent.level),
+                borderColor: `${getLevelColor(agent.level)}40`,
               }}>
-                • {loading ? 'SYNCING...' : '🔴 LIVE'}
+                {getLevelLabel(agent.level)}
               </span>
-            </span>
-          </div>
-        </div>
-        <div style={styles.headerRight}>
-          <div style={{
-            fontSize: '0.7rem',
-            color: 'rgba(255,255,255,0.4)',
-            marginRight: '12px',
-            textAlign: 'right',
-          }}>
-            Updates every 1.5s
-          </div>
-          <button onClick={() => setView('deploy')} style={styles.deployBtn}>
-            + Deploy
-          </button>
-          <button onClick={fetchSessions} style={styles.refreshBtn} disabled={loading}>
-            {loading ? '⏳' : '🔄'}
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div style={styles.filters}>
-        <button
-          onClick={() => setFilterStatus(null)}
-          style={{ ...styles.filterBtn, ...(filterStatus === null ? styles.filterBtnActive : {}) }}
-        >
-          All ({sessions.length})
-        </button>
-        <button
-          onClick={() => setFilterStatus('running')}
-          style={{ 
-            ...styles.filterBtn, 
-            ...(filterStatus === 'running' ? styles.filterBtnActive : {}),
-            borderColor: '#f59e0b',
-          }}
-        >
-          ⏳ Running ({runningCount})
-        </button>
-        <button
-          onClick={() => setFilterStatus('complete')}
-          style={{ 
-            ...styles.filterBtn, 
-            ...(filterStatus === 'complete' ? styles.filterBtnActive : {}),
-            borderColor: '#22c55e',
-          }}
-        >
-          ✅ Complete ({completedCount})
-        </button>
-        <button
-          onClick={() => setFilterStatus('failed')}
-          style={{ 
-            ...styles.filterBtn, 
-            ...(filterStatus === 'failed' ? styles.filterBtnActive : {}),
-            borderColor: '#ef4444',
-          }}
-        >
-          ❌ Failed ({failedCount})
-        </button>
-      </div>
-
-      {/* Sessions List */}
-      <div style={styles.sessionsList}>
-        {loading && sessions.length === 0 ? (
-          <div style={styles.loadingState}>
-            <span style={styles.loadingIcon}>⏳</span>
-            <span>Loading sessions...</span>
-          </div>
-        ) : error && sessions.length === 0 ? (
-          <div style={styles.errorState}>
-            <span style={styles.errorIcon}>⚠️</span>
-            <span>{error}</span>
-            <button onClick={fetchSessions} style={styles.retryButton}>
-              Retry
-            </button>
-          </div>
-        ) : filteredSessions.length === 0 ? (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>🤖</span>
-            <h3>No Sessions</h3>
-            <p>
-              {filterStatus 
-                ? `No ${filterStatus} sessions`
-                : 'Deploy an agent to start a session'}
-            </p>
-            {!filterStatus && (
-              <button onClick={() => setView('deploy')} style={styles.emptyButton}>
-                Deploy an Agent
-              </button>
-            )}
-          </div>
-        ) : (
-          filteredSessions.map(session => (
-            <div
-              key={session.id}
-              onClick={() => setSelectedSession(session)}
-              style={{
-                ...styles.sessionCard,
-                borderLeftColor: getStatusColor(session.status),
-              }}
-            >
-              <div style={styles.sessionCardHeader}>
-                <div style={styles.sessionCardInfo}>
-                  <div style={styles.sessionCardLabel}>
-                    <span style={{
-                      ...styles.statusDot,
-                      background: getStatusColor(session.status),
-                      animation: session.status === 'running' ? 'pulse 1.5s infinite' : 'none',
-                    }} />
-                    {session.label}
-                  </div>
-                  <div style={styles.sessionCardModel}>{session.model}</div>
-                </div>
-                <div style={styles.sessionCardStatus}>
-                  <span style={{ color: getStatusColor(session.status) }}>
-                    {getStatusIcon(session.status)} {session.status}
-                  </span>
-                </div>
-              </div>
-              <div style={styles.sessionCardStats}>
-                <span>⏱️ {session.runtime}</span>
-                <span>📊 {formatTokens(session.tokens.total)} tokens</span>
-                <span>🕐 {mounted ? new Date(session.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '...'}</span>
-              </div>
-              <div style={styles.viewDetails}>Click to view details →</div>
             </div>
-          ))
-        )}
+          </div>
+        ))}
       </div>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
+      {/* Deploy Section */}
+      {selectedAgent && (
+        <div style={styles.deploySection}>
+          <textarea
+            value={deployTask}
+            onChange={(e) => setDeployTask(e.target.value)}
+            placeholder={`Task for ${selectedAgent.name}...`}
+            style={styles.deployInput}
+            rows={2}
+          />
+          <button
+            onClick={handleDeploy}
+            disabled={!deployTask.trim()}
+            style={{
+              ...styles.deployBtn,
+              opacity: deployTask.trim() ? 1 : 0.5,
+            }}
+          >
+            🚀 Deploy
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    background: 'rgba(20, 20, 35, 0.6)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    borderRadius: '20px',
-    border: '1px solid rgba(255,255,255,0.06)',
+    background: 'rgba(13, 13, 21, 0.95)',
+    borderRadius: '16px',
+    border: '1px solid rgba(255,255,255,0.08)',
     overflow: 'hidden',
-    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
-    position: 'relative',
   },
-
-  // Header
   header: {
-    padding: '24px 28px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '16px',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)',
-  },
-  headerLeft: {
+    padding: '16px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
+    gap: '10px',
   },
   headerIcon: {
-    fontSize: '32px',
-    filter: 'drop-shadow(0 0 10px rgba(102,126,234,0.4))',
+    fontSize: '20px',
   },
   title: {
     color: '#fff',
-    fontSize: '1.2rem',
-    fontWeight: 700,
-    margin: 0,
-    letterSpacing: '-0.02em',
-  },
-  subtitle: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: '0.85rem',
-    fontWeight: 500,
-  },
-  headerRight: {
-    display: 'flex',
-    gap: '10px',
-  },
-  deployBtn: {
-    padding: '12px 24px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '12px',
-    color: '#fff',
-    fontWeight: 600,
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
-    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-  },
-  refreshBtn: {
-    width: '44px',
-    height: '44px',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '12px',
-    color: '#fff',
-    fontSize: '18px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-
-  // Filters
-  filters: {
-    padding: '16px 24px',
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap',
-    borderBottom: '1px solid rgba(255,255,255,0.04)',
-    background: 'rgba(0,0,0,0.1)',
-  },
-  filterBtn: {
-    padding: '8px 16px',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '10px',
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  filterBtnActive: {
-    background: 'rgba(102,126,234,0.15)',
-    color: '#fff',
-    borderColor: 'rgba(102,126,234,0.4)',
-    boxShadow: '0 0 15px rgba(102,126,234,0.2)',
-  },
-
-  // Sessions List
-  sessionsList: {
-    padding: '18px',
-    maxHeight: '550px',
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  sessionCard: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '14px',
-    padding: '18px',
-    cursor: 'pointer',
-    borderLeft: '3px solid',
-    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-    border: '1px solid rgba(255,255,255,0.04)',
-    borderLeftWidth: '3px',
-  },
-  sessionCardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '12px',
-  },
-  sessionCardInfo: {},
-  sessionCardLabel: {
-    color: '#fff',
     fontSize: '1rem',
     fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '6px',
-    letterSpacing: '-0.01em',
-  },
-  statusDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-    boxShadow: '0 0 8px currentColor',
-  },
-  sessionCardModel: {
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: '0.75rem',
-    fontFamily: '"JetBrains Mono", monospace',
-  },
-  sessionCardStatus: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    letterSpacing: '0.02em',
-  },
-  sessionCardStats: {
-    display: 'flex',
-    gap: '18px',
-    fontSize: '0.8rem',
-    color: 'rgba(255,255,255,0.45)',
-    marginBottom: '10px',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  viewDetails: {
-    color: '#667eea',
-    fontSize: '0.8rem',
-    textAlign: 'right',
-    fontWeight: 500,
-  },
-
-  // States
-  loadingState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    color: 'rgba(255,255,255,0.5)',
-    gap: '12px',
-  },
-  loadingIcon: {
-    fontSize: '32px',
-    animation: 'pulse 1s infinite',
-  },
-  errorState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    color: '#ef4444',
-    gap: '12px',
-  },
-  errorIcon: {
-    fontSize: '32px',
-  },
-  retryButton: {
-    padding: '8px 16px',
-    background: 'rgba(239,68,68,0.2)',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#ef4444',
-    fontWeight: 500,
-    cursor: 'pointer',
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '60px 40px',
-    color: 'rgba(255,255,255,0.5)',
-  },
-  emptyIcon: {
-    fontSize: '48px',
-    display: 'block',
-    marginBottom: '16px',
-  },
-  emptyButton: {
-    marginTop: '20px',
-    padding: '12px 24px',
-    background: '#667eea',
-    border: 'none',
-    borderRadius: '10px',
-    color: '#fff',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-
-  // Back Button
-  backButton: {
-    margin: '16px 16px 0',
-    padding: '8px 16px',
-    background: 'rgba(255,255,255,0.05)',
-    border: 'none',
-    borderRadius: '8px',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '0.85rem',
-    cursor: 'pointer',
-  },
-
-  // Detail View
-  detailHeader: {
-    padding: '24px',
-    display: 'flex',
-    gap: '20px',
-    alignItems: 'flex-start',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-  },
-  sessionIcon: {
-    fontSize: '48px',
-  },
-  sessionHeaderInfo: {
-    flex: 1,
-  },
-  sessionTitle: {
-    color: '#fff',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    margin: '0 0 10px 0',
-  },
-  sessionMeta: {
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap',
-  },
-  statusBadge: {
-    padding: '6px 14px',
-    borderRadius: '20px',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-  },
-  modelBadge: {
-    padding: '6px 14px',
-    borderRadius: '20px',
-    background: 'rgba(255,255,255,0.05)',
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '0.75rem',
-    fontFamily: 'monospace',
-  },
-
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '12px',
-    padding: '20px 24px',
-  },
-  statCard: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '12px',
-    padding: '16px',
-    textAlign: 'center',
-  },
-  statNumber: {
-    display: 'block',
-    color: '#fff',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    marginBottom: '4px',
-  },
-  statLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.75rem',
-  },
-
-  detailSection: {
-    padding: '20px 24px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: '0.9rem',
-    fontWeight: 600,
-    margin: '0 0 12px 0',
-  },
-  infoGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  infoItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  infoLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.75rem',
-  },
-  infoValue: {
-    color: '#fff',
-    fontSize: '0.9rem',
-    fontFamily: 'monospace',
-    background: 'rgba(255,255,255,0.03)',
-    padding: '8px 12px',
-    borderRadius: '6px',
-    wordBreak: 'break-all',
-  },
-
-  errorSection: {
-    padding: '20px 24px',
-    background: 'rgba(239,68,68,0.05)',
-  },
-  errorContent: {
-    background: 'rgba(0,0,0,0.3)',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    color: '#ef4444',
-    fontSize: '0.85rem',
-    fontFamily: 'monospace',
     margin: 0,
-    whiteSpace: 'pre-wrap',
-    overflow: 'auto',
-    maxHeight: '200px',
   },
-  outputContent: {
-    background: 'rgba(0,0,0,0.3)',
-    padding: '14px 18px',
-    borderRadius: '10px',
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: '0.85rem',
-    fontFamily: 'monospace',
-    margin: 0,
-    whiteSpace: 'pre-wrap',
-    overflow: 'auto',
-    maxHeight: '300px',
-  },
-
-  // Deploy View
-  deployGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '16px',
-    padding: '20px',
+  agentsList: {
+    maxHeight: '500px',
+    overflowY: 'auto',
   },
   agentCard: {
-    padding: '20px',
-    borderRadius: '16px',
-    border: '1px solid rgba(255,255,255,0.06)',
+    padding: '14px 20px',
     cursor: 'pointer',
-    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-    background: 'rgba(255,255,255,0.02)',
-    position: 'relative',
-    overflow: 'hidden',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    transition: 'background 0.15s',
+  },
+  agentCardSelected: {
+    background: 'rgba(102, 126, 234, 0.15)',
   },
   agentCardHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
-    marginBottom: '14px',
+    gap: '12px',
   },
   agentEmoji: {
-    fontSize: '36px',
-    filter: 'drop-shadow(0 0 8px rgba(102,126,234,0.3))',
+    fontSize: '24px',
   },
-  agentCardInfo: {},
-  agentCardName: {
+  agentInfo: {
+    flex: 1,
+  },
+  agentName: {
     color: '#fff',
-    fontSize: '1.05rem',
-    fontWeight: 600,
-    letterSpacing: '-0.01em',
-  },
-  agentCardRole: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-  },
-  agentCardGoal: {
-    color: 'rgba(255,255,255,0.65)',
     fontSize: '0.9rem',
-    margin: '0 0 14px 0',
-    lineHeight: 1.5,
-  },
-  agentSkills: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  skillTag: {
-    background: 'rgba(102,126,234,0.12)',
-    color: '#8b9cf2',
-    padding: '5px 10px',
-    borderRadius: '8px',
-    fontSize: '0.7rem',
     fontWeight: 600,
-    border: '1px solid rgba(102,126,234,0.15)',
-    letterSpacing: '0.02em',
   },
-
+  agentDesc: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '0.75rem',
+    marginTop: '2px',
+  },
+  levelBadge: {
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '6px',
+    border: '1px solid',
+    textTransform: 'uppercase',
+    letterSpacing: '0.03em',
+  },
   deploySection: {
-    padding: '28px',
-    background: 'linear-gradient(180deg, rgba(102,126,234,0.08) 0%, rgba(102,126,234,0.03) 100%)',
-    borderTop: '1px solid rgba(102,126,234,0.15)',
+    padding: '16px 20px',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    display: 'flex',
+    gap: '10px',
   },
   deployInput: {
-    width: '100%',
-    padding: '16px 18px',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '14px',
+    flex: 1,
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(0,0,0,0.3)',
     color: '#fff',
-    fontSize: '0.95rem',
-    resize: 'vertical',
-    minHeight: '100px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    marginBottom: '16px',
-    transition: 'all 0.2s ease',
+    fontSize: '0.85rem',
+    resize: 'none',
     fontFamily: 'inherit',
   },
-  deployButton: {
-    padding: '16px 32px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  deployBtn: {
+    padding: '10px 20px',
+    borderRadius: '8px',
     border: 'none',
-    borderRadius: '14px',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     color: '#fff',
-    fontSize: '1rem',
+    fontSize: '0.85rem',
     fontWeight: 600,
     cursor: 'pointer',
-    float: 'right',
-    boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
-    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+    whiteSpace: 'nowrap',
   },
 };

@@ -22,7 +22,7 @@ interface CronJob {
 export async function GET() {
   try {
     // Use /tools/invoke to call the cron list action
-    const data = await invokeGatewayTool('cron', { action: 'list', includeDisabled: true });
+    const data = await invokeGatewayTool('cron', { action: 'list', includeDisabled: true }) as any;
     
     // Transform the response to match expected format
     const jobs = data?.jobs || [];
