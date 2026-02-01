@@ -92,15 +92,26 @@ export async function POST(req: NextRequest) {
     let reply = 'No response';
     
     if (data.ok && data.result) {
-      // sessions_send returns result.content[].text or result.reply
+      // sessions_send returns result.details.reply (preferred) or result.content[].text
       const result = data.result;
-      if (result.content && Array.isArray(result.content)) {
+
+      // Prefer result.details.reply - it's the parsed reply text
+      if (result.details?.reply) {
+        reply = result.details.reply;
+      } else if (result.content && Array.isArray(result.content)) {
         const textParts = result.content
           .filter((c: { type?: string }) => c.type === 'text')
           .map((c: { text?: string }) => c.text)
           .filter(Boolean);
         if (textParts.length > 0) {
-          reply = textParts.join('\n');
+          // Content text might be JSON - try to parse and extract reply
+          const text = textParts.join('\n');
+          try {
+            const parsed = JSON.parse(text);
+            reply = parsed.reply || text;
+          } catch {
+            reply = text;
+          }
         }
       } else if (result.reply) {
         reply = result.reply;
