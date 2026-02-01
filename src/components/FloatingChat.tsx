@@ -712,23 +712,25 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Just the neon logo, no dark background
+  // Closed - Robot avatar clipped to circle (no dark square background)
   if (mode === 'closed') {
     return (
       <>
         <img
           onClick={() => { setMode('open'); setHasInteracted(true); }}
-          src="/opie-logo-neon.png"
+          src="/opie-avatar.png"
           alt="Chat with Opie"
           style={{
             position: 'fixed',
             bottom: 16,
             right: 16,
-            width: 180,
-            height: 180,
-            objectFit: 'contain',
+            width: 140,
+            height: 140,
+            objectFit: 'cover',
             cursor: 'pointer',
             zIndex: 1000,
+            borderRadius: '50%',
+            clipPath: 'circle(50%)',
           }}
         />
         {unreadCount > 0 && (
