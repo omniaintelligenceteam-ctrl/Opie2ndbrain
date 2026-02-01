@@ -55,26 +55,21 @@ export async function POST(req: NextRequest) {
       input = `[Style: ${personalityConfig.systemModifiers}]\n\n${input}`;
     }
 
-    const res = await fetch(`${GATEWAY_URL}/v1/responses`, {
+    // Use tools/invoke with sessions_send - more reliable than /v1/responses
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-        'x-moltbot-agent-id': 'main',
-        'x-moltbot-session-key': 'agent:main:main',  // Use main session for full context
-        // Pass personality parameters as headers for gateway support
-        ...(personalityConfig && {
-          'x-moltbot-temperature': String(personalityConfig.temperature),
-        }),
       },
       body: JSON.stringify({
-        model: 'moltbot:main',
-        input,
-        stream: false,
-        // Note: max_tokens not supported by Moltbot gateway
-        ...(personalityConfig && {
-          temperature: personalityConfig.temperature,
-        }),
+        tool: 'sessions_send',
+        args: {
+          sessionKey: 'agent:main:main',
+          message: input,
+          timeoutSeconds: 55, // Just under Vercel's 60s limit
+        },
       }),
     });
 
@@ -90,32 +85,33 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     
-    // Debug: log the full response structure
-    console.log('[Chat API] Gateway response structure:', JSON.stringify(data, null, 2).slice(0, 2000));
+    // Debug: log the response structure
+    console.log('[Chat API] Gateway response:', JSON.stringify(data, null, 2).slice(0, 2000));
     
-    // Handle different response formats
+    // Handle sessions_send response format
     let reply = 'No response';
     
-    if (data.output) {
-      const assistantMessage = data.output
-        .find((item: { type?: string; role?: string }) => item.type === 'message' && item.role === 'assistant');
-      console.log('[Chat API] Found assistant message:', JSON.stringify(assistantMessage, null, 2).slice(0, 1000));
-      if (assistantMessage?.content) {
-        // Join all text content items (might be multiple)
-        const textParts = assistantMessage.content
+    if (data.ok && data.result) {
+      // sessions_send returns result.content[].text or result.reply
+      const result = data.result;
+      if (result.content && Array.isArray(result.content)) {
+        const textParts = result.content
           .filter((c: { type?: string }) => c.type === 'text')
           .map((c: { text?: string }) => c.text)
           .filter(Boolean);
         if (textParts.length > 0) {
           reply = textParts.join('\n');
         }
+      } else if (result.reply) {
+        reply = result.reply;
+      } else if (result.text) {
+        reply = result.text;
+      } else if (typeof result === 'string') {
+        reply = result;
       }
-    } else if (data.text) {
-      reply = data.text;
-    } else if (data.reply) {
-      reply = data.reply;
-    } else if (data.message) {
-      reply = data.message;
+    } else if (data.error) {
+      console.error('[Chat API] Gateway error:', data.error);
+      reply = `Error: ${data.error.message || 'Unknown error'}`;
     }
     
     console.log('[Chat API] Final reply:', reply.slice(0, 500));
