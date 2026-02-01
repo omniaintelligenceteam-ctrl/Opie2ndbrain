@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 'react';
 import AgentsPanel from './AgentsPanel';
 import SkillsPanel from './SkillsPanel';
 import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
@@ -790,148 +790,6 @@ export default function OpieKanban(): React.ReactElement {
 
   const runningTasksCount = tasks.filter(t => t.status === 'running').length;
 
-  const getCount = (itemId: ViewId): number | null => {
-    if (itemId === 'agents') return activeAgents.length;
-    if (itemId === 'tasks') return runningTasksCount;
-    if (itemId === 'crons') return cronCount;
-    return null;
-  };
-
-  // Sidebar Component
-  const Sidebar = () => (
-    <aside style={{
-      ...styles.sidebar,
-      width: sidebarExpanded ? '240px' : '72px',
-      ...(isMobile ? {
-        position: 'fixed',
-        left: mobileMenuOpen ? 0 : '-100%',
-        width: '280px',
-        zIndex: 1000,
-      } : {}),
-    }}>
-      {/* Opie Status Widget - Top of Sidebar */}
-      <div style={{ 
-        padding: sidebarExpanded ? '16px' : '12px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-      }}>
-        {sidebarExpanded ? (
-          <OpieStatusWidget 
-            size="medium" 
-            showDetails={true}
-            onClick={() => handleViewChange('settings')}
-          />
-        ) : (
-          <OpieStatusWidget 
-            size="small" 
-            showDetails={false}
-            onClick={() => handleViewChange('settings')}
-          />
-        )}
-      </div>
-      
-      {/* Sidebar Widgets - Calendar, Email, System Health */}
-      {!isMobile && <SidebarWidgets isExpanded={sidebarExpanded} />}
-      
-      {/* Collapse/Expand Toggle */}
-      {!isMobile && (
-        <div style={{
-          padding: '8px 14px',
-          display: 'flex',
-          justifyContent: sidebarExpanded ? 'flex-end' : 'center',
-        }}>
-          <button onClick={toggleSidebar} style={styles.collapseBtn}>
-            {sidebarExpanded ? '◀' : '▶'}
-          </button>
-        </div>
-      )}
-
-      {/* Navigation */}
-      <nav style={styles.nav}>
-        {NAV_ITEMS.map(item => {
-          const count = getCount(item.id);
-          const isActive = activeView === item.id;
-          
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleViewChange(item.id)}
-              style={{
-                ...styles.navItem,
-                ...(isActive ? styles.navItemActive : {}),
-                justifyContent: sidebarExpanded ? 'flex-start' : 'center',
-              }}
-              title={!sidebarExpanded ? item.label : undefined}
-            >
-              <span style={styles.navIcon}>{item.icon}</span>
-              {sidebarExpanded && (
-                <>
-                  <span style={styles.navLabel}>{item.label}</span>
-                  {count !== null && count > 0 && (
-                    <span style={{
-                      ...styles.navBadge,
-                      background: item.id === 'tasks' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
-                      color: item.id === 'tasks' ? '#f59e0b' : '#22c55e',
-                    }}>
-                      {count}
-                    </span>
-                  )}
-                </>
-              )}
-              {!sidebarExpanded && count !== null && count > 0 && (
-                <span style={styles.navBadgeCollapsed}>{count}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Quick Stats */}
-      {sidebarExpanded && (
-        <div style={styles.quickStats}>
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Active Agents</span>
-            <span style={{ ...styles.statValue, color: '#22c55e' }}>{activeAgents.length}</span>
-          </div>
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Total Agents</span>
-            <span style={{ ...styles.statValue, color: '#06b6d4' }}>42</span>
-          </div>
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Running Tasks</span>
-            <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
-          </div>
-          <div style={styles.statRow}>
-            <span style={styles.statLabel}>Cron Jobs</span>
-            <span style={{ ...styles.statValue, color: '#8b5cf6' }}>{cronCount}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Notification Bell */}
-      {sidebarExpanded && (
-        <div style={{ padding: '12px 16px' }}>
-          <NotificationBell
-            notifications={notifications}
-            unreadCount={unreadCount}
-            onMarkAsRead={markAsRead}
-            onMarkAllAsRead={markAllAsRead}
-            onClear={clearNotification}
-            onClearAll={clearAll}
-          />
-        </div>
-      )}
-
-      {/* Footer */}
-      <div style={styles.sidebarFooter}>
-        {sidebarExpanded ? (
-          <span style={styles.footerText}>Omnia Intelligence</span>
-        ) : (
-          <span style={styles.footerIcon}>🌟</span>
-        )}
-      </div>
-    </aside>
-  );
-
   // Get live status from the hook (poll every 3 seconds for real-time updates)
   const { status: liveStatus, loading: statusLoading } = useSystemStatus(3000);
   
@@ -983,6 +841,160 @@ export default function OpieKanban(): React.ReactElement {
     clearAll 
   } = useNotifications();
 
+  // Memoized Sidebar to prevent re-renders during voice activity
+  // The key insight is that the Sidebar itself doesn't need voice state
+  const sidebarElement = useMemo(() => {
+    const getCount = (itemId: ViewId): number | null => {
+      if (itemId === 'agents') return activeAgents.length;
+      if (itemId === 'tasks') return runningTasksCount;
+      if (itemId === 'crons') return cronCount;
+      return null;
+    };
+
+    return (
+      <aside style={{
+        ...styles.sidebar,
+        width: sidebarExpanded ? '240px' : '72px',
+        ...(isMobile ? {
+          position: 'fixed',
+          left: mobileMenuOpen ? 0 : '-100%',
+          width: '280px',
+          zIndex: 1000,
+        } : {}),
+      }}>
+        {/* Opie Status Widget - Top of Sidebar */}
+        <div style={{ 
+          padding: sidebarExpanded ? '16px' : '12px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <OpieStatusWidget 
+            size={sidebarExpanded ? "medium" : "small"}
+            showDetails={sidebarExpanded}
+            onClick={() => handleViewChange('settings')}
+          />
+        </div>
+        
+        {/* Sidebar Widgets - Calendar, Email, System Health */}
+        {!isMobile && <SidebarWidgets isExpanded={sidebarExpanded} />}
+        
+        {/* Collapse/Expand Toggle */}
+        {!isMobile && (
+          <div style={{
+            padding: '8px 14px',
+            display: 'flex',
+            justifyContent: sidebarExpanded ? 'flex-end' : 'center',
+          }}>
+            <button onClick={toggleSidebar} style={styles.collapseBtn}>
+              {sidebarExpanded ? '◀' : '▶'}
+            </button>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav style={styles.nav}>
+          {NAV_ITEMS.map(item => {
+            const count = getCount(item.id);
+            const isActive = activeView === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleViewChange(item.id)}
+                style={{
+                  ...styles.navItem,
+                  ...(isActive ? styles.navItemActive : {}),
+                  justifyContent: sidebarExpanded ? 'flex-start' : 'center',
+                }}
+                title={!sidebarExpanded ? item.label : undefined}
+              >
+                <span style={styles.navIcon}>{item.icon}</span>
+                {sidebarExpanded && (
+                  <>
+                    <span style={styles.navLabel}>{item.label}</span>
+                    {count !== null && count > 0 && (
+                      <span style={{
+                        ...styles.navBadge,
+                        background: item.id === 'tasks' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
+                        color: item.id === 'tasks' ? '#f59e0b' : '#22c55e',
+                      }}>
+                        {count}
+                      </span>
+                    )}
+                  </>
+                )}
+                {!sidebarExpanded && count !== null && count > 0 && (
+                  <span style={styles.navBadgeCollapsed}>{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Quick Stats */}
+        {sidebarExpanded && (
+          <div style={styles.quickStats}>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Active Agents</span>
+              <span style={{ ...styles.statValue, color: '#22c55e' }}>{activeAgents.length}</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Total Agents</span>
+              <span style={{ ...styles.statValue, color: '#06b6d4' }}>42</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Running Tasks</span>
+              <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Cron Jobs</span>
+              <span style={{ ...styles.statValue, color: '#8b5cf6' }}>{cronCount}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Notification Bell */}
+        {sidebarExpanded && (
+          <div style={{ padding: '12px 16px' }}>
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+              onClear={clearNotification}
+              onClearAll={clearAll}
+            />
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={styles.sidebarFooter}>
+          {sidebarExpanded ? (
+            <span style={styles.footerText}>Omnia Intelligence</span>
+          ) : (
+            <span style={styles.footerIcon}>🌟</span>
+          )}
+        </div>
+      </aside>
+    );
+  }, [
+    // Only re-create sidebar when these change (NOT voice state!)
+    sidebarExpanded,
+    isMobile,
+    mobileMenuOpen,
+    activeView,
+    activeAgents.length,
+    runningTasksCount,
+    cronCount,
+    notifications,
+    unreadCount,
+    handleViewChange,
+    toggleSidebar,
+    markAsRead,
+    markAllAsRead,
+    clearNotification,
+    clearAll,
+  ]);
+
   return (
     <NotificationProvider>
       <div style={styles.container}>
@@ -1008,7 +1020,7 @@ export default function OpieKanban(): React.ReactElement {
 
         {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
         {isMobile && <MobileOverlay />}
-        <Sidebar />
+        {sidebarElement}
       
       {/* Main Content */}
       <main style={{

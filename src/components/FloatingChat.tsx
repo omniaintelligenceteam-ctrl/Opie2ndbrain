@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 
 // ============================================================================
 // Types
@@ -116,8 +116,8 @@ function renderMessageText(text: string): React.ReactNode {
 // Sub-Components
 // ============================================================================
 
-// Avatar Component with Omnia-style ring
-function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boolean }) {
+// Avatar Component with Omnia-style ring - Memoized to prevent re-renders during voice activity
+const Avatar = memo(function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boolean }) {
   const ringSize = size + 12;
 
   if (showRing) {
@@ -146,10 +146,12 @@ function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boo
           borderRadius: '50%',
           border: '2px solid rgba(30, 58, 95, 0.8)',
         }} />
-        {/* Avatar image */}
+        {/* Avatar image - GPU accelerated to prevent flicker */}
         <img
           src="/opie-avatar.png"
           alt="Opie"
+          loading="eager"
+          decoding="sync"
           style={{
             width: size,
             height: size,
@@ -157,6 +159,8 @@ function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boo
             objectFit: 'cover',
             position: 'relative',
             zIndex: 1,
+            transform: 'translate3d(0,0,0)',
+            backfaceVisibility: 'hidden',
           }}
         />
       </div>
@@ -167,6 +171,8 @@ function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boo
     <img
       src="/opie-avatar.png"
       alt="Opie"
+      loading="eager"
+      decoding="sync"
       style={{
         width: size,
         height: size,
@@ -174,13 +180,15 @@ function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boo
         objectFit: 'cover',
         border: '2px solid rgba(102, 126, 234, 0.3)',
         flexShrink: 0,
+        transform: 'translate3d(0,0,0)',
+        backfaceVisibility: 'hidden',
       }}
     />
   );
-}
+});
 
-// Status Indicator
-function StatusIndicator({ state, size = 8 }: { state: VoiceState; size?: number }) {
+// Status Indicator - Memoized
+const StatusIndicator = memo(function StatusIndicator({ state, size = 8 }: { state: VoiceState; size?: number }) {
   const colors: Record<VoiceState, string> = {
     idle: '#22c55e',
     listening: '#22c55e',
@@ -203,10 +211,10 @@ function StatusIndicator({ state, size = 8 }: { state: VoiceState; size?: number
       }}
     />
   );
-}
+});
 
-// Voice Waveform Animation
-function VoiceWaveform({ active, color = '#22c55e' }: { active: boolean; color?: string }) {
+// Voice Waveform Animation - Memoized
+const VoiceWaveform = memo(function VoiceWaveform({ active, color = '#22c55e' }: { active: boolean; color?: string }) {
   return (
     <div style={styles.waveformContainer}>
       {[...Array(5)].map((_, i) => (
@@ -223,10 +231,10 @@ function VoiceWaveform({ active, color = '#22c55e' }: { active: boolean; color?:
       ))}
     </div>
   );
-}
+});
 
-// Typing Indicator
-function TypingIndicator() {
+// Typing Indicator - Memoized
+const TypingIndicator = memo(function TypingIndicator() {
   return (
     <div style={styles.typingContainer}>
       <Avatar size={28} />
@@ -239,7 +247,7 @@ function TypingIndicator() {
       </div>
     </div>
   );
-}
+});
 
 // Message Status Icon
 function MessageStatus({ status }: { status?: ChatMessage['status'] }) {
