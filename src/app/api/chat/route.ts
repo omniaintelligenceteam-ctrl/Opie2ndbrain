@@ -90,14 +90,25 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     
+    // Debug: log the full response structure
+    console.log('[Chat API] Gateway response structure:', JSON.stringify(data, null, 2).slice(0, 2000));
+    
     // Handle different response formats
     let reply = 'No response';
     
     if (data.output) {
       const assistantMessage = data.output
         .find((item: { type?: string; role?: string }) => item.type === 'message' && item.role === 'assistant');
-      if (assistantMessage?.content?.[0]?.text) {
-        reply = assistantMessage.content[0].text;
+      console.log('[Chat API] Found assistant message:', JSON.stringify(assistantMessage, null, 2).slice(0, 1000));
+      if (assistantMessage?.content) {
+        // Join all text content items (might be multiple)
+        const textParts = assistantMessage.content
+          .filter((c: { type?: string }) => c.type === 'text')
+          .map((c: { text?: string }) => c.text)
+          .filter(Boolean);
+        if (textParts.length > 0) {
+          reply = textParts.join('\n');
+        }
       }
     } else if (data.text) {
       reply = data.text;
@@ -106,6 +117,8 @@ export async function POST(req: NextRequest) {
     } else if (data.message) {
       reply = data.message;
     }
+    
+    console.log('[Chat API] Final reply:', reply.slice(0, 500));
     
     return NextResponse.json({ reply });
 
