@@ -400,15 +400,6 @@ export default function OrchestrationStatus({
               fontSize: demoMode ? '32px' : '28px',
               animation: demoMode ? 'float 3s ease-in-out infinite' : 'none',
             }}>⚡</span>
-            <span style={{
-              ...styles.centralLabel,
-              background: demoMode 
-                ? 'linear-gradient(135deg, #fff 0%, #667eea 50%, #764ba2 100%)'
-                : 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>Opie</span>
           </div>
           
           {/* Status indicators */}

@@ -677,7 +677,7 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Big robot face button (static)
+  // Closed - Circular robot face button (no box)
   if (mode === 'closed') {
     return (
       <>
@@ -687,14 +687,17 @@ export default function FloatingChat({
             position: 'fixed',
             bottom: 16,
             right: 16,
-            width: 180,
-            height: 180,
-            background: 'none',
+            width: 80,
+            height: 80,
+            background: 'transparent',
             border: 'none',
+            outline: 'none',
             cursor: 'pointer',
             zIndex: 1000,
             padding: 0,
             margin: 0,
+            borderRadius: '50%',
+            overflow: 'visible',
           }}
           aria-label="Open chat"
         >
@@ -704,15 +707,16 @@ export default function FloatingChat({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
+              objectFit: 'cover',
               display: 'block',
+              borderRadius: '50%',
             }}
           />
           {unreadCount > 0 && (
             <span style={{
               ...styles.unreadBadge,
-              top: 0,
-              right: 0,
+              top: -4,
+              right: -4,
             }}>{unreadCount}</span>
           )}
         </button>

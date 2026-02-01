@@ -1,12 +1,15 @@
 'use client';
 
+import { memo } from 'react';
+
 interface OpieStatusWidgetProps {
   size?: 'small' | 'medium' | 'large';
   showDetails?: boolean;
   onClick?: () => void;
 }
 
-export default function OpieStatusWidget({ 
+// Memoized to prevent re-renders from parent state changes
+const OpieStatusWidget = memo(function OpieStatusWidget({ 
   size = 'medium',
   onClick 
 }: OpieStatusWidgetProps) {
@@ -17,26 +20,33 @@ export default function OpieStatusWidget({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: size === 'small' ? '10px' : '14px',
-        padding: size === 'small' ? '8px' : '12px',
-        borderRadius: '12px',
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.2s ease',
-        background: 'transparent',
+        padding: '12px',
+        // Prevent layout shift during re-renders
+        minWidth: logoSize + 24,
+        minHeight: logoSize + 24,
       }}
       onClick={onClick}
     >
-      {/* Opie Neon Logo */}
       <img 
         src="/opie-logo-neon.png" 
         alt="Opie"
+        width={logoSize}
+        height={logoSize}
+        loading="eager"
+        decoding="async"
         style={{
           width: logoSize,
           height: logoSize,
           objectFit: 'contain',
-          flexShrink: 0,
+          // Prevent flicker with GPU acceleration
+          transform: 'translateZ(0)',
+          willChange: 'auto',
+          // Ensure image doesn't flash
+          backfaceVisibility: 'hidden',
         }}
       />
     </div>
   );
-}
+});
+
+export default OpieStatusWidget;
