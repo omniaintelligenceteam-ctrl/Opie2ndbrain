@@ -37,84 +37,65 @@ export async function GET() {
   }
 
   try {
-    // Try to fetch real context data from gateway
-    const res = await fetch(`${GATEWAY_URL}/api/context`, {
+    // Get real session status via /tools/invoke
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-        'x-moltbot-agent-id': 'main',
       },
+      body: JSON.stringify({
+        tool: 'session_status',
+        args: {},
+      }),
     });
 
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
+      
+      if (data.ok && data.result) {
+        // Parse the result - it may be in content[0].text as stringified JSON
+        let sessionData = data.result;
+        if (data.result.content?.[0]?.text) {
+          try {
+            // Extract numbers from the status text
+            const text = data.result.content[0].text;
+            const contextMatch = text.match(/Context:\s*([\d.]+)k\/([\d.]+)k\s*\((\d+)%\)/);
+            const tokensMatch = text.match(/Tokens:\s*([\d.]+)\s*in\s*\/\s*([\d.]+)\s*out/);
+            
+            if (contextMatch) {
+              const used = parseFloat(contextMatch[1]) * 1000;
+              const total = parseFloat(contextMatch[2]) * 1000;
+              const percentage = parseFloat(contextMatch[3]);
+              
+              const segments: ContextSegment[] = [
+                {
+                  id: 'conversation',
+                  type: 'conversation',
+                  label: 'Active Conversation',
+                  tokenCount: Math.round(used),
+                  percentage: 100,
+                  canForget: false,
+                },
+              ];
 
-      // Transform gateway response to our format
-      const segments: ContextSegment[] = [];
+              const response: ContextWindowState = {
+                used: Math.round(used),
+                total: Math.round(total),
+                percentage,
+                segments,
+                lastUpdated: new Date().toISOString(),
+                warningLevel: getWarningLevel(percentage),
+              };
 
-      if (data.system_prompt_tokens) {
-        segments.push({
-          id: 'system-prompt',
-          type: 'system_prompt',
-          label: 'System Prompt',
-          tokenCount: data.system_prompt_tokens,
-          percentage: 0,
-          canForget: false,
-        });
+              return NextResponse.json(response);
+            }
+          } catch (parseErr) {
+            console.error('Failed to parse session status:', parseErr);
+          }
+        }
       }
-
-      if (data.memory_tokens) {
-        segments.push({
-          id: 'memory',
-          type: 'memory',
-          label: 'Memory Context',
-          tokenCount: data.memory_tokens,
-          percentage: 0,
-          canForget: true,
-          content: data.memory_preview,
-        });
-      }
-
-      if (data.conversation_tokens) {
-        segments.push({
-          id: 'conversation',
-          type: 'conversation',
-          label: 'Conversation History',
-          tokenCount: data.conversation_tokens,
-          percentage: 0,
-          canForget: true,
-        });
-      }
-
-      if (data.tool_tokens) {
-        segments.push({
-          id: 'tools',
-          type: 'tool_calls',
-          label: 'Tool Results',
-          tokenCount: data.tool_tokens,
-          percentage: 0,
-          canForget: true,
-        });
-      }
-
-      // Filter out forgotten segments
-      const filteredSegments = segments.filter(s => !forgottenSegments.has(s.id));
-      const used = filteredSegments.reduce((sum, s) => sum + s.tokenCount, 0);
-      const total = data.total_context || 128000;
-      const percentage = (used / total) * 100;
-
-      const response: ContextWindowState = {
-        used,
-        total,
-        percentage,
-        segments: filteredSegments.map(s => ({
-          ...s,
-          percentage: used > 0 ? (s.tokenCount / used) * 100 : 0,
-        })),
-        lastUpdated: new Date().toISOString(),
-        warningLevel: getWarningLevel(percentage),
-      };
-
-      return NextResponse.json(response);
     }
 
     // Fallback to demo data
