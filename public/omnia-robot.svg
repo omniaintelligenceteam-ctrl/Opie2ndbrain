@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Outer circle ring -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#3B82F6" stroke-width="4"/>
+  <circle cx="100" cy="100" r="88" fill="none" stroke="#1E3A5F" stroke-width="2"/>
+
+  <!-- Robot head background -->
+  <ellipse cx="100" cy="105" rx="55" ry="50" fill="#E8F0FE"/>
+
+  <!-- Robot top/cap -->
+  <path d="M55 85 Q55 55 100 55 Q145 55 145 85 L145 95 Q100 90 55 95 Z" fill="#3B82F6"/>
+
+  <!-- Antenna -->
+  <line x1="100" y1="55" x2="100" y2="35" stroke="#3B82F6" stroke-width="4"/>
+  <circle cx="100" cy="32" r="6" fill="#E8F0FE" stroke="#3B82F6" stroke-width="2"/>
+
+  <!-- Visor/face plate -->
+  <rect x="60" y="90" width="80" height="40" rx="10" fill="#1E3A5F"/>
+
+  <!-- Eyes -->
+  <ellipse cx="80" cy="110" rx="10" ry="12" fill="#4FD1C5"/>
+  <ellipse cx="120" cy="110" rx="10" ry="12" fill="#4FD1C5"/>
+
+  <!-- Smile -->
+  <path d="M85 128 Q100 138 115 128" fill="none" stroke="#4FD1C5" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Ear pieces -->
+  <rect x="38" y="95" width="15" height="30" rx="5" fill="#3B82F6"/>
+  <rect x="147" y="95" width="15" height="30" rx="5" fill="#3B82F6"/>
+
+  <!-- Chin/jaw area -->
+  <ellipse cx="100" cy="150" rx="35" ry="15" fill="#3B82F6"/>
+</svg>

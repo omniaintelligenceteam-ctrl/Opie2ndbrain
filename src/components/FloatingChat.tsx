@@ -116,8 +116,53 @@ function renderMessageText(text: string): React.ReactNode {
 // Sub-Components
 // ============================================================================
 
-// Avatar Component
-function Avatar({ size = 32 }: { size?: number }) {
+// Avatar Component with Omnia-style ring
+function Avatar({ size = 32, showRing = false }: { size?: number; showRing?: boolean }) {
+  const ringSize = size + 12;
+
+  if (showRing) {
+    return (
+      <div style={{
+        position: 'relative',
+        width: ringSize,
+        height: ringSize,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        {/* Outer ring */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '50%',
+          border: '3px solid #3B82F6',
+          boxShadow: '0 0 15px rgba(59, 130, 246, 0.4), inset 0 0 10px rgba(59, 130, 246, 0.1)',
+        }} />
+        {/* Inner ring */}
+        <div style={{
+          position: 'absolute',
+          inset: 4,
+          borderRadius: '50%',
+          border: '2px solid rgba(30, 58, 95, 0.8)',
+        }} />
+        {/* Avatar image */}
+        <img
+          src="/opie-avatar.png"
+          alt="Opie"
+          style={{
+            width: size,
+            height: size,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <img
       src="/opie-avatar.png"
@@ -712,35 +757,80 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Robot avatar clipped to circle (no dark square background)
+  // Closed - Robot avatar with Omnia-style ring
   if (mode === 'closed') {
     return (
       <>
-        <img
+        <div
           onClick={() => { setMode('open'); setHasInteracted(true); }}
-          src="/opie-avatar.png"
-          alt="Chat with Opie"
           style={{
             position: 'fixed',
             bottom: 16,
             right: 16,
-            width: 140,
-            height: 140,
-            objectFit: 'cover',
             cursor: 'pointer',
             zIndex: 1000,
-            borderRadius: '50%',
-            clipPath: 'circle(50%)',
           }}
-        />
+        >
+          {/* Outer glowing ring */}
+          <div style={{
+            position: 'relative',
+            width: 156,
+            height: 156,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {/* Animated outer ring */}
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              border: '4px solid #3B82F6',
+              boxShadow: '0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.2)',
+              animation: 'pulse 2s ease-in-out infinite',
+            }} />
+            {/* Inner ring */}
+            <div style={{
+              position: 'absolute',
+              inset: 8,
+              borderRadius: '50%',
+              border: '2px solid rgba(30, 58, 95, 0.9)',
+            }} />
+            {/* Avatar image */}
+            <img
+              src="/opie-avatar.png"
+              alt="Chat with Opie"
+              style={{
+                width: 130,
+                height: 130,
+                objectFit: 'cover',
+                borderRadius: '50%',
+                clipPath: 'circle(50%)',
+              }}
+            />
+          </div>
+        </div>
         {unreadCount > 0 && (
           <span style={{
             ...styles.unreadBadge,
             position: 'fixed',
-            bottom: 140,
+            bottom: 156,
             right: 16,
           }}>{unreadCount}</span>
         )}
+        {/* Pulse animation */}
+        <style>{`
+          @keyframes pulse {
+            0%, 100% {
+              box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.2);
+              transform: scale(1);
+            }
+            50% {
+              box-shadow: 0 0 30px rgba(59, 130, 246, 0.7), 0 0 60px rgba(59, 130, 246, 0.3);
+              transform: scale(1.02);
+            }
+          }
+        `}</style>
       </>
     );
   }
