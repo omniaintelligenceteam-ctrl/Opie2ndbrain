@@ -757,80 +757,43 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
-  // Closed - Robot avatar with Omnia-style ring
+  // Closed - Robot avatar (image has ring built-in)
   if (mode === 'closed') {
     return (
       <>
-        <div
+        <img
           onClick={() => { setMode('open'); setHasInteracted(true); }}
+          src="/opie-avatar.png"
+          alt="Chat with Opie"
           style={{
             position: 'fixed',
             bottom: 16,
             right: 16,
+            width: 140,
+            height: 140,
+            objectFit: 'contain',
             cursor: 'pointer',
             zIndex: 1000,
+            filter: 'drop-shadow(0 0 20px rgba(59, 130, 246, 0.4))',
+            transition: 'transform 0.2s ease, filter 0.2s ease',
           }}
-        >
-          {/* Outer glowing ring */}
-          <div style={{
-            position: 'relative',
-            width: 156,
-            height: 156,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            {/* Animated outer ring */}
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              border: '4px solid #3B82F6',
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.2)',
-              animation: 'pulse 2s ease-in-out infinite',
-            }} />
-            {/* Inner ring */}
-            <div style={{
-              position: 'absolute',
-              inset: 8,
-              borderRadius: '50%',
-              border: '2px solid rgba(30, 58, 95, 0.9)',
-            }} />
-            {/* Avatar image */}
-            <img
-              src="/opie-avatar.png"
-              alt="Chat with Opie"
-              style={{
-                width: 130,
-                height: 130,
-                objectFit: 'cover',
-                borderRadius: '50%',
-                clipPath: 'circle(50%)',
-              }}
-            />
-          </div>
-        </div>
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.filter = 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.6))';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.filter = 'drop-shadow(0 0 20px rgba(59, 130, 246, 0.4))';
+          }}
+        />
         {unreadCount > 0 && (
           <span style={{
             ...styles.unreadBadge,
             position: 'fixed',
-            bottom: 156,
+            bottom: 140,
             right: 16,
           }}>{unreadCount}</span>
         )}
-        {/* Pulse animation */}
-        <style>{`
-          @keyframes pulse {
-            0%, 100% {
-              box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.2);
-              transform: scale(1);
-            }
-            50% {
-              box-shadow: 0 0 30px rgba(59, 130, 246, 0.7), 0 0 60px rgba(59, 130, 246, 0.3);
-              transform: scale(1.02);
-            }
-          }
-        `}</style>
       </>
     );
   }
