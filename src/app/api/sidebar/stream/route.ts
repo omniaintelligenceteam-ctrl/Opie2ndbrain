@@ -239,39 +239,51 @@ async function fetchCrons(): Promise<{ crons: CronJob[]; error?: string }> {
   }
   
   try {
-    // Try the /crons endpoint first
-    const res = await fetch(`${GATEWAY_URL}/crons`, {
+    // Use tools/invoke with cron tool
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
         ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
       },
+      body: JSON.stringify({ tool: 'cron', args: { action: 'list' } }),
       signal: AbortSignal.timeout(5000),
     });
     
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      // Try tools/invoke as fallback
-      const invokeRes = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-        },
-        body: JSON.stringify({ tool: 'crons_list', args: {} }),
-        signal: AbortSignal.timeout(5000),
-      });
-      
-      if (invokeRes.ok) {
-        const invokeData = await invokeRes.json();
-        return { crons: invokeData.result?.crons || [] };
-      }
-      
-      return { crons: [] };
+      return { crons: [], error: 'Invalid gateway response' };
     }
     
     const data = await res.json();
-    return { crons: data.crons || data || [] };
+    if (!data.ok) {
+      return { crons: [], error: data.error?.message || 'Gateway error' };
+    }
+    
+    // Extract jobs from the response - handle nested structure
+    const jobs = data.result?.details?.jobs || data.result?.jobs || [];
+    
+    // Map gateway cron format to our CronJob format
+    const crons: CronJob[] = jobs.map((job: {
+      id: string;
+      name?: string;
+      schedule?: { kind?: string; expr?: string; tz?: string };
+      payload?: { kind?: string; message?: string; text?: string };
+      enabled?: boolean;
+      state?: { lastRunAtMs?: number; lastStatus?: string; nextRunAtMs?: number };
+    }) => ({
+      id: job.id,
+      name: job.name || job.id,
+      schedule: job.schedule?.expr || `${job.schedule?.kind || 'unknown'}`,
+      command: job.payload?.message || job.payload?.text || '',
+      enabled: job.enabled !== false,
+      lastRun: job.state?.lastRunAtMs ? new Date(job.state.lastRunAtMs).toISOString() : undefined,
+      lastStatus: job.state?.lastStatus === 'ok' ? 'success' : job.state?.lastStatus === 'error' ? 'failed' : undefined,
+      nextRun: job.state?.nextRunAtMs ? new Date(job.state.nextRunAtMs).toISOString() : undefined,
+    }));
+    
+    return { crons };
   } catch (error) {
     console.error('[Sidebar SSE] Crons fetch error:', error);
     return { crons: [], error: error instanceof Error ? error.message : 'Fetch failed' };
