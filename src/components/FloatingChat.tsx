@@ -730,6 +730,35 @@ export default function FloatingChat({
     }
   };
 
+  // Handle paste for images
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert('Image must be less than 5MB');
+          return;
+        }
+        
+        // Convert to base64
+        const reader = new FileReader();
+        reader.onload = () => {
+          setPendingImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  };
+
   // Handle keyboard
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1131,6 +1160,7 @@ export default function FloatingChat({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={() => setShowEmojiHint(true)}
               onBlur={() => setShowEmojiHint(false)}
               placeholder="Type a message..."
