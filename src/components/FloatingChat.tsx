@@ -1187,46 +1187,6 @@ export default function FloatingChat({
             </button>
           </div>
           
-          {/* Model Picker */}
-          <div style={styles.modelPickerRow}>
-            <span style={styles.modelLabel}>Model:</span>
-            <div style={styles.modelPickerWrapper}>
-              <button
-                onClick={() => setShowModelPicker(!showModelPicker)}
-                style={styles.modelPickerButton}
-              >
-                <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
-                <span style={styles.modelPickerArrow}>{showModelPicker ? '▲' : '▼'}</span>
-              </button>
-              {showModelPicker && (
-                <div style={styles.modelPickerDropdown}>
-                  {AI_MODELS.map(model => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setSelectedModel(model.id);
-                        setShowModelPicker(false);
-                      }}
-                      style={{
-                        ...styles.modelOption,
-                        ...(selectedModel === model.id ? styles.modelOptionActive : {}),
-                      }}
-                    >
-                      <span style={styles.modelOptionName}>{model.name}</span>
-                      <span style={styles.modelOptionDesc}>{model.description}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <span style={styles.modeHint}>
-            {interactionMode === 'plan' 
-              ? 'Brainstorming mode — no actions will be taken'
-              : 'Action mode — I can make changes'
-            }
-          </span>
         </div>
 
         {/* Input Area */}
