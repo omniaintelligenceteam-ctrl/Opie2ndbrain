@@ -32,10 +32,7 @@ const MODEL_MAP: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan', model } = await req.json();
-  
-  // Get full model name from alias (only if model is specified)
-  const fullModelName = model ? (MODEL_MAP[model] || MODEL_MAP['opus']) : null;
+  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan' } = await req.json();
 
   // Convert personality parameters to API config if provided
   const personalityConfig = personality
@@ -72,30 +69,7 @@ export async function POST(req: NextRequest) {
       : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
     input = input + modeContext;
 
-    // Only set model if explicitly passed from dropdown change
-    // This prevents resetting to Opus on every message
-    if (model && fullModelName) {
-      try {
-        await fetch(`${GATEWAY_URL}/tools/invoke`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-          },
-          body: JSON.stringify({
-            tool: 'session_status',
-            args: {
-              sessionKey: 'agent:main:main',
-              model: fullModelName,
-            },
-          }),
-        });
-        console.log('[Chat API] Set model to:', fullModelName);
-      } catch (err) {
-        console.error('[Chat API] Failed to set model:', err);
-      }
-    }
+    // Model switching is now handled by the separate /api/model endpoint
 
     // Use tools/invoke with sessions_send - more reliable than /v1/responses
     const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {

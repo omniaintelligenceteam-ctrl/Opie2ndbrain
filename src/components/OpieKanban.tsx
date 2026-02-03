@@ -243,8 +243,29 @@ export default function OpieKanban(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('opus');
-  const [modelChanged, setModelChanged] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  // Handle model switching
+  const handleModelChange = async (model: AIModel) => {
+    setSelectedModel(model);
+    setShowModelDropdown(false);
+    
+    try {
+      const res = await fetch('/api/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      
+      if (res.ok) {
+        console.log('Model switched to:', model);
+      } else {
+        console.error('Failed to switch model:', await res.text());
+      }
+    } catch (error) {
+      console.error('Model switch error:', error);
+    }
+  };
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -610,17 +631,11 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
-          ...(modelChanged && { model: selectedModel }), // Only pass model if explicitly changed
         }),
         signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
-      
-      // Reset model changed flag after sending
-      if (modelChanged) {
-        setModelChanged(false);
-      }
       
       // Update interaction mode if AI signaled a change
       if (data.mode && data.mode !== interactionMode) {
@@ -1102,11 +1117,7 @@ export default function OpieKanban(): React.ReactElement {
                       {AI_MODELS.map(model => (
                         <button
                           key={model.id}
-                          onClick={() => {
-                            setSelectedModel(model.id);
-                            setModelChanged(true);
-                            setShowModelDropdown(false);
-                          }}
+                          onClick={() => handleModelChange(model.id)}
                           style={{
                             ...styles.modelDropdownItem,
                             ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
@@ -1563,10 +1574,7 @@ export default function OpieKanban(): React.ReactElement {
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}
         selectedModel={selectedModel}
-        onModelChange={(model) => {
-          setSelectedModel(model);
-          setModelChanged(true);
-        }}
+        onModelChange={handleModelChange}
       />
 
       {/* Command Palette */}
