@@ -16,6 +16,7 @@ export interface ChatMessage {
 
 type ChatMode = 'closed' | 'minimized' | 'open' | 'fullscreen';
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'working';
+export type InteractionMode = 'plan' | 'execute';
 
 interface FloatingChatProps {
   messages: ChatMessage[];
@@ -23,12 +24,14 @@ interface FloatingChatProps {
   setInput: (val: string) => void;
   isLoading: boolean;
   isWorking?: boolean;
-  onSend: (text?: string, image?: string) => void;
+  onSend: (text?: string, image?: string, mode?: InteractionMode) => void;
   micOn: boolean;
   onMicToggle: () => void;
   isSpeaking: boolean;
   transcript: string;
   onCancelProcessing?: () => void;
+  interactionMode?: InteractionMode;
+  onInteractionModeChange?: (mode: InteractionMode) => void;
 }
 
 // ============================================================================
@@ -321,6 +324,8 @@ export default function FloatingChat({
   isSpeaking,
   transcript,
   onCancelProcessing,
+  interactionMode: controlledInteractionMode,
+  onInteractionModeChange,
 }: FloatingChatProps): React.ReactElement {
   // State
   const [mode, setMode] = useState<ChatMode>('closed');
@@ -332,6 +337,11 @@ export default function FloatingChat({
   const [isDetached, setIsDetached] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [localInteractionMode, setLocalInteractionMode] = useState<InteractionMode>('execute');
+  
+  // Use controlled mode if provided, otherwise use local state
+  const interactionMode = controlledInteractionMode ?? localInteractionMode;
+  const setInteractionMode = onInteractionModeChange ?? setLocalInteractionMode;
   const detachedWindowRef = useRef<Window | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -774,10 +784,10 @@ export default function FloatingChat({
     }
   };
 
-  // Handle send with local text and optional image
+  // Handle send with local text, optional image, and interaction mode
   const handleSendClick = () => {
     if (input.trim() || pendingImage) {
-      onSend(input, pendingImage || undefined);
+      onSend(input, pendingImage || undefined, interactionMode);
       setPendingImage(null);
       setHasInteracted(true);
     }
@@ -1100,6 +1110,40 @@ export default function FloatingChat({
             </button>
           </div>
         )}
+
+        {/* Mode Toggle */}
+        <div style={styles.modeToggleContainer}>
+          <div style={styles.modeToggle}>
+            <button
+              onClick={() => setInteractionMode('plan')}
+              style={{
+                ...styles.modeButton,
+                ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
+              }}
+              title="Plan Mode - Brainstorm and discuss without taking action"
+            >
+              <span style={styles.modeIcon}>💭</span>
+              <span>Plan</span>
+            </button>
+            <button
+              onClick={() => setInteractionMode('execute')}
+              style={{
+                ...styles.modeButton,
+                ...(interactionMode === 'execute' ? styles.modeButtonActiveExecute : {}),
+              }}
+              title="Execute Mode - Take action on your requests"
+            >
+              <span style={styles.modeIcon}>⚡</span>
+              <span>Execute</span>
+            </button>
+          </div>
+          <span style={styles.modeHint}>
+            {interactionMode === 'plan' 
+              ? 'Brainstorming mode — no actions will be taken'
+              : 'Action mode — I can make changes'
+            }
+          </span>
+        </div>
 
         {/* Input Area */}
         <div style={styles.inputArea}>
@@ -1580,6 +1624,53 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50%',
     background: 'rgba(255, 255, 255, 0.5)',
     animation: 'typingBounce 1.4s ease-in-out infinite',
+  },
+
+  // Mode Toggle
+  modeToggleContainer: {
+    padding: '8px 16px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 6,
+    background: 'rgba(0, 0, 0, 0.15)',
+  },
+  modeToggle: {
+    display: 'flex',
+    gap: 8,
+  },
+  modeButton: {
+    flex: 1,
+    padding: '8px 12px',
+    borderRadius: 12,
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'rgba(255, 255, 255, 0.05)',
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    transition: 'all 0.2s ease',
+  },
+  modeButtonActive: {
+    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(168, 85, 247, 0.2) 100%)',
+    border: '1px solid rgba(139, 92, 246, 0.5)',
+    color: '#a78bfa',
+  },
+  modeButtonActiveExecute: {
+    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.2) 100%)',
+    border: '1px solid rgba(34, 197, 94, 0.5)',
+    color: '#4ade80',
+  },
+  modeIcon: {
+    fontSize: '14px',
+  },
+  modeHint: {
+    fontSize: '0.7rem',
+    color: 'rgba(255, 255, 255, 0.4)',
+    textAlign: 'center' as const,
   },
 
   // Input Area
