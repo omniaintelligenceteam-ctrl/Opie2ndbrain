@@ -19,7 +19,7 @@ import WorkspaceBrowser from './WorkspaceBrowser';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage } from './FloatingChat';
+import FloatingChat, { ChatMessage, InteractionMode } from './FloatingChat';
 // Real-time dashboard components
 import SmartDashboardHome from './SmartDashboardHome';
 import OpieStatusWidget from './OpieStatusWidget';
@@ -241,6 +241,7 @@ export default function OpieKanban(): React.ReactElement {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -605,11 +606,17 @@ export default function OpieKanban(): React.ReactElement {
           sessionId,
           personality: personalityParams,
           image: image, // Include image in API call
+          interactionMode, // Pass current interaction mode
         }),
         signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
+      
+      // Update interaction mode if AI signaled a change
+      if (data.mode && data.mode !== interactionMode) {
+        setInteractionMode(data.mode);
+      }
       
       // Update user message to delivered
       setMessages(prev => prev.map(m => 
@@ -1505,6 +1512,8 @@ export default function OpieKanban(): React.ReactElement {
         onMicToggle={toggleMic}
         isSpeaking={isSpeaking}
         transcript={transcript}
+        interactionMode={interactionMode}
+        onInteractionModeChange={setInteractionMode}
       />
 
       {/* Command Palette */}

@@ -24,7 +24,7 @@ const DEMO_RESPONSES = [
 ];
 
 export async function POST(req: NextRequest) {
-  const { message, sessionId, isVoice = true, personality } = await req.json();
+  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan' } = await req.json();
 
   // Convert personality parameters to API config if provided
   const personalityConfig = personality
@@ -49,11 +49,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Build input with personality modifiers if provided
+    // Build input with personality modifiers and interaction mode
     let input = isVoice ? VOICE_INSTRUCTIONS + message : message;
     if (personalityConfig?.systemModifiers) {
       input = `[Style: ${personalityConfig.systemModifiers}]\n\n${input}`;
     }
+    
+    // Add interaction mode context
+    const modeContext = interactionMode === 'plan' 
+      ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions. Before taking any action, ask for confirmation and include [MODE:execute] in your response when switching to execute mode.'
+      : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
+    input = input + modeContext;
 
     // Use tools/invoke with sessions_send - more reliable than /v1/responses
     const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
@@ -127,7 +133,17 @@ export async function POST(req: NextRequest) {
     
     console.log('[Chat API] Final reply:', reply.slice(0, 500));
     
-    return NextResponse.json({ reply });
+    // Parse mode indicators from response
+    let newMode: 'plan' | 'execute' | null = null;
+    if (reply.includes('[MODE:execute]')) {
+      newMode = 'execute';
+      reply = reply.replace(/\[MODE:execute\]/g, '').trim();
+    } else if (reply.includes('[MODE:plan]')) {
+      newMode = 'plan';
+      reply = reply.replace(/\[MODE:plan\]/g, '').trim();
+    }
+    
+    return NextResponse.json({ reply, mode: newMode });
 
   } catch (error: any) {
     console.error('Fetch error:', error);
