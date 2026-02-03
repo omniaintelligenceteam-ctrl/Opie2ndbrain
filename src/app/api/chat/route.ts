@@ -16,7 +16,7 @@ const anthropic = new Anthropic({
 const MODELS = {
   kimi: {
     provider: 'ollama',
-    model: 'kimi-k2-instruct',
+    model: 'kimi-k2.5',
     baseUrl: 'https://ollama.com/v1',
   },
   opus: {
