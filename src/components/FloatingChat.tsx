@@ -17,6 +17,14 @@ export interface ChatMessage {
 type ChatMode = 'closed' | 'minimized' | 'open' | 'fullscreen';
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'working';
 export type InteractionMode = 'plan' | 'execute';
+export type AIModel = 'opus' | 'sonnet' | 'haiku' | 'kimi';
+
+export const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
+  { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
+  { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
+  { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
+  { id: 'kimi', name: 'Kimi K2.5', description: 'Very fast, great value' },
+];
 
 interface FloatingChatProps {
   messages: ChatMessage[];
@@ -32,6 +40,8 @@ interface FloatingChatProps {
   onCancelProcessing?: () => void;
   interactionMode?: InteractionMode;
   onInteractionModeChange?: (mode: InteractionMode) => void;
+  selectedModel?: AIModel;
+  onModelChange?: (model: AIModel) => void;
 }
 
 // ============================================================================
@@ -326,6 +336,8 @@ export default function FloatingChat({
   onCancelProcessing,
   interactionMode: controlledInteractionMode,
   onInteractionModeChange,
+  selectedModel: controlledModel,
+  onModelChange,
 }: FloatingChatProps): React.ReactElement {
   // State
   const [mode, setMode] = useState<ChatMode>('closed');
@@ -338,10 +350,14 @@ export default function FloatingChat({
   const [mounted, setMounted] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [localInteractionMode, setLocalInteractionMode] = useState<InteractionMode>('execute');
+  const [localModel, setLocalModel] = useState<AIModel>('opus');
+  const [showModelPicker, setShowModelPicker] = useState(false);
   
   // Use controlled mode if provided, otherwise use local state
   const interactionMode = controlledInteractionMode ?? localInteractionMode;
   const setInteractionMode = onInteractionModeChange ?? setLocalInteractionMode;
+  const selectedModel = controlledModel ?? localModel;
+  const setSelectedModel = onModelChange ?? setLocalModel;
   const detachedWindowRef = useRef<Window | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1137,6 +1153,41 @@ export default function FloatingChat({
               <span>Execute</span>
             </button>
           </div>
+          
+          {/* Model Picker */}
+          <div style={styles.modelPickerRow}>
+            <span style={styles.modelLabel}>Model:</span>
+            <div style={styles.modelPickerWrapper}>
+              <button
+                onClick={() => setShowModelPicker(!showModelPicker)}
+                style={styles.modelPickerButton}
+              >
+                <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
+                <span style={styles.modelPickerArrow}>{showModelPicker ? '▲' : '▼'}</span>
+              </button>
+              {showModelPicker && (
+                <div style={styles.modelPickerDropdown}>
+                  {AI_MODELS.map(model => (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        setSelectedModel(model.id);
+                        setShowModelPicker(false);
+                      }}
+                      style={{
+                        ...styles.modelOption,
+                        ...(selectedModel === model.id ? styles.modelOptionActive : {}),
+                      }}
+                    >
+                      <span style={styles.modelOptionName}>{model.name}</span>
+                      <span style={styles.modelOptionDesc}>{model.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
           <span style={styles.modeHint}>
             {interactionMode === 'plan' 
               ? 'Brainstorming mode — no actions will be taken'
@@ -1671,6 +1722,78 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.7rem',
     color: 'rgba(255, 255, 255, 0.4)',
     textAlign: 'center' as const,
+  },
+  
+  // Model Picker
+  modelPickerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  modelLabel: {
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  modelPickerWrapper: {
+    position: 'relative' as const,
+    flex: 1,
+  },
+  modelPickerButton: {
+    width: '100%',
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    background: 'rgba(255, 255, 255, 0.08)',
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    transition: 'all 0.2s ease',
+  },
+  modelPickerArrow: {
+    fontSize: '0.6rem',
+    opacity: 0.6,
+  },
+  modelPickerDropdown: {
+    position: 'absolute' as const,
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: 4,
+    background: 'rgba(30, 30, 40, 0.98)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.4)',
+    zIndex: 100,
+  },
+  modelOption: {
+    width: '100%',
+    padding: '10px 12px',
+    border: 'none',
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: 2,
+    textAlign: 'left' as const,
+    transition: 'background 0.15s ease',
+  },
+  modelOptionActive: {
+    background: 'rgba(102, 126, 234, 0.2)',
+  },
+  modelOptionName: {
+    fontWeight: 500,
+  },
+  modelOptionDesc: {
+    fontSize: '0.7rem',
+    color: 'rgba(255, 255, 255, 0.4)',
   },
 
   // Input Area

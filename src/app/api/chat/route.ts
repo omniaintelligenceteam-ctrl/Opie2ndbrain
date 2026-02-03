@@ -23,8 +23,19 @@ const DEMO_RESPONSES = [
   "Hey! The gateway's not available in this environment. The full experience needs the local Moltbot gateway running.",
 ];
 
+// Model ID to full provider/model mapping
+const MODEL_MAP: Record<string, string> = {
+  'opus': 'anthropic/claude-opus-4-5',
+  'sonnet': 'anthropic/claude-sonnet-4-20250514',
+  'haiku': 'anthropic/claude-3-5-haiku-latest',
+  'kimi': 'moonshotai/kimi-k2-instruct',
+};
+
 export async function POST(req: NextRequest) {
-  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan' } = await req.json();
+  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan', model = 'opus' } = await req.json();
+  
+  // Get full model name from alias
+  const fullModelName = MODEL_MAP[model] || MODEL_MAP['opus'];
 
   // Convert personality parameters to API config if provided
   const personalityConfig = personality
@@ -60,6 +71,30 @@ export async function POST(req: NextRequest) {
       ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions. Before taking any action, ask for confirmation and include [MODE:execute] in your response when switching to execute mode.'
       : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
     input = input + modeContext;
+
+    // Set model override if not using default (opus)
+    if (model !== 'opus') {
+      try {
+        await fetch(`${GATEWAY_URL}/tools/invoke`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+          },
+          body: JSON.stringify({
+            tool: 'session_status',
+            args: {
+              sessionKey: 'agent:main:main',
+              model: fullModelName,
+            },
+          }),
+        });
+        console.log('[Chat API] Set model override to:', fullModelName);
+      } catch (err) {
+        console.error('[Chat API] Failed to set model override:', err);
+      }
+    }
 
     // Use tools/invoke with sessions_send - more reliable than /v1/responses
     const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {

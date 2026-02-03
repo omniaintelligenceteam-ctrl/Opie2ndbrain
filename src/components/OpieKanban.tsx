@@ -19,7 +19,7 @@ import WorkspaceBrowser from './WorkspaceBrowser';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode } from './FloatingChat';
+import FloatingChat, { ChatMessage, InteractionMode, AIModel } from './FloatingChat';
 // Real-time dashboard components
 import SmartDashboardHome from './SmartDashboardHome';
 import OpieStatusWidget from './OpieStatusWidget';
@@ -242,6 +242,7 @@ export default function OpieKanban(): React.ReactElement {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
+  const [selectedModel, setSelectedModel] = useState<AIModel>('opus');
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -607,6 +608,7 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
+          model: selectedModel, // Pass selected AI model
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -1514,6 +1516,8 @@ export default function OpieKanban(): React.ReactElement {
         transcript={transcript}
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
       />
 
       {/* Command Palette */}
