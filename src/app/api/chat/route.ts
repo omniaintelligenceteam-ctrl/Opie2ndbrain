@@ -72,28 +72,27 @@ export async function POST(req: NextRequest) {
       : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
     input = input + modeContext;
 
-    // Set model override if not using default (opus)
-    if (model !== 'opus') {
-      try {
-        await fetch(`${GATEWAY_URL}/tools/invoke`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+    // Set model override for the session before sending
+    // Always set the model to ensure correct model is used
+    try {
+      await fetch(`${GATEWAY_URL}/tools/invoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        },
+        body: JSON.stringify({
+          tool: 'session_status',
+          args: {
+            sessionKey: 'agent:main:main',
+            model: fullModelName,
           },
-          body: JSON.stringify({
-            tool: 'session_status',
-            args: {
-              sessionKey: 'agent:main:main',
-              model: fullModelName,
-            },
-          }),
-        });
-        console.log('[Chat API] Set model override to:', fullModelName);
-      } catch (err) {
-        console.error('[Chat API] Failed to set model override:', err);
-      }
+        }),
+      });
+      console.log('[Chat API] Set model to:', fullModelName);
+    } catch (err) {
+      console.error('[Chat API] Failed to set model:', err);
     }
 
     // Use tools/invoke with sessions_send - more reliable than /v1/responses
