@@ -27,7 +27,7 @@ const DEMO_RESPONSES = [
 const MODEL_MAP: Record<string, string> = {
   'opus': 'anthropic/claude-opus-4-5',
   'sonnet': 'anthropic/claude-sonnet-4-20250514',
-  'haiku': 'anthropic/claude-3-5-haiku-latest',
+  'haiku': 'anthropic/claude-3-5-haiku-20241022',
   'kimi': 'moonshotai/kimi-k2-instruct',
 };
 
