@@ -19,7 +19,7 @@ import WorkspaceBrowser from './WorkspaceBrowser';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode, AIModel } from './FloatingChat';
+import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
 // Real-time dashboard components
 import SmartDashboardHome from './SmartDashboardHome';
 import OpieStatusWidget from './OpieStatusWidget';
@@ -243,6 +243,7 @@ export default function OpieKanban(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('opus');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1073,6 +1074,44 @@ export default function OpieKanban(): React.ReactElement {
                 ) : (
                   <OrchestrationStatus />
                 )}
+              </div>
+            </div>
+
+            {/* Model Selector */}
+            <div style={styles.modelSelectorSection}>
+              <div style={styles.modelSelectorInner}>
+                <span style={styles.modelSelectorLabel}>🤖 Active Model</span>
+                <div style={styles.modelSelectorDropdown}>
+                  <button
+                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                    style={styles.modelSelectorButton}
+                  >
+                    <span style={styles.modelSelectorName}>
+                      {AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}
+                    </span>
+                    <span style={styles.modelSelectorArrow}>{showModelDropdown ? '▲' : '▼'}</span>
+                  </button>
+                  {showModelDropdown && (
+                    <div style={styles.modelDropdownMenu}>
+                      {AI_MODELS.map(model => (
+                        <button
+                          key={model.id}
+                          onClick={() => {
+                            setSelectedModel(model.id);
+                            setShowModelDropdown(false);
+                          }}
+                          style={{
+                            ...styles.modelDropdownItem,
+                            ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
+                          }}
+                        >
+                          <span style={styles.modelDropdownName}>{model.name}</span>
+                          <span style={styles.modelDropdownDesc}>{model.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2133,6 +2172,92 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 0,
     fontWeight: 400,
     letterSpacing: '-0.01em',
+  },
+
+  // ==========================================================================
+  // MODEL SELECTOR STYLES
+  // ==========================================================================
+  modelSelectorSection: {
+    marginBottom: '24px',
+  },
+  modelSelectorInner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '16px 20px',
+    background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.05) 100%)',
+    borderRadius: '16px',
+    border: '1px solid rgba(255,255,255,0.1)',
+  },
+  modelSelectorLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+  },
+  modelSelectorDropdown: {
+    position: 'relative' as const,
+    flex: 1,
+    maxWidth: '300px',
+  },
+  modelSelectorButton: {
+    width: '100%',
+    padding: '10px 16px',
+    borderRadius: '12px',
+    border: '1px solid rgba(255,255,255,0.15)',
+    background: 'rgba(255,255,255,0.08)',
+    color: '#fff',
+    fontSize: '1rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    transition: 'all 0.2s ease',
+  },
+  modelSelectorName: {
+    // inherits from button
+  },
+  modelSelectorArrow: {
+    fontSize: '0.7rem',
+    opacity: 0.6,
+  },
+  modelDropdownMenu: {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: '8px',
+    background: 'rgba(20, 20, 30, 0.98)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '14px',
+    overflow: 'hidden',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  modelDropdownItem: {
+    width: '100%',
+    padding: '14px 16px',
+    border: 'none',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: '0.95rem',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: '4px',
+    textAlign: 'left' as const,
+    transition: 'background 0.15s ease',
+  },
+  modelDropdownItemActive: {
+    background: 'rgba(99, 102, 241, 0.25)',
+  },
+  modelDropdownName: {
+    fontWeight: 600,
+  },
+  modelDropdownDesc: {
+    fontSize: '0.8rem',
+    color: 'rgba(255,255,255,0.5)',
   },
 
   // ==========================================================================
