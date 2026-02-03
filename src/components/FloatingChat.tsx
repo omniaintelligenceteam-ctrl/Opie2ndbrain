@@ -961,6 +961,39 @@ export default function FloatingChat({
             </div>
           </div>
           
+          {/* Model Selector in Header */}
+          <div style={styles.headerModelPicker}>
+            <button
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              style={styles.headerModelButton}
+              title="Switch AI model"
+            >
+              <span style={styles.headerModelName}>
+                {AI_MODELS.find(m => m.id === selectedModel)?.name.split(' ').pop() || 'Opus'}
+              </span>
+              <span style={styles.headerModelArrow}>{showModelPicker ? '▲' : '▼'}</span>
+            </button>
+            {showModelPicker && (
+              <div style={styles.headerModelDropdown}>
+                {AI_MODELS.map(model => (
+                  <button
+                    key={model.id}
+                    onClick={() => {
+                      setSelectedModel(model.id);
+                      setShowModelPicker(false);
+                    }}
+                    style={{
+                      ...styles.headerModelOption,
+                      ...(selectedModel === model.id ? styles.headerModelOptionActive : {}),
+                    }}
+                  >
+                    {model.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
           <div style={styles.headerActions}>
             <button
               onClick={handleDetach}
@@ -1510,6 +1543,61 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 6,
     fontSize: '0.8rem',
     transition: 'color 0.3s',
+  },
+  headerModelPicker: {
+    position: 'relative' as const,
+    marginRight: 8,
+  },
+  headerModelButton: {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    background: 'rgba(255, 255, 255, 0.08)',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    transition: 'all 0.2s ease',
+  },
+  headerModelName: {
+    maxWidth: 60,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  headerModelArrow: {
+    fontSize: '0.5rem',
+    opacity: 0.6,
+  },
+  headerModelDropdown: {
+    position: 'absolute' as const,
+    top: '100%',
+    right: 0,
+    marginTop: 4,
+    background: 'rgba(20, 20, 30, 0.98)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+    minWidth: 140,
+  },
+  headerModelOption: {
+    width: '100%',
+    padding: '10px 12px',
+    border: 'none',
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    transition: 'background 0.15s ease',
+  },
+  headerModelOptionActive: {
+    background: 'rgba(102, 126, 234, 0.25)',
   },
   headerActions: {
     display: 'flex',
