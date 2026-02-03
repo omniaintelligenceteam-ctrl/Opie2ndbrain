@@ -242,7 +242,7 @@ export default function OpieKanban(): React.ReactElement {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
-  const [selectedModel, setSelectedModel] = useState<AIModel>('opus');
+  const [selectedModel, setSelectedModel] = useState<AIModel>('kimi');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   // Handle model switching

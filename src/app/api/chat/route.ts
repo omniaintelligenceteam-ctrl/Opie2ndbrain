@@ -2,25 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
 
-// Force Node.js runtime for full env var access (Edge has 5KB limit issues)
+// Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60 seconds for AI response (Pro plan: 300)
+export const maxDuration = 60;
 
-// Initialize Anthropic client
+// Initialize Anthropic client (for when using Claude models)
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Model mapping from aliases to Anthropic model names
-const MODEL_MAP: Record<string, string> = {
-  'opus': 'claude-opus-4-5-20250514',
-  'sonnet': 'claude-sonnet-4-20250514', 
-  'haiku': 'claude-3-5-haiku-20241022',
-};
+// Model configurations
+const MODELS = {
+  kimi: {
+    provider: 'ollama',
+    model: 'kimi-k2-instruct',
+    baseUrl: 'https://ollama.com/v1',
+  },
+  opus: {
+    provider: 'anthropic',
+    model: 'claude-opus-4-5-20250514',
+  },
+  sonnet: {
+    provider: 'anthropic', 
+    model: 'claude-sonnet-4-20250514',
+  },
+  haiku: {
+    provider: 'anthropic',
+    model: 'claude-3-5-haiku-20241022',
+  },
+} as const;
 
-// In-memory model preference (resets on cold start, but that's fine for now)
-let currentModel = 'sonnet';
+type ModelAlias = keyof typeof MODELS;
+
+// Default to Kimi
+let currentModel: ModelAlias = 'kimi';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -37,32 +53,76 @@ Keep responses focused and helpful.`;
 
 // Simple in-memory conversation history (per session)
 const conversationHistory: Map<string, Array<{role: 'user' | 'assistant', content: string}>> = new Map();
-const MAX_HISTORY = 20; // Keep last 20 messages per session
+const MAX_HISTORY = 20;
+
+async function callOllama(messages: Array<{role: string, content: string}>, model: string): Promise<string> {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    throw new Error('OLLAMA_API_KEY not configured');
+  }
+
+  const response = await fetch('https://ollama.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ollamaKey}`,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages,
+      ],
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Ollama error:', response.status, error);
+    throw new Error(`Ollama API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || 'No response';
+}
+
+async function callAnthropic(messages: Array<{role: 'user' | 'assistant', content: string}>, model: string): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+
+  const response = await anthropic.messages.create({
+    model: model,
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT,
+    messages: messages,
+  });
+
+  let reply = '';
+  for (const block of response.content) {
+    if (block.type === 'text') {
+      reply += block.text;
+    }
+  }
+  return reply;
+}
 
 export async function POST(req: NextRequest) {
   const { message, sessionId = 'default', isVoice = true, personality, interactionMode = 'plan', model } = await req.json();
 
   // Update model if specified
-  if (model && MODEL_MAP[model]) {
-    currentModel = model;
+  if (model && model in MODELS) {
+    currentModel = model as ModelAlias;
     console.log('[Chat API] Model set to:', model);
   }
 
-  // Convert personality parameters to API config if provided
   const personalityConfig = personality
     ? parametersToApiConfig(personality as PersonalityParameters)
     : null;
   
   if (!message) {
     return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
-  }
-
-  // Check for Anthropic API key
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ 
-      reply: 'Anthropic API key not configured. Please add ANTHROPIC_API_KEY to your environment variables.',
-      error: true 
-    });
   }
 
   try {
@@ -76,11 +136,11 @@ export async function POST(req: NextRequest) {
     
     // Add interaction mode context
     const modeContext = interactionMode === 'plan' 
-      ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions. Before taking any action, ask for confirmation and include [MODE:execute] in your response when switching to execute mode.'
-      : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
+      ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions.'
+      : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions.';
     userMessage = userMessage + modeContext;
 
-    // Get or create conversation history for this session
+    // Get or create conversation history
     if (!conversationHistory.has(sessionId)) {
       conversationHistory.set(sessionId, []);
     }
@@ -94,24 +154,16 @@ export async function POST(req: NextRequest) {
       history.shift();
     }
 
-    // Get the Anthropic model name
-    const modelName = MODEL_MAP[currentModel] || MODEL_MAP['sonnet'];
-    console.log('[Chat API] Using model:', modelName);
+    // Get model config
+    const modelConfig = MODELS[currentModel];
+    console.log('[Chat API] Using model:', currentModel, modelConfig);
 
-    // Call Anthropic API directly
-    const response = await anthropic.messages.create({
-      model: modelName,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: history,
-    });
-
-    // Extract reply text
-    let reply = '';
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        reply += block.text;
-      }
+    // Call the appropriate API
+    let reply: string;
+    if (modelConfig.provider === 'ollama') {
+      reply = await callOllama(history, modelConfig.model);
+    } else {
+      reply = await callAnthropic(history, modelConfig.model);
     }
 
     // Add assistant response to history
@@ -132,7 +184,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, mode: newMode, model: currentModel });
 
   } catch (error: unknown) {
-    console.error('Anthropic API error:', error);
+    console.error('API error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       reply: `Error: ${errorMessage}`,

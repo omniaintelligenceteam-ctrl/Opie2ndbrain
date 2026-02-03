@@ -17,13 +17,13 @@ export interface ChatMessage {
 type ChatMode = 'closed' | 'minimized' | 'open' | 'fullscreen';
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking' | 'working';
 export type InteractionMode = 'plan' | 'execute';
-export type AIModel = 'opus' | 'sonnet' | 'haiku' | 'kimi';
+export type AIModel = 'kimi' | 'opus' | 'sonnet' | 'haiku';
 
 export const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
+  { id: 'kimi', name: 'Kimi K2', description: 'Default - fast and capable' },
   { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
   { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
   { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
-  { id: 'kimi', name: 'Kimi K2.5', description: 'Very fast, great value' },
 ];
 
 interface FloatingChatProps {
@@ -350,7 +350,7 @@ export default function FloatingChat({
   const [mounted, setMounted] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [localInteractionMode, setLocalInteractionMode] = useState<InteractionMode>('execute');
-  const [localModel, setLocalModel] = useState<AIModel>('opus');
+  const [localModel, setLocalModel] = useState<AIModel>('kimi');
   const [showModelPicker, setShowModelPicker] = useState(false);
   
   // Use controlled mode if provided, otherwise use local state
