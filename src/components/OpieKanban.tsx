@@ -243,6 +243,7 @@ export default function OpieKanban(): React.ReactElement {
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('opus');
+  const [modelChanged, setModelChanged] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
@@ -609,12 +610,17 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
-          model: selectedModel, // Pass selected AI model
+          ...(modelChanged && { model: selectedModel }), // Only pass model if explicitly changed
         }),
         signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
       const reply = data.reply || 'No response';
+      
+      // Reset model changed flag after sending
+      if (modelChanged) {
+        setModelChanged(false);
+      }
       
       // Update interaction mode if AI signaled a change
       if (data.mode && data.mode !== interactionMode) {
@@ -1098,6 +1104,7 @@ export default function OpieKanban(): React.ReactElement {
                           key={model.id}
                           onClick={() => {
                             setSelectedModel(model.id);
+                            setModelChanged(true);
                             setShowModelDropdown(false);
                           }}
                           style={{
@@ -1556,7 +1563,10 @@ export default function OpieKanban(): React.ReactElement {
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}
         selectedModel={selectedModel}
-        onModelChange={setSelectedModel}
+        onModelChange={(model) => {
+          setSelectedModel(model);
+          setModelChanged(true);
+        }}
       />
 
       {/* Command Palette */}
