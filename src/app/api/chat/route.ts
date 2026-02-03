@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         tool: 'sessions_send',
         args: {
-          sessionKey: 'agent:main:main',
+          label: 'opie-webapp', // Use label-based session for web app (not main session)
           message: input,
           timeoutSeconds: 55, // Just under Vercel's 60s limit
         },
