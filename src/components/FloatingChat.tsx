@@ -48,8 +48,15 @@ interface FloatingChatProps {
 // Utility Functions
 // ============================================================================
 
+// Use a counter for IDs to avoid hydration mismatches
+let idCounter = 0;
 function generateId(): string {
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  idCounter += 1;
+  // Only use Date.now() on client side
+  if (typeof window === 'undefined') {
+    return `msg-server-${idCounter}`;
+  }
+  return `msg-${Date.now()}-${idCounter}`;
 }
 
 function formatTime(date: Date, mounted: boolean): string {

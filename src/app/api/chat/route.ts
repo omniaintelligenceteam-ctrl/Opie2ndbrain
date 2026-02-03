@@ -84,7 +84,12 @@ async function callOllama(messages: Array<{role: string, content: string}>, mode
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'No response';
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    console.error('Ollama response missing content:', JSON.stringify(data));
+    return 'No response from model';
+  }
+  return content.trim();
 }
 
 async function callAnthropic(messages: Array<{role: 'user' | 'assistant', content: string}>, model: string): Promise<string> {
