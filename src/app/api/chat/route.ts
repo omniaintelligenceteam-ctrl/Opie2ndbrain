@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
+import Anthropic from '@anthropic-ai/sdk';
 
 // Force Node.js runtime for full env var access (Edge has 5KB limit issues)
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Allow up to 60 seconds for AI response (Pro plan: 300)
+
+// Initialize Anthropic client
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// Model mapping from aliases to Anthropic model names
+const MODEL_MAP: Record<string, string> = {
+  'opus': 'claude-opus-4-5-20250514',
+  'sonnet': 'claude-sonnet-4-20250514', 
+  'haiku': 'claude-3-5-haiku-20241022',
+};
+
+// In-memory model preference (resets on cold start, but that's fine for now)
+let currentModel = 'sonnet';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -16,23 +31,22 @@ const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 
 User said: `;
 
-// Demo responses for when gateway is unavailable
-const DEMO_RESPONSES = [
-  "I'm running in demo mode right now - the gateway isn't connected. Try again when you're running locally!",
-  "This is a demo deployment. Connect to the local gateway to chat with me for real.",
-  "Hey! The gateway's not available in this environment. The full experience needs the local Moltbot gateway running.",
-];
+const SYSTEM_PROMPT = `You are Opie, a helpful AI assistant. You're friendly, concise, and practical. 
+You help with tasks, answer questions, and have natural conversations.
+Keep responses focused and helpful.`;
 
-// Model ID to full provider/model mapping
-const MODEL_MAP: Record<string, string> = {
-  'opus': 'anthropic/claude-opus-4-5',
-  'sonnet': 'anthropic/claude-sonnet-4-20250514',
-  'haiku': 'anthropic/claude-3-haiku-20240307',
-  'kimi': 'ollama/kimi-k2-instruct',
-};
+// Simple in-memory conversation history (per session)
+const conversationHistory: Map<string, Array<{role: 'user' | 'assistant', content: string}>> = new Map();
+const MAX_HISTORY = 20; // Keep last 20 messages per session
 
 export async function POST(req: NextRequest) {
-  const { message, sessionId, isVoice = true, personality, interactionMode = 'plan' } = await req.json();
+  const { message, sessionId = 'default', isVoice = true, personality, interactionMode = 'plan', model } = await req.json();
+
+  // Update model if specified
+  if (model && MODEL_MAP[model]) {
+    currentModel = model;
+    console.log('[Chat API] Model set to:', model);
+  }
 
   // Convert personality parameters to API config if provided
   const personalityConfig = personality
@@ -43,106 +57,68 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
   }
 
-  // Check if gateway is available in this environment
-  const gatewayUnavailable = IS_VERCEL && GATEWAY_URL.includes('localhost');
-  
-  if (gatewayUnavailable || !GATEWAY_TOKEN) {
-    // Return demo response instead of error
-    const demoReply = DEMO_RESPONSES[Math.floor(Math.random() * DEMO_RESPONSES.length)];
+  // Check for Anthropic API key
+  if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ 
-      reply: demoReply,
-      demo: true,
-      reason: gatewayUnavailable ? 'gateway_unavailable' : 'no_token'
+      reply: 'Anthropic API key not configured. Please add ANTHROPIC_API_KEY to your environment variables.',
+      error: true 
     });
   }
 
   try {
-    // Build input with personality modifiers and interaction mode
-    let input = isVoice ? VOICE_INSTRUCTIONS + message : message;
+    // Build input with voice instructions if needed
+    let userMessage = isVoice ? VOICE_INSTRUCTIONS + message : message;
+    
+    // Add personality modifiers
     if (personalityConfig?.systemModifiers) {
-      input = `[Style: ${personalityConfig.systemModifiers}]\n\n${input}`;
+      userMessage = `[Style: ${personalityConfig.systemModifiers}]\n\n${userMessage}`;
     }
     
     // Add interaction mode context
     const modeContext = interactionMode === 'plan' 
       ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions. Before taking any action, ask for confirmation and include [MODE:execute] in your response when switching to execute mode.'
       : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions. When done or switching back to planning, include [MODE:plan] in your response.';
-    input = input + modeContext;
+    userMessage = userMessage + modeContext;
 
-    // Model switching is now handled by the separate /api/model endpoint
+    // Get or create conversation history for this session
+    if (!conversationHistory.has(sessionId)) {
+      conversationHistory.set(sessionId, []);
+    }
+    const history = conversationHistory.get(sessionId)!;
+    
+    // Add user message to history
+    history.push({ role: 'user', content: userMessage });
+    
+    // Trim history if too long
+    while (history.length > MAX_HISTORY) {
+      history.shift();
+    }
 
-    // Use tools/invoke with sessions_send - more reliable than /v1/responses
-    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-      },
-      body: JSON.stringify({
-        tool: 'sessions_send',
-        args: {
-          label: 'opie-webapp', // Use label-based session for web app (not main session)
-          message: input,
-          timeoutSeconds: 55, // Just under Vercel's 60s limit
-        },
-      }),
+    // Get the Anthropic model name
+    const modelName = MODEL_MAP[currentModel] || MODEL_MAP['sonnet'];
+    console.log('[Chat API] Using model:', modelName);
+
+    // Call Anthropic API directly
+    const response = await anthropic.messages.create({
+      model: modelName,
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      messages: history,
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('Gateway error:', res.status, errorText);
-      return NextResponse.json({ 
-        reply: `Gateway error ${res.status}: ${errorText.slice(0, 200)}`,
-        error: true,
-        debug: { status: res.status, text: errorText.slice(0, 500) }
-      });
-    }
-
-    const data = await res.json();
-    
-    // Debug: log the response structure
-    console.log('[Chat API] Gateway response:', JSON.stringify(data, null, 2).slice(0, 2000));
-    
-    // Handle sessions_send response format
-    let reply = 'No response';
-    
-    if (data.ok && data.result) {
-      // sessions_send returns result.details.reply (preferred) or result.content[].text
-      const result = data.result;
-
-      // Prefer result.details.reply - it's the parsed reply text
-      if (result.details?.reply) {
-        reply = result.details.reply;
-      } else if (result.content && Array.isArray(result.content)) {
-        const textParts = result.content
-          .filter((c: { type?: string }) => c.type === 'text')
-          .map((c: { text?: string }) => c.text)
-          .filter(Boolean);
-        if (textParts.length > 0) {
-          // Content text might be JSON - try to parse and extract reply
-          const text = textParts.join('\n');
-          try {
-            const parsed = JSON.parse(text);
-            reply = parsed.reply || text;
-          } catch {
-            reply = text;
-          }
-        }
-      } else if (result.reply) {
-        reply = result.reply;
-      } else if (result.text) {
-        reply = result.text;
-      } else if (typeof result === 'string') {
-        reply = result;
+    // Extract reply text
+    let reply = '';
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        reply += block.text;
       }
-    } else if (data.error) {
-      console.error('[Chat API] Gateway error:', data.error);
-      reply = `Error: ${data.error.message || 'Unknown error'}`;
     }
-    
-    console.log('[Chat API] Final reply:', reply.slice(0, 500));
-    
+
+    // Add assistant response to history
+    history.push({ role: 'assistant', content: reply });
+
+    console.log('[Chat API] Reply:', reply.slice(0, 200));
+
     // Parse mode indicators from response
     let newMode: 'plan' | 'execute' | null = null;
     if (reply.includes('[MODE:execute]')) {
@@ -152,16 +128,15 @@ export async function POST(req: NextRequest) {
       newMode = 'plan';
       reply = reply.replace(/\[MODE:plan\]/g, '').trim();
     }
-    
-    return NextResponse.json({ reply, mode: newMode });
 
-  } catch (error: any) {
-    console.error('Fetch error:', error);
-    // Return a friendly response instead of 500 error
+    return NextResponse.json({ reply, mode: newMode, model: currentModel });
+
+  } catch (error: unknown) {
+    console.error('Anthropic API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
-      reply: `Connection error: ${error?.message || 'unknown'}`,
-      error: true,
-      debug: { name: error?.name, message: error?.message, cause: error?.cause }
+      reply: `Error: ${errorMessage}`,
+      error: true 
     });
   }
 }
