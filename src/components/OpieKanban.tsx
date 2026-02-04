@@ -396,32 +396,27 @@ export default function OpieKanban(): React.ReactElement {
     }
   }, [conversations.length, createConversation]);
 
-  // Auto-generate title after first exchange
+  // Auto-generate title from first user message
   useEffect(() => {
-    const generateTitle = async () => {
-      if (!activeConversation) return;
-      if (activeConversation.title !== 'New conversation') return;
-      if (activeConversation.messages.length < 2) return;
+    if (!activeConversation) return;
+    if (activeConversation.title !== 'New conversation') return;
+    if (activeConversation.messages.length === 0) return;
 
-      const hasAssistantReply = activeConversation.messages.some(m => m.role === 'assistant');
-      if (!hasAssistantReply) return;
+    const firstUserMsg = activeConversation.messages.find(m => m.role === 'user');
+    if (!firstUserMsg || !firstUserMsg.text) return;
 
-      try {
-        const response = await fetch('/api/chat/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: activeConversation.messages.slice(0, 2) }),
-        });
-        const data = await response.json();
-        if (data.title) {
-          updateTitle(activeConversation.id, data.title);
-        }
-      } catch (error) {
-        console.error('Failed to generate title:', error);
+    // Generate title from first user message (first ~30 chars, trimmed at word boundary)
+    let title = firstUserMsg.text.trim();
+    if (title.length > 35) {
+      title = title.slice(0, 35);
+      const lastSpace = title.lastIndexOf(' ');
+      if (lastSpace > 20) {
+        title = title.slice(0, lastSpace);
       }
-    };
+      title += '...';
+    }
 
-    generateTitle();
+    updateTitle(activeConversation.id, title);
   }, [activeConversation?.messages.length, activeConversation?.id, activeConversation?.title, updateTitle]);
 
   const handleViewChange = useCallback((view: ViewId) => {

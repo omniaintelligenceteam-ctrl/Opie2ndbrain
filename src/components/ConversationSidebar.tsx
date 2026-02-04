@@ -45,12 +45,16 @@ const ConversationItem = memo(function ConversationItem({
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  const [isHovered, setIsHovered] = React.useState(false);
+
   return (
     <div
       onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         ...styles.conversationItem,
-        background: isActive ? 'rgba(102, 126, 234, 0.2)' : 'transparent',
+        background: isActive ? 'rgba(102, 126, 234, 0.2)' : isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
         borderLeft: isActive ? '3px solid #667eea' : '3px solid transparent',
       }}
     >
@@ -73,7 +77,10 @@ const ConversationItem = memo(function ConversationItem({
           e.stopPropagation();
           onDelete();
         }}
-        style={styles.deleteButton}
+        style={{
+          ...styles.deleteButton,
+          opacity: isHovered ? 1 : 0,
+        }}
         title="Delete conversation"
       >
         ×
