@@ -1,67 +1,63 @@
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const API_KEY = process.env.DASHBOARD_API_KEY || process.env.INTERNAL_API_KEY;
-
 export async function POST(req: Request) {
   try {
-    // Verify API key
-    const authHeader = req.headers.get('authorization');
-    const apiKey = authHeader?.replace('Bearer ', '') || req.headers.get('x-api-key');
-    
-    if (API_KEY && apiKey !== API_KEY) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
     const { message, chatHistory, memoryContext } = await req.json();
     
-    // Build full context for the task
-    const fullTask = `Task from Opie2ndbrain (DO IT mode):
+    // Build system prompt with full memory context
+    const systemPrompt = `You are Opie, Wes's voice assistant with full memory access.
 
-User message: ${message}
+Core facts about Wes:
+- Direct, no fluff communication style
+- 2-3 sentences default, expand only when asked
+- "DO IT" means execute immediately
+- Late night worker (10PM-2AM MST)
+- Age 37, Scottsdale AZ (MST no DST)
+- Premier Landscape Lighting + Omnia Light Scape Pro
 
-Recent chat context:
-${(chatHistory || []).map((m: any) => `${m.role}: ${m.content}`).join('\n')}
+Current memory context:
+${memoryContext || 'Loading from memory server...'}
 
-Memory context:
-${memoryContext || 'No additional memory context'}
+Recent chat context for this conversation:
+${(chatHistory || []).slice(-5).map((m: any) => `${m.role}: ${m.content}`).join('\n')}
 
-Execute this task with full workspace access.`;
+You have full workspace access through OpenClaw. When asked to perform actions (write files, run commands, search, etc.), do them directly.`;
 
-    // Spawn a session via OpenClaw
-    const spawnRes = await fetch('http://143.198.128.209:18789/v1/sessions/spawn', {
+    // Call Anthropic API directly with full context
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        agentId: 'main',
-        task: fullTask,
-        deliver: true, // Result will be delivered back
-        label: `opie-doit-${Date.now()}`,
-        timeoutSeconds: 300,
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: message }],
+        stream: true,
       }),
     });
 
-    if (!spawnRes.ok) {
-      const error = await spawnRes.text();
-      throw new Error(`Spawn failed: ${error}`);
+    if (!anthropicRes.ok) {
+      const error = await anthropicRes.text();
+      throw new Error(`Anthropic error: ${error}`);
     }
 
-    const spawnData = await spawnRes.json();
-    
-    // Return the session info - the result will come via message/callback
-    return Response.json({
-      success: true,
-      sessionKey: spawnData.sessionKey,
-      message: 'Task spawned. Result will be delivered.',
-      spawnedAt: new Date().toISOString(),
+    // Stream response back to client
+    return new Response(anthropicRes.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
     });
     
   } catch (error) {
-    console.error('DO IT mode error:', error);
+    console.error('Execute mode error:', error);
     return Response.json(
-      { error: 'Failed to spawn session', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to execute', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 503 }
     );
   }
