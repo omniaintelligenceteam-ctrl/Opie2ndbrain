@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS, getToolsPrompt } from '@/lib/tools';
-import { readMemory, getMemoryContext } from '@/lib/memorySync';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -326,6 +326,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
 export async function POST(req: NextRequest) {
   const {
     message,
+    messages: conversationHistory,
     sessionId = 'default',
     isVoice = true,
     personality,
@@ -358,40 +359,83 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
-  // Add mode context to user message
-  userMessage += interactionMode === 'plan'
-    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
-    : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
-
-  // Add memory context from Supabase for DO IT mode
-  let memoryFromSupabase = memoryContext;
+  // DO IT MODE: Spawn to G (me) via OpenClaw for full tool access
   if (interactionMode === 'execute') {
+    const requestId = crypto.randomUUID();
+    
     try {
-      const supabaseMemory = await getMemoryContext(10);
-      if (supabaseMemory) {
-        memoryFromSupabase = memoryContext 
-          ? `${memoryContext}\n\n---\n\nRecent memories:\n${supabaseMemory}`
-          : supabaseMemory;
+      // 1. Write pending task to Supabase
+      await supabaseAdmin.from('opie_requests').insert({
+        request_id: requestId,
+        user_message: message,
+        status: 'pending',
+        source: 'web_app',
+        created_at: new Date().toISOString(),
+      });
+      
+      // 2. Build task with conversation context
+      let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
+      
+      if (conversationHistory && conversationHistory.length > 0) {
+        const context = conversationHistory
+          .slice(-5) // Last 5 messages
+          .map((m: any) => `${m.role}: ${m.text || m.content || ''}`)
+          .join('\n');
+        taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
       }
-    } catch (e) {
-      console.error('[Chat] Failed to load memory from Supabase:', e);
+      
+      taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
+      
+      // Spawn task to me (agent:main)
+      const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+        },
+        body: JSON.stringify({
+          tool: 'sessions_spawn',
+          args: {
+            task: taskMessage,
+            label: `webapp:${requestId}`,
+            timeoutSeconds: 180,
+            cleanup: 'keep',
+          },
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      
+      const spawnData = await spawnRes.json();
+      
+      // 3. Update with session info
+      if (spawnData.ok && spawnData.result?.sessionKey) {
+        await supabaseAdmin.from('opie_requests').update({
+          session_id: spawnData.result.sessionKey,
+        }).eq('request_id', requestId);
+      }
+      
+      // 4. Return async response for polling
+      return Response.json({
+        mode: 'async',
+        request_id: requestId,
+        poll_url: `/api/chat/poll?request_id=${requestId}`,
+        message: 'Task sent to G - checking for result...',
+      });
+      
+    } catch (error) {
+      console.error('[Chat] DO IT spawn error:', error);
+      return Response.json({ 
+        error: 'Failed to spawn task',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
     }
   }
 
-  if (interactionMode === 'execute' && memoryFromSupabase) {
-    userMessage += `\n\n[MEMORY]\n${memoryFromSupabase}`;
-  }
+  // PLAN MODE: Fast streaming via Ollama
+  // Add mode context
+  userMessage += '\n[MODE: Plan] Discuss ideas but do NOT execute actions.';
 
   const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
-
-  // Use Ollama/Kimi - with tools support for DO IT mode
-  if (interactionMode === 'execute') {
-    // DO IT mode: Check for tool calls, execute them, then stream final response
-    const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
-    return createStreamResponse(generator);
-  } else {
-    // Plan mode: Simple streaming
-    const generator = streamOllama(messages, MODELS.kimi.model);
-    return createStreamResponse(generator);
-  }
+  const generator = streamOllama(messages, MODELS.kimi.model);
+  return createStreamResponse(generator);
 }
