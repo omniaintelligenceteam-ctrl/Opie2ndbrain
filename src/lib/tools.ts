@@ -132,6 +132,88 @@ async function shellExec(args: { command: string; cwd?: string }) {
   }
 }
 
+// Read file from GitHub
+async function githubReadFile(args: { owner: string; repo: string; path: string; branch?: string }) {
+  const { owner, repo, path, branch = 'main' } = args;
+  const githubToken = process.env.GITHUB_TOKEN;
+  
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+    };
+    if (githubToken) {
+      headers['Authorization'] = `token ${githubToken}`;
+    }
+    
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      { headers }
+    );
+    
+    if (!response.ok) {
+      return { error: `GitHub API error: ${response.status}` };
+    }
+    
+    const data = await response.json();
+    
+    if (data.type !== 'file') {
+      return { error: 'Path is not a file (it may be a directory)' };
+    }
+    
+    // Content is base64 encoded
+    const content = Buffer.from(data.content, 'base64').toString('utf-8');
+    return { 
+      content: content.slice(0, 10000), // Limit to 10KB
+      name: data.name,
+      path: data.path,
+      size: data.size,
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'GitHub request failed' };
+  }
+}
+
+// List directory in GitHub repo
+async function githubListRepo(args: { owner: string; repo: string; path?: string; branch?: string }) {
+  const { owner, repo, path = '', branch = 'main' } = args;
+  const githubToken = process.env.GITHUB_TOKEN;
+  
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+    };
+    if (githubToken) {
+      headers['Authorization'] = `token ${githubToken}`;
+    }
+    
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      { headers }
+    );
+    
+    if (!response.ok) {
+      return { error: `GitHub API error: ${response.status}` };
+    }
+    
+    const data = await response.json();
+    
+    if (!Array.isArray(data)) {
+      return { error: 'Path is a file, not a directory' };
+    }
+    
+    return {
+      files: data
+        .filter((item: any) => item.type === 'file')
+        .map((item: any) => ({ name: item.name, path: item.path, size: item.size })),
+      directories: data
+        .filter((item: any) => item.type === 'dir')
+        .map((item: any) => ({ name: item.name, path: item.path })),
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'GitHub request failed' };
+  }
+}
+
 export const TOOLS: Record<string, Tool> = {
   web_search: {
     name: 'web_search',
@@ -194,6 +276,36 @@ export const TOOLS: Record<string, Tool> = {
       required: ['command'],
     },
     execute: shellExec,
+  },
+  github_read_file: {
+    name: 'github_read_file',
+    description: 'Read a file from a GitHub repository. Useful for reviewing code in your repos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string', description: 'Repository owner (e.g., "omniaintelligenceteam-ctrl")' },
+        repo: { type: 'string', description: 'Repository name (e.g., "Omnia-Light-Scape-Pro-V3")' },
+        path: { type: 'string', description: 'File path within repo (e.g., "src/components/Hero.tsx")' },
+        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+      },
+      required: ['owner', 'repo', 'path'],
+    },
+    execute: githubReadFile,
+  },
+  github_list_repo: {
+    name: 'github_list_repo',
+    description: 'List files and directories in a GitHub repository path.',
+    parameters: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string', description: 'Repository owner' },
+        repo: { type: 'string', description: 'Repository name' },
+        path: { type: 'string', description: 'Directory path (default: root)', default: '' },
+        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+      },
+      required: ['owner', 'repo'],
+    },
+    execute: githubListRepo,
   },
 };
 
