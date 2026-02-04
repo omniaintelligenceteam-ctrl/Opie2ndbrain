@@ -10,9 +10,9 @@ export const maxDuration = 120;
 // Provider Configuration
 type Provider = 'openclaw' | 'ollama' | 'anthropic';
 
-const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL;
-const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN;
-const OPENCLAW_AVAILABLE = !!(OPENCLAW_GATEWAY_URL && OPENCLAW_GATEWAY_TOKEN);
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://143.198.128.209:3457';
+const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+const OPENCLAW_AVAILABLE = true; // Bridge is always available
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
