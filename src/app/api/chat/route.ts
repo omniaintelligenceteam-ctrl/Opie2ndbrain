@@ -251,29 +251,24 @@ export async function POST(req: NextRequest) {
   let userMessage = message;
   if (isVoice) userMessage = VOICE_INSTRUCTIONS + userMessage;
 
-  const modeContext = interactionMode === 'plan'
-    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
-    : '\n[MODE: DO IT] Execute actions decisively.';
+  // Select system prompt based on mode
+  const DO_IT_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.`;
+  const PLAN_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
 
-  userMessage += modeContext;
+  const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
+
+  // Add mode context to user message
+  userMessage += interactionMode === 'plan'
+    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
+    : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
 
   if (interactionMode === 'execute' && memoryContext) {
     userMessage += `\n\n[MEMORY]\n${memoryContext}`;
   }
 
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage }];
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
 
-  // Use streaming for both Plan and DO IT modes
-  let generator: AsyncGenerator<string>;
-  
-  // Route kimi to Ollama, anthropic to Claude, default to Ollama
-  if (currentModel === 'kimi') {
-    generator = streamOllama(messages, MODELS.kimi.model);
-  } else if (currentProvider === 'anthropic' || ['opus', 'sonnet', 'haiku'].includes(currentModel)) {
-    generator = streamAnthropic(messages, MODELS[currentModel].model, image);
-  } else {
-    generator = streamOllama(messages, MODELS.kimi.model);
-  }
-
+  // Use Ollama/Kimi for both Plan and DO IT modes (always streaming, no async complexity)
+  const generator = streamOllama(messages, MODELS.kimi.model);
   return createStreamResponse(generator);
 }
