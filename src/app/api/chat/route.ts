@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -226,21 +228,88 @@ async function callOllama(
 // Anthropic
 // ============================================================================
 
+// Helper to read image file and convert to base64
+async function readImageAsBase64(imagePath: string): Promise<{ base64: string; mediaType: string } | null> {
+  try {
+    if (!existsSync(imagePath)) {
+      console.error('[Chat API] Image file not found:', imagePath);
+      return null;
+    }
+
+    const buffer = await readFile(imagePath);
+    const base64 = buffer.toString('base64');
+
+    // Determine media type from extension
+    const ext = imagePath.split('.').pop()?.toLowerCase();
+    const mediaTypes: Record<string, string> = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+    };
+    const mediaType = mediaTypes[ext || ''] || 'image/png';
+
+    return { base64, mediaType };
+  } catch (error) {
+    console.error('[Chat API] Failed to read image:', error);
+    return null;
+  }
+}
+
 async function callAnthropic(
   messages: Array<{role: 'user' | 'assistant', content: string}>,
-  model: string
+  model: string,
+  imagePath?: string
 ): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  console.log('[Chat API] Anthropic: calling with model:', model);
+  console.log('[Chat API] Anthropic: calling with model:', model, imagePath ? '(with image)' : '');
+
+  // Build messages array, potentially with image content
+  const apiMessages: Anthropic.MessageParam[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const isLastUserMessage = msg.role === 'user' && i === messages.length - 1;
+
+    if (isLastUserMessage && imagePath) {
+      // Include image in the last user message
+      const imageData = await readImageAsBase64(imagePath);
+      if (imageData) {
+        apiMessages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: imageData.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                data: imageData.base64,
+              },
+            },
+            {
+              type: 'text',
+              text: msg.content || 'What do you see in this image?',
+            },
+          ],
+        });
+      } else {
+        // Fallback to text-only if image read fails
+        apiMessages.push({ role: msg.role, content: msg.content });
+      }
+    } else {
+      apiMessages.push({ role: msg.role, content: msg.content });
+    }
+  }
 
   const response = await anthropic.messages.create({
     model: model,
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
-    messages: messages,
+    messages: apiMessages,
   });
 
   let reply = '';
@@ -271,6 +340,7 @@ export async function POST(req: NextRequest) {
     model,
     provider,  // NEW: explicit provider selection
     memoryContext,  // Memory context for DO IT mode
+    image,  // Image file path for vision
   } = await req.json();
 
   // Update provider if explicitly specified
@@ -361,7 +431,7 @@ export async function POST(req: NextRequest) {
       history.push({ role: 'user', content: userMessage });
       while (history.length > MAX_HISTORY) history.shift();
 
-      reply = await callAnthropic(history, MODELS[currentModel].model);
+      reply = await callAnthropic(history, MODELS[currentModel].model, image);
       history.push({ role: 'assistant', content: reply });
       usedProvider = 'anthropic';
       usedModel = MODELS[currentModel].model;

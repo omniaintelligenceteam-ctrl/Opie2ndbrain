@@ -759,30 +759,55 @@ export default function FloatingChat({
     return () => clearInterval(checkWindow);
   }, [isDetached]);
 
-  // Handle image selection
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
+  // Upload image to server and return path
+  const uploadImage = async (file: File): Promise<string | null> => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file');
-      return;
+      return null;
     }
-    
+
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image must be less than 5MB');
-      return;
+      return null;
     }
-    
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPendingImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Upload failed');
+      }
+
+      const data = await res.json();
+      return data.path;
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      alert('Failed to upload image');
+      return null;
+    }
+  };
+
+  // Handle image selection
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const path = await uploadImage(file);
+    if (path) {
+      // Also create a preview URL for display
+      const previewUrl = URL.createObjectURL(file);
+      setPendingImage(JSON.stringify({ path, preview: previewUrl }));
+    }
+
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -790,32 +815,80 @@ export default function FloatingChat({
   };
 
   // Handle paste for images
-  const handlePaste = (e: React.ClipboardEvent) => {
+  const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
-    
+
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item.type.startsWith('image/')) {
         e.preventDefault();
         const file = item.getAsFile();
         if (!file) continue;
-        
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          alert('Image must be less than 5MB');
-          return;
+
+        const path = await uploadImage(file);
+        if (path) {
+          const previewUrl = URL.createObjectURL(file);
+          setPendingImage(JSON.stringify({ path, preview: previewUrl }));
         }
-        
-        // Convert to base64
-        const reader = new FileReader();
-        reader.onload = () => {
-          setPendingImage(reader.result as string);
-        };
-        reader.readAsDataURL(file);
         return;
       }
     }
+  };
+
+  // Handle drag and drop
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.type.startsWith('image/')) return;
+
+    const path = await uploadImage(file);
+    if (path) {
+      const previewUrl = URL.createObjectURL(file);
+      setPendingImage(JSON.stringify({ path, preview: previewUrl }));
+    }
+  };
+
+  // Extract image path from pendingImage JSON
+  const getImagePath = (): string | undefined => {
+    if (!pendingImage) return undefined;
+    try {
+      const parsed = JSON.parse(pendingImage);
+      return parsed.path;
+    } catch {
+      return pendingImage; // Fallback to raw value if not JSON
+    }
+  };
+
+  // Clean up preview URL when clearing image
+  const clearPendingImage = () => {
+    if (pendingImage) {
+      try {
+        const parsed = JSON.parse(pendingImage);
+        if (parsed.preview) URL.revokeObjectURL(parsed.preview);
+      } catch {}
+    }
+    setPendingImage(null);
   };
 
   // Handle keyboard
@@ -823,8 +896,8 @@ export default function FloatingChat({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim() || pendingImage) {
-        onSend(input, pendingImage || undefined);
-        setPendingImage(null);
+        onSend(input, getImagePath(), interactionMode);
+        clearPendingImage();
         setHasInteracted(true);
       }
     }
@@ -836,8 +909,8 @@ export default function FloatingChat({
   // Handle send with local text, optional image, and interaction mode
   const handleSendClick = () => {
     if (input.trim() || pendingImage) {
-      onSend(input, pendingImage || undefined, interactionMode);
-      setPendingImage(null);
+      onSend(input, getImagePath(), interactionMode);
+      clearPendingImage();
       setHasInteracted(true);
     }
   };
@@ -977,12 +1050,16 @@ export default function FloatingChat({
       <style>{animationStyles}</style>
       <div
         ref={containerRef}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           ...styles.chatContainer,
           ...(isFullscreen || isMobile ? styles.chatFullscreen : {
             width: size.width,
             height: size.height,
           }),
+          ...(isDragging ? styles.chatContainerDragging : {}),
         }}
       >
         {/* Resize Handle */}
@@ -1217,9 +1294,20 @@ export default function FloatingChat({
         {/* Pending Image Preview */}
         {pendingImage && (
           <div style={styles.pendingImageContainer}>
-            <img src={pendingImage} alt="Pending" style={styles.pendingImage} />
+            <img
+              src={(() => {
+                try {
+                  const parsed = JSON.parse(pendingImage);
+                  return parsed.preview || pendingImage;
+                } catch {
+                  return pendingImage;
+                }
+              })()}
+              alt="Pending"
+              style={styles.pendingImage}
+            />
             <button
-              onClick={() => setPendingImage(null)}
+              onClick={clearPendingImage}
               style={styles.removePendingImage}
               title="Remove image"
             >
@@ -1557,6 +1645,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: 0,
     width: '100%',
     height: '100%',
+  },
+  chatContainerDragging: {
+    border: '2px dashed #667eea',
+    background: 'rgba(102, 126, 234, 0.1)',
   },
 
   // Resize Handle
