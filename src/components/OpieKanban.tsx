@@ -775,8 +775,17 @@ export default function OpieKanban(): React.ReactElement {
 
               try {
                 const parsed = JSON.parse(data);
+
+                // Check for error response first
+                if (parsed.error) {
+                  fullText = `Error: ${parsed.error}`;
+                  setMessages(prev => prev.map(m =>
+                    m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  ));
+                  console.error('[Chat] SSE error:', parsed.error);
+                }
                 // Anthropic SSE format: content_block_delta with text
-                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
                   fullText += parsed.delta.text;
                   setMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
