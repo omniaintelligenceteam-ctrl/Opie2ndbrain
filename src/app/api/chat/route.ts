@@ -201,8 +201,12 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
     });
 
     for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.text) {
-        yield `data: ${JSON.stringify({ choices: [{ delta: { content: event.delta.text } }] })}\n\n`;
+      if (event.type === 'content_block_delta') {
+        // Handle text delta - need to check the delta type
+        const delta = event.delta as any;
+        if (delta && typeof delta.text === 'string') {
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: delta.text } }] })}\n\n`;
+        }
       }
     }
 
