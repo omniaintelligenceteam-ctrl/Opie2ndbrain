@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
-    const openclawUrl = process.env.OPENCLAW_URL || 'http://143.198.128.209:3000';
+    const openclawUrl = process.env.OPENCLAW_URL || 'http://143.198.128.209:3457';
     const openclawToken = process.env.OPENCLAW_TOKEN;
     
     const headers: Record<string, string> = {
