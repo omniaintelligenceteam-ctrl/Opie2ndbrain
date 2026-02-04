@@ -281,7 +281,10 @@ export async function POST(req: NextRequest) {
       
       if (insertError) {
         console.error('[Chat] Supabase insert error:', insertError);
-        return Response.json({ error: 'Database error' }, { status: 500 });
+        return Response.json({ 
+          error: 'Database error', 
+          details: insertError.message || insertError.code || 'Unknown' 
+        }, { status: 500 });
       }
       
       // Spawn OpenClaw session
