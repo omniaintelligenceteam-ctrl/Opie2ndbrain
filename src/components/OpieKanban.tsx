@@ -102,6 +102,43 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// Poll for async response from Supabase (DO IT mode)
+async function pollForAsyncResponse(
+  pollUrl: string,
+  userMsgId: string,
+  assistantMsgId: string
+): Promise<string> {
+  const maxAttempts = 60; // 60 * 2s = 120s max
+  const pollInterval = 2000; // 2 seconds
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(pollUrl);
+      if (!res.ok) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        continue;
+      }
+      
+      const data = await res.json();
+      
+      if (data.status === 'complete' && data.response) {
+        return data.response;
+      }
+      else if (data.status === 'error') {
+        return `Error: ${data.error || 'Unknown error'}`;
+      }
+      // else pending, continue polling
+      
+    } catch (e) {
+      console.error('[Poll] Error:', e);
+    }
+    
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+  
+  return 'Error: Timed out waiting for response (120s)';
+}
+
 // Enhanced Kanban Column Component with auto-expansion and scrollable functionality for ALL columns
 function KanbanColumn({ 
   column, 
@@ -822,8 +859,17 @@ export default function OpieKanban(): React.ReactElement {
         // Regular JSON response
         const data = await res.json();
 
+        // Check for async mode (DO IT)
+        if (data.mode === 'async' && data.poll_url) {
+          // Start polling for async response
+          reply = await pollForAsyncResponse(
+            data.poll_url, 
+            userMessage.id,
+            assistantMsgId || generateMessageId()
+          );
+        }
         // Extract reply - check for valid string
-        if (data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
+        else if (data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
           reply = data.reply;
         } else if (data.error) {
           reply = `Sorry, something went wrong: ${data.error === true ? 'Unknown error' : data.error}`;
