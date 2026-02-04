@@ -618,15 +618,18 @@ export default function OpieKanban(): React.ReactElement {
       ));
     }, 300);
 
-    // Create abort controller for this request (allows user to interrupt while thinking)
+    // Create abort controller for this request with 120s timeout
     abortControllerRef.current = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortControllerRef.current?.abort();
+    }, 120_000); // 120 second timeout
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMsg || 'What do you see in this image?', 
+        body: JSON.stringify({
+          message: userMsg || 'What do you see in this image?',
           sessionId,
           personality: personalityParams,
           image: image, // Include image in API call
@@ -634,19 +637,41 @@ export default function OpieKanban(): React.ReactElement {
         }),
         signal: abortControllerRef.current.signal,
       });
+
+      clearTimeout(timeoutId);
+
+      // Handle non-ok responses with clear error message
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Chat] HTTP error:', res.status, errorText.slice(0, 200));
+        throw new Error(`Server error (${res.status}): ${errorText.slice(0, 100)}`);
+      }
+
       const data = await res.json();
-      const reply = data.reply || (data.error ? 'Sorry, something went wrong.' : 'Hmm, I didn\'t get a response. Try again?');
-      
+
+      // Extract reply - check for valid string
+      let reply: string | null = null;
+      if (data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
+        reply = data.reply;
+      } else if (data.error) {
+        reply = `Sorry, something went wrong: ${data.error === true ? 'Unknown error' : data.error}`;
+      }
+
+      // If still no reply, show helpful message
+      if (!reply) {
+        reply = 'Hmm, I didn\'t get a response. The server may be busy - please try again.';
+      }
+
       // Update interaction mode if AI signaled a change
       if (data.mode && data.mode !== interactionMode) {
         setInteractionMode(data.mode);
       }
-      
+
       // Update user message to delivered
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
       ));
-      
+
       // Add assistant response
       const assistantMessage: ChatMessage = {
         id: generateMessageId(),
@@ -654,31 +679,56 @@ export default function OpieKanban(): React.ReactElement {
         text: reply,
         timestamp: new Date(),
       };
-      
+
       setMessages(prev => [...prev, assistantMessage]);
       setIsLoading(false);
-      
+
       // Mark user message as read once assistant responds
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'read' as const } : m
       ));
-      
-      await speak(reply);
+
+      // Only call TTS if we have a valid, non-error reply
+      if (reply && !data.error) {
+        await speak(reply);
+      }
     } catch (err: any) {
+      clearTimeout(timeoutId);
+
       // If user interrupted while thinking, don't show error - just mark as cancelled
       if (err?.name === 'AbortError') {
+        // Check if it was a timeout vs user cancel
+        const isTimeout = err?.message?.includes('timeout') || !abortControllerRef.current;
         setMessages(prev => prev.map(m =>
-          m.id === userMessage.id ? { ...m, status: 'error' as const, text: userMsg + ' (cancelled - adding more context...)' } : m
+          m.id === userMessage.id ? {
+            ...m,
+            status: 'error' as const,
+            text: userMsg + (isTimeout ? ' (request timed out after 120s)' : ' (cancelled)')
+          } : m
         ));
         setIsLoading(false);
+
+        // If timeout, show error message to user
+        if (isTimeout) {
+          const timeoutMessage: ChatMessage = {
+            id: generateMessageId(),
+            role: 'assistant',
+            text: 'Sorry, the request timed out. The server might be busy - please try again.',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, timeoutMessage]);
+        }
         return;
       }
 
-      // Add error response for actual errors
+      // Add error response with actual error message
+      const errorText = err?.message || 'Unknown error';
+      console.error('[Chat] Error:', errorText);
+
       const errorMessage: ChatMessage = {
         id: generateMessageId(),
         role: 'assistant',
-        text: 'Sorry, something went wrong. Please try again.',
+        text: `Sorry, something went wrong: ${errorText.slice(0, 150)}`,
         timestamp: new Date(),
       };
 

@@ -1,17 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
+import Anthropic from '@anthropic-ai/sdk';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // 120 seconds for OpenClaw
+export const maxDuration = 120; // 120 seconds max
 
-// OpenClaw Gateway configuration (from env - never log these)
+// ============================================================================
+// Provider Configuration
+// ============================================================================
+
+type Provider = 'openclaw' | 'ollama' | 'anthropic';
+
+// OpenClaw Gateway configuration
 const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL;
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN;
+const OPENCLAW_AVAILABLE = !!(OPENCLAW_GATEWAY_URL && OPENCLAW_GATEWAY_TOKEN);
 
-// Timeout for gateway requests (120 seconds)
-const GATEWAY_TIMEOUT_MS = 120_000;
+// Timeout for requests (120 seconds)
+const REQUEST_TIMEOUT_MS = 120_000;
+
+// Initialize Anthropic client
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// ============================================================================
+// Model Configurations
+// ============================================================================
+
+const MODELS = {
+  kimi: {
+    provider: 'ollama' as const,
+    model: 'kimi-k2.5:cloud',  // Updated: use cloud variant
+  },
+  opus: {
+    provider: 'anthropic' as const,
+    model: 'claude-opus-4-5-20250514',
+  },
+  sonnet: {
+    provider: 'anthropic' as const,
+    model: 'claude-sonnet-4-20250514',
+  },
+  haiku: {
+    provider: 'anthropic' as const,
+    model: 'claude-3-5-haiku-20241022',
+  },
+};
+
+type ModelAlias = keyof typeof MODELS;
+
+// Default settings
+let currentModel: ModelAlias = 'sonnet';
+let currentProvider: Provider = OPENCLAW_AVAILABLE ? 'openclaw' : 'anthropic';
+
+// ============================================================================
+// Prompts
+// ============================================================================
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -26,68 +72,32 @@ const SYSTEM_PROMPT = `You are Opie, a helpful AI assistant. You're friendly, co
 You help with tasks, answer questions, and have natural conversations.
 Keep responses focused and helpful.`;
 
-/**
- * Call OpenClaw Gateway using tools/invoke with sessions_send
- *
- * REQUEST FORMAT TO OPENCLAW:
- * ---------------------------
- * POST /tools/invoke
- * Headers:
- *   Authorization: Bearer <OPENCLAW_GATEWAY_TOKEN>
- *   Content-Type: application/json
- *
- * Body:
- * {
- *   "tool": "sessions_send",
- *   "args": {
- *     "sessionKey": "agent:main:main",
- *     "message": "<full user message with system context>",
- *     "timeoutSeconds": 115
- *   }
- * }
- *
- * EXPECTED RESPONSE:
- * ------------------
- * {
- *   "ok": true,
- *   "result": {
- *     "details": {
- *       "runId": "...",
- *       "status": "ok",
- *       "reply": "The actual AI response text",
- *       "sessionKey": "agent:main:main"
- *     },
- *     "content": [
- *       { "type": "text", "text": "{...json with reply...}" }
- *     ]
- *   }
- * }
- *
- * OPENCLAW CONFIG REQUIRED:
- * -------------------------
- * 1. Gateway must be running with auth enabled:
- *    clawdbot gateway --bind lan --port 18789
- *
- * 2. clawdbot.json should have:
- *    {
- *      "gateway": {
- *        "bind": "lan",
- *        "auth": { "mode": "password", "token": "<your-token>" }
- *      }
- *    }
- *
- * 3. Ensure firewall allows port 18789 (or your configured port)
- */
-async function callOpenClawGateway(message: string): Promise<string> {
+// Conversation history for direct API calls
+const conversationHistory: Map<string, Array<{role: 'user' | 'assistant', content: string}>> = new Map();
+const MAX_HISTORY = 20;
+
+// ============================================================================
+// OpenClaw Gateway
+// ============================================================================
+
+async function callOpenClaw(
+  messages: Array<{role: 'user' | 'assistant', content: string}>,
+  sessionId: string
+): Promise<string> {
   if (!OPENCLAW_GATEWAY_URL || !OPENCLAW_GATEWAY_TOKEN) {
-    throw new Error('OpenClaw Gateway not configured. Set OPENCLAW_GATEWAY_URL and OPENCLAW_GATEWAY_TOKEN.');
+    throw new Error('OpenClaw not configured. Set OPENCLAW_GATEWAY_URL and OPENCLAW_GATEWAY_TOKEN.');
+  }
+
+  const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+  if (!lastUserMessage) {
+    throw new Error('No user message found');
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    console.log('[Chat API] Calling OpenClaw Gateway (non-streaming, 120s timeout)');
+    console.log('[Chat API] OpenClaw: calling /tools/invoke (sessions_send)');
 
     const response = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
       method: 'POST',
@@ -99,9 +109,9 @@ async function callOpenClawGateway(message: string): Promise<string> {
       body: JSON.stringify({
         tool: 'sessions_send',
         args: {
-          sessionKey: 'agent:main:main',
-          message: message,
-          timeoutSeconds: 115, // Slightly under our 120s timeout
+          sessionKey: `opie:chat:${sessionId}`,
+          message: lastUserMessage.content,
+          timeoutSeconds: 115,
         },
       }),
       signal: controller.signal,
@@ -110,26 +120,21 @@ async function callOpenClawGateway(message: string): Promise<string> {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Chat API] Gateway HTTP error:', response.status);
-      throw new Error(`Gateway error ${response.status}: ${errorText.slice(0, 200)}`);
+      const errorBody = await response.text();
+      console.error('[Chat API] OpenClaw HTTP error:', response.status, errorBody.slice(0, 300));
+      throw new Error(`OpenClaw error ${response.status}: ${errorBody.slice(0, 300)}`);
     }
 
     const data = await response.json();
+    console.log('[Chat API] OpenClaw response ok:', data.ok, 'hasResult:', !!data.result);
 
-    // Log response structure (without sensitive data)
-    console.log('[Chat API] Gateway response ok:', data.ok, 'hasResult:', !!data.result);
-
-    // Extract reply from response
     if (data.ok && data.result) {
       const result = data.result;
 
-      // Prefer result.details.reply - it's the parsed reply text
       if (result.details?.reply) {
         return result.details.reply;
       }
 
-      // Fallback: extract from content array
       if (result.content && Array.isArray(result.content)) {
         const textParts = result.content
           .filter((c: { type?: string }) => c.type === 'text')
@@ -138,7 +143,6 @@ async function callOpenClawGateway(message: string): Promise<string> {
 
         if (textParts.length > 0) {
           const text = textParts.join('\n');
-          // Content might be JSON - try to parse and extract reply
           try {
             const parsed = JSON.parse(text);
             return parsed.reply || text;
@@ -148,28 +152,114 @@ async function callOpenClawGateway(message: string): Promise<string> {
         }
       }
 
-      // Other fallbacks
       if (result.reply) return result.reply;
       if (result.text) return result.text;
       if (typeof result === 'string') return result;
     }
 
     if (data.error) {
-      console.error('[Chat API] Gateway error:', data.error.message || data.error);
-      throw new Error(data.error.message || 'Gateway returned an error');
+      throw new Error(`OpenClaw error: ${data.error.message || JSON.stringify(data.error).slice(0, 300)}`);
     }
 
-    throw new Error('Gateway returned empty response');
+    throw new Error('OpenClaw returned empty response - check gateway logs');
 
   } catch (error: unknown) {
     clearTimeout(timeoutId);
-
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Gateway request timed out after 120 seconds');
+      throw new Error('OpenClaw request timed out after 120 seconds');
     }
     throw error;
   }
 }
+
+// ============================================================================
+// Ollama (Kimi)
+// ============================================================================
+
+async function callOllama(
+  messages: Array<{role: string, content: string}>,
+  model: string
+): Promise<string> {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    throw new Error('OLLAMA_API_KEY not configured');
+  }
+
+  console.log('[Chat API] Ollama: calling with model:', model);
+
+  const response = await fetch('https://ollama.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ollamaKey}`,
+    },
+    body: JSON.stringify({
+      model: model,
+      stream: false,  // Explicitly disable streaming
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages,
+      ],
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error('[Chat API] Ollama HTTP error:', response.status, errorBody.slice(0, 300));
+    throw new Error(`Ollama error ${response.status}: ${errorBody.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  console.log('[Chat API] Ollama response structure:', Object.keys(data));
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content || content.trim() === '') {
+    console.error('[Chat API] Ollama returned empty content. Full response:', JSON.stringify(data).slice(0, 500));
+    throw new Error('Ollama returned empty response - model may be unavailable');
+  }
+
+  return content.trim();
+}
+
+// ============================================================================
+// Anthropic
+// ============================================================================
+
+async function callAnthropic(
+  messages: Array<{role: 'user' | 'assistant', content: string}>,
+  model: string
+): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+
+  console.log('[Chat API] Anthropic: calling with model:', model);
+
+  const response = await anthropic.messages.create({
+    model: model,
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT,
+    messages: messages,
+  });
+
+  let reply = '';
+  for (const block of response.content) {
+    if (block.type === 'text') {
+      reply += block.text;
+    }
+  }
+
+  if (!reply || reply.trim() === '') {
+    throw new Error('Anthropic returned empty response');
+  }
+
+  return reply;
+}
+
+// ============================================================================
+// Main API Handler
+// ============================================================================
 
 export async function POST(req: NextRequest) {
   const {
@@ -178,53 +268,93 @@ export async function POST(req: NextRequest) {
     isVoice = true,
     personality,
     interactionMode = 'plan',
+    model,
+    provider,  // NEW: explicit provider selection
   } = await req.json();
+
+  // Update provider if explicitly specified
+  if (provider && ['openclaw', 'ollama', 'anthropic'].includes(provider)) {
+    currentProvider = provider as Provider;
+    console.log('[Chat API] Provider set to:', currentProvider);
+  }
+
+  // Update model if specified
+  if (model && model in MODELS) {
+    currentModel = model as ModelAlias;
+    console.log('[Chat API] Model set to:', currentModel);
+  }
 
   const personalityConfig = personality
     ? parametersToApiConfig(personality as PersonalityParameters)
     : null;
 
   if (!message) {
-    return NextResponse.json({ reply: 'No message provided' }, { status: 400 });
-  }
-
-  // Check gateway configuration (don't log the actual values)
-  if (!OPENCLAW_GATEWAY_URL || !OPENCLAW_GATEWAY_TOKEN) {
-    console.error('[Chat API] Missing OPENCLAW_GATEWAY_URL or OPENCLAW_GATEWAY_TOKEN');
-    return NextResponse.json({
-      reply: 'OpenClaw Gateway not configured. Please set OPENCLAW_GATEWAY_URL and OPENCLAW_GATEWAY_TOKEN environment variables.',
-      error: true,
-      model: 'openclaw'
-    });
+    return NextResponse.json({ reply: 'No message provided', error: true }, { status: 400 });
   }
 
   try {
     // Build the full message with context
     let userMessage = message;
 
-    // Add voice instructions if voice mode
     if (isVoice) {
       userMessage = VOICE_INSTRUCTIONS + userMessage;
     }
 
-    // Add personality modifiers
     if (personalityConfig?.systemModifiers) {
       userMessage = `[Style: ${personalityConfig.systemModifiers}]\n\n${userMessage}`;
     }
 
-    // Add interaction mode context
     const modeContext = interactionMode === 'plan'
       ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions.'
       : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions.';
     userMessage = userMessage + modeContext;
 
-    // Add system prompt context
-    userMessage = `[System: ${SYSTEM_PROMPT}]\n\n${userMessage}`;
+    let reply: string;
+    let usedProvider: string;
 
-    console.log('[Chat API] Sending to OpenClaw, session:', sessionId, 'mode:', interactionMode);
+    // === Route to selected provider ===
+    if (currentProvider === 'openclaw' && OPENCLAW_AVAILABLE) {
+      console.log('[Chat API] Using OpenClaw Gateway');
+      const fullMessage = `[System: ${SYSTEM_PROMPT}]\n\n${userMessage}`;
+      reply = await callOpenClaw([{ role: 'user', content: fullMessage }], sessionId);
+      usedProvider = 'openclaw';
 
-    // Call OpenClaw Gateway
-    let reply = await callOpenClawGateway(userMessage);
+    } else if (currentProvider === 'ollama') {
+      console.log('[Chat API] Using Ollama directly');
+      const modelConfig = MODELS.kimi;  // Ollama = Kimi
+
+      if (!conversationHistory.has(sessionId)) {
+        conversationHistory.set(sessionId, []);
+      }
+      const history = conversationHistory.get(sessionId)!;
+      history.push({ role: 'user', content: userMessage });
+      while (history.length > MAX_HISTORY) history.shift();
+
+      reply = await callOllama(history, modelConfig.model);
+      history.push({ role: 'assistant', content: reply });
+      usedProvider = 'ollama';
+
+    } else {
+      // Default: Anthropic
+      console.log('[Chat API] Using Anthropic directly, model:', currentModel);
+      const modelConfig = MODELS[currentModel];
+
+      if (modelConfig.provider !== 'anthropic') {
+        // If model is ollama-based but provider is anthropic, use sonnet
+        currentModel = 'sonnet';
+      }
+
+      if (!conversationHistory.has(sessionId)) {
+        conversationHistory.set(sessionId, []);
+      }
+      const history = conversationHistory.get(sessionId)!;
+      history.push({ role: 'user', content: userMessage });
+      while (history.length > MAX_HISTORY) history.shift();
+
+      reply = await callAnthropic(history, MODELS[currentModel].model);
+      history.push({ role: 'assistant', content: reply });
+      usedProvider = 'anthropic';
+    }
 
     // Parse mode indicators from response
     let newMode: 'plan' | 'execute' | null = null;
@@ -236,18 +366,22 @@ export async function POST(req: NextRequest) {
       reply = reply.replace(/\[MODE:plan\]/g, '').trim();
     }
 
-    console.log('[Chat API] Reply received, length:', reply.length);
+    console.log('[Chat API] Success - provider:', usedProvider, 'reply length:', reply.length);
 
-    // Response shape: { reply, mode, model }
-    return NextResponse.json({ reply, mode: newMode, model: 'openclaw' });
+    return NextResponse.json({
+      reply,
+      mode: newMode,
+      model: usedProvider,
+    });
 
   } catch (error: unknown) {
-    console.error('[Chat API] Error:', error instanceof Error ? error.message : 'Unknown error');
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Chat API] Error:', errorMessage);
+
     return NextResponse.json({
       reply: `Sorry, I couldn't process that: ${errorMessage}`,
       error: true,
-      model: 'openclaw'
+      model: currentProvider,
     });
   }
 }
