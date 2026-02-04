@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
+import { TOOLS, getToolsPrompt } from '@/lib/tools';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -187,6 +188,104 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
   }
 }
 
+// Ollama with tool support for DO IT mode
+async function* streamOllamaWithTools(messages: Array<{role: string, content: string}>, model: string) {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
+    return;
+  }
+
+  try {
+    // First pass: Check if AI wants to use tools
+    const firstResponse = await fetch('https://ollama.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ollamaKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        stream: false,
+        messages: messages,
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!firstResponse.ok) {
+      const error = await firstResponse.text();
+      yield `data: ${JSON.stringify({ error: `Ollama: ${error.slice(0, 200)}` })}\n\n`;
+      return;
+    }
+
+    const firstData = await firstResponse.json();
+    const firstContent = firstData.choices?.[0]?.message?.content || '';
+
+    // Check for tool call in response (JSON format: {"tool": "name", "args": {...}})
+    let toolCall = null;
+    try {
+      // Look for JSON object in the response
+      const jsonMatch = firstContent.match(/\{[\s\S]*"tool"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.tool && TOOLS[parsed.tool]) {
+          toolCall = parsed;
+        }
+      }
+    } catch {
+      // Not a valid tool call, treat as regular response
+    }
+
+    let finalContent = firstContent;
+
+    // If tool call detected, execute it and get final response
+    if (toolCall) {
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Executing ${toolCall.tool}...\n` } }] })}\n\n`;
+
+      const tool = TOOLS[toolCall.tool];
+      const toolResult = await tool.execute(toolCall.args || {});
+
+      // Second pass: Send tool result back to AI
+      const messagesWithTool = [
+        ...messages,
+        { role: 'assistant' as const, content: firstContent },
+        { role: 'user' as const, content: `Tool "${toolCall.tool}" result:\n\n${JSON.stringify(toolResult, null, 2)}\n\nBased on this result, provide your final response.` },
+      ];
+
+      const finalResponse = await fetch('https://ollama.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ollamaKey}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          stream: false,
+          messages: messagesWithTool,
+          max_tokens: 1024,
+        }),
+      });
+
+      if (finalResponse.ok) {
+        const finalData = await finalResponse.json();
+        finalContent = finalData.choices?.[0]?.message?.content || firstContent;
+      }
+    }
+
+    // Stream the final response
+    const chunks = finalContent.split(/\s+/); // Word-by-word streaming
+    for (const chunk of chunks) {
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: chunk + ' ' } }] })}\n\n`;
+      await new Promise(r => setTimeout(r, 10)); // Small delay for effect
+    }
+    yield `data: [DONE]\n\n`;
+
+  } catch (error) {
+    console.error("[Ollama Tools] Error:", error);
+    yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Ollama failed' })}\n\n`;
+  }
+}
+
 // Call Anthropic with streaming
 async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string, imageDataUrl?: string) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -251,29 +350,32 @@ export async function POST(req: NextRequest) {
   let userMessage = message;
   if (isVoice) userMessage = VOICE_INSTRUCTIONS + userMessage;
 
-  const modeContext = interactionMode === 'plan'
-    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
-    : '\n[MODE: DO IT] Execute actions decisively.';
+  // Select system prompt based on mode
+  const PLAN_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
+  
+  const DO_IT_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
 
-  userMessage += modeContext;
+  const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
+
+  // Add mode context to user message
+  userMessage += interactionMode === 'plan'
+    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
+    : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
 
   if (interactionMode === 'execute' && memoryContext) {
     userMessage += `\n\n[MEMORY]\n${memoryContext}`;
   }
 
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage }];
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
 
-  // Use streaming for both Plan and DO IT modes
-  let generator: AsyncGenerator<string>;
-  
-  // Route kimi to Ollama, anthropic to Claude, default to Ollama
-  if (currentModel === 'kimi') {
-    generator = streamOllama(messages, MODELS.kimi.model);
-  } else if (currentProvider === 'anthropic' || ['opus', 'sonnet', 'haiku'].includes(currentModel)) {
-    generator = streamAnthropic(messages, MODELS[currentModel].model, image);
+  // Use Ollama/Kimi - with tools support for DO IT mode
+  if (interactionMode === 'execute') {
+    // DO IT mode: Check for tool calls, execute them, then stream final response
+    const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
+    return createStreamResponse(generator);
   } else {
-    generator = streamOllama(messages, MODELS.kimi.model);
+    // Plan mode: Simple streaming
+    const generator = streamOllama(messages, MODELS.kimi.model);
+    return createStreamResponse(generator);
   }
-
-  return createStreamResponse(generator);
 }
