@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useVisibilityRefresh } from '@/hooks/useRealTimeData';
 
 interface MemoryFile {
   name: string;
@@ -72,6 +73,9 @@ export default function MemoryPanel({ onFileSelect }: MemoryPanelProps) {
       setIsLoading(false);
     }
   }, []);
+
+  // Refresh memory files when page becomes visible or gains focus
+  useVisibilityRefresh(loadFiles);
 
   // Load file content
   const loadFileContent = useCallback(async (filePath: string) => {

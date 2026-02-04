@@ -98,6 +98,39 @@ export interface Notification {
 }
 
 // =============================================================================
+// useVisibilityRefresh - Refresh data when page becomes visible or gains focus
+// =============================================================================
+
+/**
+ * Hook that calls a callback when the page becomes visible or gains focus.
+ * Useful for refreshing data when user returns to the app.
+ */
+export function useVisibilityRefresh(callback: () => void) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        callbackRef.current();
+      }
+    };
+
+    const handleFocus = () => {
+      callbackRef.current();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+}
+
+// =============================================================================
 // useSystemStatus - Real-time system status polling
 // =============================================================================
 
@@ -390,27 +423,30 @@ export function useRecentMemories(limit = 10) {
   const [memories, setMemories] = useState<RecentMemory[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchMemories = async () => {
-      try {
-        const res = await fetch(`/api/memory/recent?limit=${limit}`);
-        if (res.ok) {
-          const data = await res.json();
-          setMemories(data.memories || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch memories:', err);
-      } finally {
-        setLoading(false);
+  const fetchMemories = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/memory/recent?limit=${limit}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMemories(data.memories || []);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch memories:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [limit]);
 
+  useEffect(() => {
     fetchMemories();
     const interval = setInterval(fetchMemories, 60000);
     return () => clearInterval(interval);
-  }, [limit]);
+  }, [fetchMemories]);
 
-  return { memories, loading };
+  // Refresh when page becomes visible or gains focus
+  useVisibilityRefresh(fetchMemories);
+
+  return { memories, loading, refresh: fetchMemories };
 }
 
 // =============================================================================
