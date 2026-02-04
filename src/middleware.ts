@@ -5,6 +5,8 @@ import type { NextRequest } from 'next/server';
 // ALL dashboard internal routes are public (URL itself is the security)
 const PUBLIC_ROUTES = [
   '/api/',  // Allow ALL /api/* routes - this is a personal dashboard
+  '/api/openclaw/', // Explicitly allow OpenClaw routes
+  '/api/memory/',   // Explicitly allow memory routes
   '/_next',
   '/favicon',
   '/manifest',
