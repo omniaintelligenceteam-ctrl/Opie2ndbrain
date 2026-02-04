@@ -3,7 +3,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+// Hardcoded to working project - wsiedmznnwaejwonuraj
+const supabaseUrl = 'https://wsiedmznnwaejwonuraj.supabase.co';
+// Key will come from env var for security
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 // Lazy init
