@@ -4,7 +4,7 @@ import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSideb
 import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContextMenu';
 import { Conversation } from '@/types/conversation';
 import { OpieAvatar } from './OpieAvatar';
-import { MicIcon, CameraIcon } from './ChatIcons';
+import { Mic, Camera } from 'lucide-react';
 
 // ============================================================================
 // Types
@@ -62,6 +62,11 @@ interface FloatingChatProps {
   // Pin conversation to comparison panel
   pinnedConversationIds?: string[];
   onPinConversation?: (id: string) => void;
+  // Secondary window mode (for multiple interactive chats)
+  isSecondary?: boolean;
+  windowIndex?: number;
+  onClose?: () => void;
+  conversationId?: string;
 }
 
 // ============================================================================
@@ -379,6 +384,10 @@ export default function FloatingChat({
   pinnedTitle,
   pinnedConversationIds = [],
   onPinConversation,
+  isSecondary = false,
+  windowIndex = 0,
+  onClose,
+  conversationId,
 }: FloatingChatProps): React.ReactElement {
   // State
   const [mode, setMode] = useState<ChatMode>('closed');
@@ -1103,6 +1112,197 @@ export default function FloatingChat({
     );
   }
 
+  // Secondary Window Mode - fully interactive multi-chat
+  if (isSecondary) {
+    // Calculate position based on window index (stagger left)
+    const offsetLeft = 20 + (windowIndex * 400);
+
+    return (
+      <>
+        <style>{animationStyles}</style>
+        <div
+          style={{
+            ...styles.chatContainer,
+            position: 'fixed',
+            bottom: 24,
+            left: offsetLeft,
+            right: 'auto',
+            width: 380,
+            height: 500,
+            borderRadius: 16,
+            border: '1px solid rgba(168, 85, 247, 0.3)',
+            zIndex: 998 + windowIndex,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(168, 85, 247, 0.15)',
+          }}
+        >
+          {/* Secondary Chat Header */}
+          <header style={{
+            ...styles.header,
+            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(6, 182, 212, 0.08) 100%)',
+            borderBottom: '1px solid rgba(168, 85, 247, 0.2)',
+          }}>
+            <div style={styles.headerLeft}>
+              <Avatar size={32} />
+              <div style={styles.headerInfo}>
+                <span style={{
+                  ...styles.headerName,
+                  fontSize: '0.95rem',
+                }}>
+                  {pinnedTitle || `Chat ${windowIndex + 2}`}
+                </span>
+                <span style={{
+                  ...styles.headerStatus,
+                  color: isLoading ? '#a855f7' : 'rgba(255,255,255,0.5)',
+                }}>
+                  <StatusIndicator state={isLoading ? 'processing' : 'idle'} size={6} />
+                  {isLoading ? 'Thinking...' : 'Ready'}
+                </span>
+              </div>
+            </div>
+            <div style={styles.headerActions}>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  style={styles.headerButtonClose}
+                  title="Close chat window"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* Messages */}
+          <div style={{ ...styles.messagesContainer, flex: 1 }}>
+            {messages.length === 0 ? (
+              <div style={styles.welcomeContainer}>
+                <div style={styles.welcomeEmoji}>💬</div>
+                <h3 style={styles.welcomeTitle}>New Chat</h3>
+                <p style={styles.welcomeText}>
+                  Start a new conversation in this window
+                </p>
+              </div>
+            ) : (
+              messages.filter(msg => msg.role === 'user' || msg.text).map((msg, i) => {
+                const isUser = msg.role === 'user';
+                const prevMsg = i > 0 ? messages[i - 1] : undefined;
+                const shouldGroup = shouldGroupMessages(msg, prevMsg);
+
+                return (
+                  <div
+                    key={msg.id}
+                    style={{
+                      ...styles.messageRow,
+                      justifyContent: isUser ? 'flex-end' : 'flex-start',
+                      marginTop: shouldGroup ? 2 : 12,
+                    }}
+                  >
+                    {!isUser && !shouldGroup && <Avatar size={28} />}
+                    {!isUser && shouldGroup && <div style={{ width: 28 }} />}
+                    <div style={styles.messageBubbleWrapper}>
+                      <div
+                        style={{
+                          ...styles.messageBubble,
+                          ...(isUser ? styles.messageBubbleUser : styles.messageBubbleAssistant),
+                          borderRadius: isUser
+                            ? (shouldGroup ? '16px' : '16px 16px 4px 16px')
+                            : (shouldGroup ? '16px' : '16px 16px 16px 4px'),
+                        }}
+                      >
+                        {renderMessageText(msg.text)}
+                      </div>
+                      {!shouldGroup && (
+                        <div style={{
+                          ...styles.messageTimestamp,
+                          justifyContent: isUser ? 'flex-end' : 'flex-start',
+                        }}>
+                          {formatTime(msg.timestamp, mounted)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {isLoading && <TypingIndicator />}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Mode Toggle - Simplified */}
+          <div style={{
+            ...styles.modeToggleContainer,
+            padding: '6px 12px',
+          }}>
+            <div style={styles.modeToggle}>
+              <button
+                onClick={() => setInteractionMode('plan')}
+                style={{
+                  ...styles.modeButton,
+                  padding: '6px 10px',
+                  ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
+                }}
+              >
+                <span style={styles.modeIcon}>💭</span>
+                <span>Plan</span>
+              </button>
+              <button
+                onClick={() => setInteractionMode('execute')}
+                style={{
+                  ...styles.modeButton,
+                  padding: '6px 10px',
+                  ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
+                }}
+              >
+                <span style={styles.modeIcon}>🔥</span>
+                <span>DO IT</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Input Area */}
+          <div style={styles.inputArea}>
+            <div style={styles.inputWrapper}>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (input.trim() && !isLoading) {
+                      onSend(input.trim(), undefined, interactionMode);
+                    }
+                  }
+                }}
+                placeholder="Type a message..."
+                style={styles.textInput}
+                rows={1}
+                disabled={isLoading}
+              />
+            </div>
+            <button
+              onClick={() => {
+                if (input.trim() && !isLoading) {
+                  onSend(input.trim(), undefined, interactionMode);
+                }
+              }}
+              disabled={!input.trim() || isLoading}
+              style={{
+                ...styles.sendButton,
+                opacity: !input.trim() || isLoading ? 0.5 : 1,
+                width: 40,
+                height: 40,
+              }}
+            >
+              {isLoading ? '⏳' : '↑'}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // Closed - Premium aurora avatar
   if (mode === 'closed') {
     return (
@@ -1484,7 +1684,7 @@ export default function FloatingChat({
               <span style={styles.micSpinner}>◌</span>
             ) : (
               <>
-                <MicIcon size={22} active={micOn} />
+                <Mic size={22} strokeWidth={2} style={{ filter: micOn ? 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.8))' : 'none', transition: 'filter 0.2s ease' }} />
                 {micOn && <VoiceWaveform active={true} color="#fff" />}
               </>
             )}
@@ -1514,7 +1714,7 @@ export default function FloatingChat({
             style={styles.imageButton}
             title="Attach image"
           >
-            <CameraIcon size={20} />
+            <Camera size={20} strokeWidth={2} />
           </button>
 
           {/* Text input */}
@@ -2192,8 +2392,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 48,
     height: 48,
     borderRadius: '50%',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
+    background: 'rgba(34, 211, 238, 0.1)',
     color: '#fff',
     cursor: 'pointer',
     display: 'flex',
@@ -2203,6 +2403,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexShrink: 0,
     transition: 'all 0.3s ease',
     boxShadow: '0 2px 15px rgba(0, 0, 0, 0.3)',
+    backdropFilter: 'blur(8px)',
   },
   micSpinner: {
     animation: 'spin 1s linear infinite',
@@ -2226,8 +2427,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 40,
     height: 40,
     borderRadius: '50%',
-    border: 'none',
-    background: 'rgba(102, 126, 234, 0.2)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    background: 'rgba(139, 92, 246, 0.15)',
     color: '#fff',
     fontSize: '18px',
     cursor: 'pointer',
@@ -2236,6 +2437,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     flexShrink: 0,
     transition: 'all 0.2s ease',
+    backdropFilter: 'blur(8px)',
   },
   pendingImageContainer: {
     padding: '8px 16px',

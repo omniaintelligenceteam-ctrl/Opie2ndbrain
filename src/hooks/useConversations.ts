@@ -18,6 +18,7 @@ interface UseConversationsReturn {
   forkConversation: (fromMessageId: string) => Conversation;
   deleteConversation: (id: string) => void;
   updateMessages: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+  updateMessagesForConversation: (conversationId: string, updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   updateTitle: (conversationId: string, title: string) => void;
   setSummary: (conversationId: string, summary: string) => void;
 }
@@ -137,6 +138,34 @@ export function useConversations(): UseConversationsReturn {
     });
   }, []);
 
+  // Update messages for a specific conversation (for multi-chat support)
+  const updateMessagesForConversation = useCallback((
+    conversationId: string,
+    updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
+  ): void => {
+    setStore(prev => {
+      const targetConv = prev.conversations.find(c => c.id === conversationId);
+      if (!targetConv) return prev;
+
+      const currentMessages = targetConv.messages || [];
+      const newMessages = typeof updater === 'function' ? updater(currentMessages) : updater;
+
+      // Trim messages if over limit
+      const trimmedMessages = newMessages.length > MAX_MESSAGES_PER_CONVERSATION
+        ? newMessages.slice(-MAX_MESSAGES_PER_CONVERSATION)
+        : newMessages;
+
+      return {
+        ...prev,
+        conversations: prev.conversations.map(c =>
+          c.id === conversationId
+            ? { ...c, messages: trimmedMessages, updatedAt: new Date().toISOString() }
+            : c
+        ),
+      };
+    });
+  }, []);
+
   const updateTitle = useCallback((conversationId: string, title: string): void => {
     setStore(prev => ({
       ...prev,
@@ -163,6 +192,7 @@ export function useConversations(): UseConversationsReturn {
     forkConversation,
     deleteConversation,
     updateMessages,
+    updateMessagesForConversation,
     updateTitle,
     setSummary,
   };

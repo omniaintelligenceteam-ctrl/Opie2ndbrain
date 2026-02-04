@@ -400,9 +400,14 @@ export default function OpieKanban(): React.ReactElement {
     forkConversation,
     deleteConversation,
     updateMessages,
+    updateMessagesForConversation,
     updateTitle,
     setSummary,
   } = useConversations();
+
+  // State for secondary chat windows (interactive pinned chats)
+  const [pinnedInputs, setPinnedInputs] = useState<Record<string, string>>({});
+  const [pinnedLoading, setPinnedLoading] = useState<Record<string, boolean>>({});
 
   // Use conversation messages instead of local state
   const messages = activeConversation?.messages || [];
@@ -986,6 +991,136 @@ export default function OpieKanban(): React.ReactElement {
       setTimeout(() => startRecognition(), 500);
     }
   };
+
+  // Handle send for secondary/pinned chat windows
+  const handleSendToPinned = useCallback(async (conversationId: string, text: string, mode?: InteractionMode) => {
+    if (!text.trim() || pinnedLoading[conversationId]) return;
+
+    const conv = conversations.find(c => c.id === conversationId);
+    if (!conv) return;
+
+    // Set loading state for this conversation
+    setPinnedLoading(prev => ({ ...prev, [conversationId]: true }));
+    setPinnedInputs(prev => ({ ...prev, [conversationId]: '' }));
+
+    // Create user message
+    const userMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: 'user',
+      text: text.trim(),
+      timestamp: new Date(),
+      status: 'sending',
+    };
+
+    // Add user message to conversation
+    updateMessagesForConversation(conversationId, [...conv.messages, userMessage]);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text.trim(),
+          messages: conv.messages.slice(-10),
+          sessionId: getSessionId(),
+          personality: personalityParams,
+          interactionMode: mode || interactionMode,
+          memoryContext: (mode || interactionMode) === 'execute' ? memoryContext : undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server error (${res.status})`);
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      const isStreaming = contentType.includes('text/event-stream');
+
+      let reply = '';
+      const assistantMsgId = generateMessageId();
+
+      if (isStreaming && res.body) {
+        // SSE streaming
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        // Add empty assistant message
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+        };
+        updateMessagesForConversation(conversationId, [...conv.messages, userMessage, assistantMessage]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                  reply += parsed.delta.text;
+                } else if (parsed.choices?.[0]?.delta?.content) {
+                  reply += parsed.choices[0].delta.content;
+                }
+                // Update message in real-time
+                const currentConv = conversations.find(c => c.id === conversationId);
+                if (currentConv) {
+                  const updatedMsgs = currentConv.messages.map(m =>
+                    m.id === assistantMsgId ? { ...m, text: reply } : m
+                  );
+                  updateMessagesForConversation(conversationId, updatedMsgs);
+                }
+              } catch {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+
+        reply = reply || 'No response received';
+      } else {
+        // JSON response
+        const data = await res.json();
+        reply = data.reply || data.error || 'No response received';
+
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: reply,
+          timestamp: new Date(),
+        };
+        const currentConv = conversations.find(c => c.id === conversationId);
+        if (currentConv) {
+          updateMessagesForConversation(conversationId, [...currentConv.messages, assistantMessage]);
+        }
+      }
+    } catch (err: any) {
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: `Sorry, something went wrong: ${err?.message || 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      const currentConv = conversations.find(c => c.id === conversationId);
+      if (currentConv) {
+        updateMessagesForConversation(conversationId, [...currentConv.messages, errorMessage]);
+      }
+    } finally {
+      setPinnedLoading(prev => ({ ...prev, [conversationId]: false }));
+    }
+  }, [conversations, pinnedLoading, updateMessagesForConversation, personalityParams, interactionMode, memoryContext]);
 
   const handleDeployAgent = async (agentId: string, taskLabel: string) => {
     const agentInfo: { [key: string]: { name: string; emoji: string } } = {
@@ -1854,46 +1989,73 @@ export default function OpieKanban(): React.ReactElement {
         )}
       </main>
 
-      {/* Pinned Comparison Panels */}
-      {pinnedConversationIds.length > 0 && (
-        <div style={{
-          position: 'fixed',
-          bottom: 16,
-          left: 16,
-          display: 'flex',
-          gap: 8,
-          zIndex: 999,
-        }}>
-          {pinnedConversationIds.map(pinnedId => {
-            const pinnedConv = conversations.find(c => c.id === pinnedId);
-            if (!pinnedConv) return null;
+      {/* Secondary Chat Windows */}
+      {pinnedConversationIds.map((pinnedId, index) => {
+        const pinnedConv = conversations.find(c => c.id === pinnedId);
+        if (!pinnedConv) return null;
 
-            return (
-              <div
-                key={pinnedId}
-                style={{
-                  width: 350,
-                  height: 450,
-                }}
-              >
-                <FloatingChat
-                  messages={pinnedConv.messages}
-                  isPinned={true}
-                  onUnpin={() => unpinConversation(pinnedId)}
-                  pinnedTitle={pinnedConv.title}
-                  input=""
-                  setInput={() => {}}
-                  isLoading={false}
-                  micOn={false}
-                  onMicToggle={() => {}}
-                  isSpeaking={false}
-                  transcript=""
-                  onSend={() => {}}
-                />
-              </div>
-            );
-          })}
-        </div>
+        return (
+          <FloatingChat
+            key={pinnedId}
+            messages={pinnedConv.messages}
+            isSecondary={true}
+            windowIndex={index}
+            onClose={() => unpinConversation(pinnedId)}
+            pinnedTitle={pinnedConv.title}
+            conversationId={pinnedId}
+            input={pinnedInputs[pinnedId] || ''}
+            setInput={(val) => setPinnedInputs(prev => ({ ...prev, [pinnedId]: val }))}
+            isLoading={pinnedLoading[pinnedId] || false}
+            micOn={false}
+            onMicToggle={() => {}}
+            isSpeaking={false}
+            transcript=""
+            onSend={(text, image, mode) => handleSendToPinned(pinnedId, text || pinnedInputs[pinnedId] || '', mode)}
+            interactionMode={interactionMode}
+            onInteractionModeChange={setInteractionMode}
+          />
+        );
+      })}
+
+      {/* Spawn New Chat Button */}
+      {pinnedConversationIds.length < 2 && (
+        <button
+          onClick={() => {
+            const newConv = createConversation();
+            pinConversation(newConv.id);
+          }}
+          style={{
+            position: 'fixed',
+            bottom: 90,
+            right: 24,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(6, 182, 212, 0.15) 100%)',
+            color: '#a855f7',
+            fontSize: '24px',
+            fontWeight: 300,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 997,
+            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.3)',
+            transition: 'all 0.3s ease',
+          }}
+          title="Open new chat window"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 25px rgba(168, 85, 247, 0.5)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(168, 85, 247, 0.3)';
+          }}
+        >
+          +
+        </button>
       )}
 
       {/* Floating Chat Box */}
