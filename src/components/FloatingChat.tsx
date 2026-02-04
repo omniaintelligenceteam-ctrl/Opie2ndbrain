@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from '
 import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSidebar';
 import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContextMenu';
 import { Conversation } from '@/types/conversation';
+import { OpieAvatar } from './OpieAvatar';
 
 // ============================================================================
 // Types
@@ -277,7 +278,7 @@ const VoiceWaveform = memo(function VoiceWaveform({ active, color = '#22c55e' }:
 const TypingIndicator = memo(function TypingIndicator() {
   return (
     <div style={styles.typingContainer}>
-      <Avatar size={28} />
+      <OpieAvatar size={28} state="thinking" />
       <div style={styles.typingBubble}>
         <div style={styles.typingDots}>
           <span style={{ ...styles.typingDot, animationDelay: '0s' }} />
@@ -437,6 +438,17 @@ export default function FloatingChat({
       default: return '● Online';
     }
   }, [voiceState]);
+
+  // Helper to get avatar state from voice state
+  const getAvatarState = (): 'idle' | 'listening' | 'thinking' | 'speaking' | 'error' => {
+    switch (voiceState) {
+      case 'listening': return 'listening';
+      case 'processing': return 'thinking';
+      case 'speaking': return 'speaking';
+      case 'working': return 'thinking';
+      default: return 'idle';
+    }
+  };
 
   // Effects
   useEffect(() => {
@@ -1067,7 +1079,7 @@ export default function FloatingChat({
                       marginTop: shouldGroup ? 2 : 12,
                     }}
                   >
-                    {!isUser && !shouldGroup && <Avatar size={28} />}
+                    {!isUser && !shouldGroup && <OpieAvatar size={28} state="idle" />}
                     {!isUser && shouldGroup && <div style={{ width: 28 }} />}
                     <div style={{
                       ...(isUser ? styles.userBubble : styles.assistantBubble),
@@ -1090,45 +1102,16 @@ export default function FloatingChat({
     );
   }
 
-  // Closed - Robot avatar (smaller container, zoomed in on head)
+  // Closed - Premium aurora avatar
   if (mode === 'closed') {
     return (
       <>
-        <div
-          onClick={() => { setMode('open'); setHasInteracted(true); }}
-          style={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-            width: 70,
-            height: 70,
-            cursor: 'pointer',
-            zIndex: 1000,
-            borderRadius: '50%',
-            overflow: 'hidden',
-            filter: 'drop-shadow(0 0 15px rgba(59, 130, 246, 0.5))',
-            transition: 'transform 0.2s ease, filter 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.filter = 'drop-shadow(0 0 25px rgba(59, 130, 246, 0.7))';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.filter = 'drop-shadow(0 0 15px rgba(59, 130, 246, 0.5))';
-          }}
-        >
-          <img
-            src="/opie-avatar.png"
-            alt="Chat with Opie"
-            style={{
-              width: '180%',
-              height: '180%',
-              objectFit: 'cover',
-              objectPosition: 'center 25%',
-              marginLeft: '-40%',
-              marginTop: '-20%',
-            }}
+        <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 1000 }}>
+          <OpieAvatar
+            size={70}
+            state="idle"
+            interactive={true}
+            onClick={() => { setMode('open'); setHasInteracted(true); }}
           />
         </div>
         {unreadCount > 0 && (
@@ -1161,7 +1144,7 @@ export default function FloatingChat({
               : 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
           }}
         >
-          <Avatar size={32} />
+          <OpieAvatar size={32} state={getAvatarState()} />
           <div style={styles.minimizedInfo}>
             <span style={styles.minimizedName}>Opie</span>
             <span style={styles.minimizedStatus}>
@@ -1225,7 +1208,7 @@ export default function FloatingChat({
                 ☰
               </button>
             )}
-            <Avatar size={36} />
+            <OpieAvatar size={36} state={getAvatarState()} />
             <div style={styles.headerInfo}>
               <span style={styles.headerName}>
                 {activeConversationId && conversations?.find(c => c.id === activeConversationId)?.title || 'Opie'}
@@ -1318,7 +1301,7 @@ export default function FloatingChat({
           {/* Welcome message */}
           {messages.length === 0 && !hasInteracted && (
             <div style={styles.welcomeContainer}>
-              <Avatar size={80} />
+              <OpieAvatar size={80} state="idle" />
               <h3 style={styles.welcomeTitle}>Hey there! 👋</h3>
               <p style={styles.welcomeText}>
                 I'm Opie, your AI assistant. Type a message or tap the mic to start talking!
@@ -1361,7 +1344,7 @@ export default function FloatingChat({
               >
                 {/* Avatar for assistant (only show on first of group) */}
                 {!isUser && !isGrouped && (
-                  <Avatar size={28} />
+                  <OpieAvatar size={28} state={getAvatarState()} />
                 )}
                 {!isUser && isGrouped && (
                   <div style={{ width: 28, flexShrink: 0 }} />
