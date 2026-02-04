@@ -18,11 +18,18 @@ MEMORY CONTEXT:
 ${memoryContext || 'No additional context'}
 
 INSTRUCTIONS:
-- You have full tool access: read/write files, execute commands, git operations
+- You have full tool access: read/write files, execute commands, git operations, web search
 - Do the work requested immediately ("DO IT" = execute)
-- After completing, report what was done
+- After completing, write your response to Supabase table 'opie_responses':
+  * session_key: use the label from spawn
+  * task: summary of what was requested
+  * response: your full reply with actions taken
+  * status: 'complete'
 - If file changes made, commit and push to git automatically
-- Reply with a summary of actions taken and results`;
+- Reply with a summary of actions taken`;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
 
     const openclawUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
     const openclawToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
