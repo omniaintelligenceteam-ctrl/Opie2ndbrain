@@ -108,6 +108,7 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
     yield `data: [DONE]\n\n`;
 
   } catch (error) {
+    console.error("[Ollama] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'OpenClaw failed' })}\n\n`;
   }
 }
@@ -175,6 +176,7 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
     }
 
   } catch (error) {
+    console.error("[Ollama] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Ollama failed' })}\n\n`;
   }
 }
@@ -209,6 +211,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
     yield `data: [DONE]\n\n`;
 
   } catch (error) {
+    console.error("[Ollama] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Anthropic failed' })}\n\n`;
   }
 }
