@@ -6,6 +6,10 @@ export async function POST(req: Request) {
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+    const sessionLabel = `opie-doit-${Date.now()}`;
+    
     // Build comprehensive task for the spawned session
     const task = `DO IT MODE - Execute this task with full workspace access:
 
@@ -20,16 +24,19 @@ ${memoryContext || 'No additional context'}
 INSTRUCTIONS:
 - You have full tool access: read/write files, execute commands, git operations, web search
 - Do the work requested immediately ("DO IT" = execute)
-- After completing, write your response to Supabase table 'opie_responses':
-  * session_key: use the label from spawn
-  * task: summary of what was requested
-  * response: your full reply with actions taken
-  * status: 'complete'
+- After completing, write your response to Supabase via REST API:
+  POST ${supabaseUrl}/rest/v1/opie_responses
+  Headers: apikey: ${supabaseKey}, Authorization: Bearer ${supabaseKey}
+  Body: {
+    "session_key": "${sessionLabel}",
+    "task": "${message.replace(/"/g, '\\"').slice(0, 200)}",
+    "response": "your full reply with actions taken",
+    "status": "complete"
+  }
 - If file changes made, commit and push to git automatically
-- Reply with a summary of actions taken`;
+- Reply with a summary of actions taken
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+SUPABASE ENV: ${supabaseUrl ? 'Configured' : 'MISSING'}`;
 
     const openclawUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
     const openclawToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
@@ -44,8 +51,8 @@ INSTRUCTIONS:
       body: JSON.stringify({
         agentId: 'main',
         task: task,
-        deliver: true, // Deliver result back when done
-        label: `opie-doit-${Date.now()}`,
+        deliver: false, // We'll check Supabase for results
+        label: sessionLabel,
         timeoutSeconds: 300,
       }),
     });
@@ -59,9 +66,9 @@ INSTRUCTIONS:
     
     return Response.json({
       success: true,
-      sessionKey: spawnData.sessionKey,
+      sessionKey: sessionLabel,
       status: 'spawned',
-      message: 'Task spawned to OpenClaw. You will receive a message when complete.',
+      message: 'Task spawned to OpenClaw. Check back in a few seconds.',
       spawnedAt: new Date().toISOString(),
     });
     
