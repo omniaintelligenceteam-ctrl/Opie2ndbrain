@@ -63,14 +63,16 @@ export async function GET(req: NextRequest) {
             if (lastMsg.role === 'assistant') {
               // Extract text from content (can be string or array of blocks)
               let responseText = '';
-              if (typeof lastMsg.content === 'string') {
-                responseText = lastMsg.content;
-              } else if (Array.isArray(lastMsg.content)) {
+              const content = lastMsg.content;
+              if (typeof content === 'string') {
+                responseText = content;
+              } else if (Array.isArray(content)) {
                 // Extract text blocks, skip thinking blocks
-                responseText = lastMsg.content
-                  .filter((block: any) => block.type === 'text')
-                  .map((block: any) => block.text || '')
-                  .join('');
+                for (const block of content) {
+                  if (block?.type === 'text' && block?.text) {
+                    responseText += block.text;
+                  }
+                }
               }
               
               if (responseText) {
