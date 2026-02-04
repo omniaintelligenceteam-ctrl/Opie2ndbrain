@@ -191,17 +191,21 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
 
 // Parse tool call JSON from AI response
 function parseToolCall(text: string): { tool: string; args: Record<string, any> } | null {
-  // Look for JSON object with tool and args keys
-  const jsonMatch = text.match(/\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\}/);
-  if (!jsonMatch) return null;
+  // Look for JSON objects in the text
+  // Match from { to } with "tool" key somewhere inside
+  const jsonMatches = text.match(/\{[\s\S]*?"tool"[\s\S]*?\}/g);
+  if (!jsonMatches) return null;
 
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (parsed.tool && typeof parsed.tool === 'string') {
-      return { tool: parsed.tool, args: parsed.args || {} };
+  // Try each match to find valid JSON with required fields
+  for (const match of jsonMatches) {
+    try {
+      const parsed = JSON.parse(match);
+      if (parsed.tool && typeof parsed.tool === 'string' && TOOLS[parsed.tool]) {
+        return { tool: parsed.tool, args: parsed.args || {} };
+      }
+    } catch {
+      continue;
     }
-  } catch {
-    return null;
   }
   return null;
 }
