@@ -1,5 +1,8 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSidebar';
+import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContextMenu';
+import { Conversation } from '@/types/conversation';
 
 // ============================================================================
 // Types
@@ -42,6 +45,14 @@ interface FloatingChatProps {
   onInteractionModeChange?: (mode: InteractionMode) => void;
   selectedModel?: AIModel;
   onModelChange?: (model: AIModel) => void;
+  // Conversation management (new)
+  conversations?: Conversation[];
+  activeConversationId?: string | null;
+  onConversationCreate?: () => void;
+  onConversationSwitch?: (id: string) => void;
+  onConversationDelete?: (id: string) => void;
+  onConversationFork?: (fromMessageId: string) => void;
+  onSummarizeAndContinue?: () => void;
 }
 
 // ============================================================================
@@ -345,6 +356,13 @@ export default function FloatingChat({
   onInteractionModeChange,
   selectedModel: controlledModel,
   onModelChange,
+  conversations,
+  activeConversationId,
+  onConversationCreate,
+  onConversationSwitch,
+  onConversationDelete,
+  onConversationFork,
+  onSummarizeAndContinue,
 }: FloatingChatProps): React.ReactElement {
   // State
   const [mode, setMode] = useState<ChatMode>('closed');
@@ -359,7 +377,15 @@ export default function FloatingChat({
   const [localInteractionMode, setLocalInteractionMode] = useState<InteractionMode>('execute');
   const [localModel, setLocalModel] = useState<AIModel>('kimi');
   const [showModelPicker, setShowModelPicker] = useState(false);
-  
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    messageId: string;
+    messageText: string;
+    isAssistant: boolean;
+  } | null>(null);
+
   // Use controlled mode if provided, otherwise use local state
   const interactionMode = controlledInteractionMode ?? localInteractionMode;
   const setInteractionMode = onInteractionModeChange ?? setLocalInteractionMode;
@@ -816,6 +842,30 @@ export default function FloatingChat({
     }
   };
 
+  const handleMessageContextMenu = (
+    e: React.MouseEvent,
+    messageId: string,
+    messageText: string,
+    isAssistant: boolean
+  ) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      messageId,
+      messageText,
+      isAssistant,
+    });
+  };
+
+  const handleCopyMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
   // Quick actions
   const quickActions = [
     { emoji: '👋', label: 'Say hi', message: 'Hey Opie!' },
@@ -948,10 +998,20 @@ export default function FloatingChat({
         {/* Header */}
         <header style={styles.header}>
           <div style={styles.headerLeft}>
+            {/* Sidebar toggle button - NEW */}
+            {conversations && conversations.length > 0 && (
+              <button
+                onClick={() => setShowSidebar(true)}
+                style={styles.headerButton}
+                title="Conversation history"
+              >
+                ☰
+              </button>
+            )}
             <Avatar size={36} />
             <div style={styles.headerInfo}>
               <span style={styles.headerName}>
-                Opie
+                {activeConversationId && conversations?.find(c => c.id === activeConversationId)?.title || 'Opie'}
                 <span style={styles.headerBolt}>⚡</span>
               </span>
               <span style={{
@@ -1092,6 +1152,7 @@ export default function FloatingChat({
                   alignItems: isUser ? 'flex-end' : 'flex-start',
                 }}>
                   <div
+                    onContextMenu={(e) => handleMessageContextMenu(e, msg.id, msg.text, !isUser)}
                     style={{
                       ...styles.messageBubble,
                       ...(isUser ? styles.messageBubbleUser : styles.messageBubbleAssistant),
@@ -1298,6 +1359,38 @@ export default function FloatingChat({
           </div>
         )}
       </div>
+
+        {/* Conversation Sidebar */}
+        {conversations && (
+          <ConversationSidebar
+            isOpen={showSidebar}
+            onClose={() => setShowSidebar(false)}
+            conversations={conversations}
+            activeConversationId={activeConversationId || null}
+            onSelectConversation={(id) => {
+              onConversationSwitch?.(id);
+              setShowSidebar(false);
+            }}
+            onNewConversation={() => {
+              onConversationCreate?.();
+              setShowSidebar(false);
+            }}
+            onDeleteConversation={onConversationDelete || (() => {})}
+          />
+        )}
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <MessageContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            onFork={() => onConversationFork?.(contextMenu.messageId)}
+            onSummarize={() => onSummarizeAndContinue?.()}
+            onCopy={() => handleCopyMessage(contextMenu.messageText)}
+            isAssistantMessage={contextMenu.isAssistant}
+          />
+        )}
     </>
   );
 }
@@ -1336,6 +1429,8 @@ const animationStyles = `
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
   }
+  ${sidebarAnimationStyles}
+  ${contextMenuAnimationStyles}
 `;
 
 const styles: { [key: string]: React.CSSProperties } = {
