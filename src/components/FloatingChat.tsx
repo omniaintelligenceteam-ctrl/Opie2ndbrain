@@ -4,6 +4,7 @@ import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSideb
 import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContextMenu';
 import { Conversation } from '@/types/conversation';
 import { OpieAvatar } from './OpieAvatar';
+import { MicIcon, CameraIcon } from './ChatIcons';
 
 // ============================================================================
 // Types
@@ -1475,7 +1476,7 @@ export default function FloatingChat({
                 ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
                 : voiceState === 'processing'
                 ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                : 'rgba(255, 255, 255, 0.1)',
             }}
             title={micOn ? 'Stop listening' : 'Start voice input'}
           >
@@ -1483,7 +1484,7 @@ export default function FloatingChat({
               <span style={styles.micSpinner}>◌</span>
             ) : (
               <>
-                🎤
+                <MicIcon size={22} active={micOn} />
                 {micOn && <VoiceWaveform active={true} color="#fff" />}
               </>
             )}
@@ -1513,7 +1514,7 @@ export default function FloatingChat({
             style={styles.imageButton}
             title="Attach image"
           >
-            📷
+            <CameraIcon size={20} />
           </button>
 
           {/* Text input */}
@@ -2191,9 +2192,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 48,
     height: 48,
     borderRadius: '50%',
-    border: '1px solid rgba(34, 197, 94, 0.3)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    background: 'rgba(255, 255, 255, 0.1)',
     color: '#fff',
-    fontSize: '20px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',

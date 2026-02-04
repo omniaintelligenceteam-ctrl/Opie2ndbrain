@@ -362,7 +362,12 @@ export async function POST(req: NextRequest) {
   // DO IT MODE: Spawn to G (me) via OpenClaw for full tool access
   if (interactionMode === 'execute') {
     const requestId = crypto.randomUUID();
-    
+
+    // Check if Supabase is configured
+    if (!supabaseAdmin) {
+      return Response.json({ error: 'Supabase not configured for DO IT mode' }, { status: 503 });
+    }
+
     try {
       // 1. Write pending task to Supabase
       await supabaseAdmin.from('opie_requests').insert({

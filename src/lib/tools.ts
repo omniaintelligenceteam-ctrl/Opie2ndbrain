@@ -1,6 +1,8 @@
 // Server-side tools for DO IT mode
 // These execute on the server and return results to the AI
 
+import { createClient } from '@supabase/supabase-js';
+
 export interface Tool {
   name: string;
   description: string;

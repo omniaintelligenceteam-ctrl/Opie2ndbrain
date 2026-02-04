@@ -13,6 +13,11 @@ export async function GET(req: NextRequest) {
   }
   
   try {
+    // Check if Supabase is configured
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    }
+
     // Get task status from Supabase
     const { data, error } = await supabaseAdmin
       .from('opie_requests')
