@@ -759,41 +759,31 @@ export default function FloatingChat({
     return () => clearInterval(checkWindow);
   }, [isDetached]);
 
-  // Upload image to server and return path
-  const uploadImage = async (file: File): Promise<string | null> => {
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return null;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
-      return null;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Upload failed');
+  // Convert file to base64 data URL
+  const fileToBase64 = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        resolve(null);
+        return;
       }
 
-      const data = await res.json();
-      return data.path;
-    } catch (error) {
-      console.error('Image upload failed:', error);
-      alert('Failed to upload image');
-      return null;
-    }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image must be less than 5MB');
+        resolve(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => {
+        console.error('Failed to read image');
+        resolve(null);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   // Handle image selection
@@ -801,11 +791,9 @@ export default function FloatingChat({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const path = await uploadImage(file);
-    if (path) {
-      // Also create a preview URL for display
-      const previewUrl = URL.createObjectURL(file);
-      setPendingImage(JSON.stringify({ path, preview: previewUrl }));
+    const base64 = await fileToBase64(file);
+    if (base64) {
+      setPendingImage(base64);
     }
 
     // Reset input
@@ -826,10 +814,9 @@ export default function FloatingChat({
         const file = item.getAsFile();
         if (!file) continue;
 
-        const path = await uploadImage(file);
-        if (path) {
-          const previewUrl = URL.createObjectURL(file);
-          setPendingImage(JSON.stringify({ path, preview: previewUrl }));
+        const base64 = await fileToBase64(file);
+        if (base64) {
+          setPendingImage(base64);
         }
         return;
       }
@@ -862,33 +849,10 @@ export default function FloatingChat({
     const file = files[0];
     if (!file.type.startsWith('image/')) return;
 
-    const path = await uploadImage(file);
-    if (path) {
-      const previewUrl = URL.createObjectURL(file);
-      setPendingImage(JSON.stringify({ path, preview: previewUrl }));
+    const base64 = await fileToBase64(file);
+    if (base64) {
+      setPendingImage(base64);
     }
-  };
-
-  // Extract image path from pendingImage JSON
-  const getImagePath = (): string | undefined => {
-    if (!pendingImage) return undefined;
-    try {
-      const parsed = JSON.parse(pendingImage);
-      return parsed.path;
-    } catch {
-      return pendingImage; // Fallback to raw value if not JSON
-    }
-  };
-
-  // Clean up preview URL when clearing image
-  const clearPendingImage = () => {
-    if (pendingImage) {
-      try {
-        const parsed = JSON.parse(pendingImage);
-        if (parsed.preview) URL.revokeObjectURL(parsed.preview);
-      } catch {}
-    }
-    setPendingImage(null);
   };
 
   // Handle keyboard
@@ -896,8 +860,8 @@ export default function FloatingChat({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim() || pendingImage) {
-        onSend(input, getImagePath(), interactionMode);
-        clearPendingImage();
+        onSend(input, pendingImage || undefined, interactionMode);
+        setPendingImage(null);
         setHasInteracted(true);
       }
     }
@@ -909,8 +873,8 @@ export default function FloatingChat({
   // Handle send with local text, optional image, and interaction mode
   const handleSendClick = () => {
     if (input.trim() || pendingImage) {
-      onSend(input, getImagePath(), interactionMode);
-      clearPendingImage();
+      onSend(input, pendingImage || undefined, interactionMode);
+      setPendingImage(null);
       setHasInteracted(true);
     }
   };
@@ -1295,19 +1259,12 @@ export default function FloatingChat({
         {pendingImage && (
           <div style={styles.pendingImageContainer}>
             <img
-              src={(() => {
-                try {
-                  const parsed = JSON.parse(pendingImage);
-                  return parsed.preview || pendingImage;
-                } catch {
-                  return pendingImage;
-                }
-              })()}
+              src={pendingImage}
               alt="Pending"
               style={styles.pendingImage}
             />
             <button
-              onClick={clearPendingImage}
+              onClick={() => setPendingImage(null)}
               style={styles.removePendingImage}
               title="Remove image"
             >

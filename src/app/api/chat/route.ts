@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -228,45 +226,29 @@ async function callOllama(
 // Anthropic
 // ============================================================================
 
-// Helper to read image file and convert to base64
-async function readImageAsBase64(imagePath: string): Promise<{ base64: string; mediaType: string } | null> {
-  try {
-    if (!existsSync(imagePath)) {
-      console.error('[Chat API] Image file not found:', imagePath);
-      return null;
-    }
-
-    const buffer = await readFile(imagePath);
-    const base64 = buffer.toString('base64');
-
-    // Determine media type from extension
-    const ext = imagePath.split('.').pop()?.toLowerCase();
-    const mediaTypes: Record<string, string> = {
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-      'gif': 'image/gif',
-      'webp': 'image/webp',
-    };
-    const mediaType = mediaTypes[ext || ''] || 'image/png';
-
-    return { base64, mediaType };
-  } catch (error) {
-    console.error('[Chat API] Failed to read image:', error);
+// Parse base64 data URL (e.g., "data:image/png;base64,ABC123...")
+function parseDataUrl(dataUrl: string): { base64: string; mediaType: string } | null {
+  const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+  if (!match) {
+    console.error('[Chat API] Invalid data URL format');
     return null;
   }
+  return {
+    mediaType: match[1],
+    base64: match[2],
+  };
 }
 
 async function callAnthropic(
   messages: Array<{role: 'user' | 'assistant', content: string}>,
   model: string,
-  imagePath?: string
+  imageDataUrl?: string
 ): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  console.log('[Chat API] Anthropic: calling with model:', model, imagePath ? '(with image)' : '');
+  console.log('[Chat API] Anthropic: calling with model:', model, imageDataUrl ? '(with image)' : '');
 
   // Build messages array, potentially with image content
   const apiMessages: Anthropic.MessageParam[] = [];
@@ -275,9 +257,9 @@ async function callAnthropic(
     const msg = messages[i];
     const isLastUserMessage = msg.role === 'user' && i === messages.length - 1;
 
-    if (isLastUserMessage && imagePath) {
+    if (isLastUserMessage && imageDataUrl) {
       // Include image in the last user message
-      const imageData = await readImageAsBase64(imagePath);
+      const imageData = parseDataUrl(imageDataUrl);
       if (imageData) {
         apiMessages.push({
           role: 'user',
@@ -297,7 +279,7 @@ async function callAnthropic(
           ],
         });
       } else {
-        // Fallback to text-only if image read fails
+        // Fallback to text-only if parsing fails
         apiMessages.push({ role: msg.role, content: msg.content });
       }
     } else {
