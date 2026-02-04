@@ -310,16 +310,50 @@ export const TOOLS: Record<string, Tool> = {
 };
 
 export function getToolsPrompt(): string {
+  const toolsList = Object.values(TOOLS).map(t => {
+    const params = Object.entries(t.parameters.properties || {})
+      .map(([key, val]: [string, any]) => `    ${key}: ${val.description}${val.default !== undefined ? ` (default: ${val.default})` : ''}${t.parameters.required?.includes(key) ? ' [REQUIRED]' : ''}`)
+      .join('\n');
+    return `
+${t.name}:
+  Description: ${t.description}
+  Parameters:
+${params}`;
+  }).join('\n');
+
   return `
-You have access to the following tools. To use a tool, respond with a JSON object in this format:
-{"tool": "tool_name", "args": {"arg1": "value1", "arg2": "value2"}}
+## TOOL ACCESS
 
-Available tools:
-${Object.values(TOOLS).map(t => `
-${t.name}: ${t.description}
-Parameters: ${JSON.stringify(t.parameters.properties)}
-`).join('\n')}
+You have access to the following tools. When you need to use a tool, respond with ONLY a JSON object in this exact format:
+{"tool": "tool_name", "args": {"param1": "value1", "param2": "value2"}}
 
-You can use multiple tools in sequence. After each tool result, you'll receive the output and can decide to use another tool or provide your final response.
+After receiving tool results, provide your final response incorporating that information.
+
+### AVAILABLE TOOLS
+${toolsList}
+
+### IMPORTANT EXAMPLES
+
+To read a GitHub file:
+{"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Omnia-Light-Scape-Pro-V3", "path": "src/components/Hero.tsx"}}
+
+To search your memory:
+{"tool": "memory_search", "args": {"query": "sales leads Texas", "limit": 5}}
+
+To list a directory:
+{"tool": "file_list", "args": {"path": "memory"}}
+
+To read a local file:
+{"tool": "file_read", "args": {"path": "MEMORY.md"}}
+
+To search the web:
+{"tool": "web_search", "args": {"query": "landscape lighting design principles", "count": 5}}
+
+### RULES
+1. When the user asks about GitHub repos, files, or code - USE the github_read_file or github_list_repo tools
+2. When the user asks about past work or memory - USE memory_search
+3. When the user asks about local files - USE file_read or file_list
+4. When the user asks for research - USE web_search
+5. Always respond with tool JSON FIRST, then provide analysis after receiving results
 `;
 }
