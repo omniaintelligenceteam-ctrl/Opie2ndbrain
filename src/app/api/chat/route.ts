@@ -261,42 +261,18 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
-  // DO IT MODE: Spawn to G (me) via OpenClaw for full tool access
-  if (interactionMode === 'execute') {
-    const requestId = crypto.randomUUID();
+  // DO IT MODE: Execute with tools locally (fast streaming)
+  // Add mode context
+  userMessage += interactionMode === 'plan'
+    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
+    : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
 
-    // Check if Supabase is configured
-    if (!supabaseAdmin) {
-      return Response.json({ error: 'Supabase not configured for DO IT mode' }, { status: 503 });
-    }
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
 
-    try {
-      // 1. Write pending task to Supabase
-      await supabaseAdmin.from('opie_requests').insert({
-        request_id: requestId,
-        user_message: message,
-        status: 'pending',
-        source: 'web_app',
-        created_at: new Date().toISOString(),
-      });
-
-      // 2. Build task with conversation context
-      let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
-
-      if (conversationHistory && conversationHistory.length > 0) {
-        const context = conversationHistory
-          .slice(-5) // Last 5 messages
-          .map((m: { role: string; text?: string; content?: string }) => `${m.role}: ${m.text || m.content || ''}`)
-          .join('\n');
-        taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
-      }
-
-      taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
-
-      // Spawn task to me (agent:main)
-      const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-        method: 'POST',
-        headers: {
+  // Use Ollama/Kimi for both modes (fast streaming, local execution with tools)
+  const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
+  return createStreamResponse(generator);
+}
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
         },
