@@ -60,21 +60,35 @@ export async function GET(req: NextRequest) {
           if (historyData.ok && historyData.result?.messages?.length > 0) {
             const lastMsg = historyData.result.messages[historyData.result.messages.length - 1];
             
-            if (lastMsg.role === 'assistant' && lastMsg.content) {
-              // Update Supabase with the response
-              await supabaseAdmin
-                .from('opie_responses')
-                .update({
-                  response: lastMsg.content,
-                  status: 'complete',
-                  completed_at: new Date().toISOString(),
-                })
-                .eq('request_id', requestId);
+            if (lastMsg.role === 'assistant') {
+              // Extract text from content (can be string or array of blocks)
+              let responseText = '';
+              if (typeof lastMsg.content === 'string') {
+                responseText = lastMsg.content;
+              } else if (Array.isArray(lastMsg.content)) {
+                // Extract text blocks, skip thinking blocks
+                responseText = lastMsg.content
+                  .filter((block: any) => block.type === 'text')
+                  .map((block: any) => block.text || '')
+                  .join('');
+              }
               
-              return NextResponse.json({
-                status: 'complete',
-                response: lastMsg.content,
-              });
+              if (responseText) {
+                // Update Supabase with the response
+                await supabaseAdmin
+                  .from('opie_responses')
+                  .update({
+                    response: responseText,
+                    status: 'complete',
+                    completed_at: new Date().toISOString(),
+                  })
+                  .eq('request_id', requestId);
+                
+                return NextResponse.json({
+                  status: 'complete',
+                  response: responseText,
+                });
+              }
             }
           }
         }
