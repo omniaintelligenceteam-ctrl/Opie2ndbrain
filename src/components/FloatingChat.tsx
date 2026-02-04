@@ -1239,11 +1239,14 @@ export default function FloatingChat({
 
           {/* Message list */}
           {messages.map((msg, i) => {
+            // Skip empty assistant messages (typing indicator will show instead)
+            if (msg.role === 'assistant' && !msg.text) return null;
+
             const prev = i > 0 ? messages[i - 1] : undefined;
             const isGrouped = shouldGroupMessages(msg, prev);
             const isUser = msg.role === 'user';
             const showTimestamp = !isGrouped || i === messages.length - 1;
-            
+
             return (
               <div
                 key={msg.id || i}
