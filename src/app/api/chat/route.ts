@@ -359,83 +359,15 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
-  // DO IT MODE: Spawn to G (me) via OpenClaw for full tool access
-  if (interactionMode === 'execute') {
-    const requestId = crypto.randomUUID();
-    
-    try {
-      // 1. Write pending task to Supabase
-      await supabaseAdmin.from('opie_requests').insert({
-        request_id: requestId,
-        user_message: message,
-        status: 'pending',
-        source: 'web_app',
-        created_at: new Date().toISOString(),
-      });
-      
-      // 2. Build task with conversation context
-      let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
-      
-      if (conversationHistory && conversationHistory.length > 0) {
-        const context = conversationHistory
-          .slice(-5) // Last 5 messages
-          .map((m: any) => `${m.role}: ${m.text || m.content || ''}`)
-          .join('\n');
-        taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
-      }
-      
-      taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
-      
-      // Spawn task to me (agent:main)
-      const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-        },
-        body: JSON.stringify({
-          tool: 'sessions_spawn',
-          args: {
-            task: taskMessage,
-            label: `webapp:${requestId}`,
-            timeoutSeconds: 180,
-            cleanup: 'keep',
-          },
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-      
-      const spawnData = await spawnRes.json();
-      
-      // 3. Update with session info
-      if (spawnData.ok && spawnData.result?.sessionKey) {
-        await supabaseAdmin.from('opie_requests').update({
-          session_id: spawnData.result.sessionKey,
-        }).eq('request_id', requestId);
-      }
-      
-      // 4. Return async response for polling
-      return Response.json({
-        mode: 'async',
-        request_id: requestId,
-        poll_url: `/api/chat/poll?request_id=${requestId}`,
-        message: 'Task sent to G - checking for result...',
-      });
-      
-    } catch (error) {
-      console.error('[Chat] DO IT spawn error:', error);
-      return Response.json({ 
-        error: 'Failed to spawn task',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 });
-    }
-  }
-
-  // PLAN MODE: Fast streaming via Ollama
+  // DO IT MODE: Execute with tools locally (fast streaming)
   // Add mode context
-  userMessage += '\n[MODE: Plan] Discuss ideas but do NOT execute actions.';
+  userMessage += interactionMode === 'plan'
+    ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
+    : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
 
   const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
-  const generator = streamOllama(messages, MODELS.kimi.model);
+
+  // Use Ollama/Kimi for both modes (fast streaming, local execution)
+  const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
   return createStreamResponse(generator);
 }
