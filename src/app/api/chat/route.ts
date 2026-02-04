@@ -30,7 +30,7 @@ const MODELS = {
 type ModelAlias = keyof typeof MODELS;
 
 let currentModel: ModelAlias = 'sonnet';
-let currentProvider: Provider = OPENCLAW_AVAILABLE ? 'openclaw' : 'anthropic';
+let currentProvider: Provider = OPENCLAW_AVAILABLE ? 'openclaw' : 'ollama';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
