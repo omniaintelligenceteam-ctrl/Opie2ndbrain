@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
-import { TOOLS, getToolsPrompt } from '@/lib/tools';
+import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Force Node.js runtime for full env var access
@@ -189,6 +189,117 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
   }
 }
 
+// Parse tool call JSON from AI response
+function parseToolCall(text: string): { tool: string; args: Record<string, any> } | null {
+  // Look for JSON object with tool and args keys
+  const jsonMatch = text.match(/\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\}/);
+  if (!jsonMatch) return null;
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (parsed.tool && typeof parsed.tool === 'string') {
+      return { tool: parsed.tool, args: parsed.args || {} };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Call Ollama with tool execution loop (for DO IT mode)
+async function* streamOllamaWithTools(
+  messages: Array<{ role: string; content: string }>,
+  model: string,
+  maxToolIterations = 3
+): AsyncGenerator<string> {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
+    return;
+  }
+
+  let iterations = 0;
+  let currentMessages = [...messages];
+
+  while (iterations < maxToolIterations) {
+    iterations++;
+    console.log(`[DO IT] Tool iteration ${iterations}/${maxToolIterations}`);
+
+    // Call Ollama and collect full response (non-streaming to check for tool calls)
+    try {
+      const response = await fetch('https://ollama.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ollamaKey}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          stream: false, // Non-streaming to get full response
+          messages: currentMessages,
+          max_tokens: 2048,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        yield `data: ${JSON.stringify({ error: `Ollama: ${error.slice(0, 200)}` })}\n\n`;
+        return;
+      }
+
+      const data = await response.json();
+      const fullResponse = data.choices?.[0]?.message?.content || '';
+      console.log(`[DO IT] AI response:`, fullResponse.slice(0, 200));
+
+      // Check for tool call
+      const toolCall = parseToolCall(fullResponse);
+
+      if (!toolCall) {
+        // No tool call - stream the final response
+        console.log(`[DO IT] No tool call, streaming final response`);
+        yield `data: ${JSON.stringify({ choices: [{ delta: { content: fullResponse } }] })}\n\n`;
+        yield `data: [DONE]\n\n`;
+        return;
+      }
+
+      // Execute the tool
+      console.log(`[DO IT] Executing tool: ${toolCall.tool}`, toolCall.args);
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n🔧 Executing ${toolCall.tool}...\n` } }] })}\n\n`;
+
+      const toolResult = await executeTool(toolCall);
+
+      if (!toolResult.success) {
+        console.error(`[DO IT] Tool error:`, toolResult.error);
+        yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ Tool error: ${toolResult.error}\n` } }] })}\n\n`;
+        // Add error to context and continue
+        currentMessages.push(
+          { role: 'assistant', content: fullResponse },
+          { role: 'user', content: `Tool error: ${toolResult.error}. Please provide an alternative response or try a different approach.` }
+        );
+        continue;
+      }
+
+      // Add tool result to conversation
+      const resultStr = JSON.stringify(toolResult.result, null, 2);
+      console.log(`[DO IT] Tool result:`, resultStr.slice(0, 500));
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n✅ Got results\n` } }] })}\n\n`;
+
+      currentMessages.push(
+        { role: 'assistant', content: fullResponse },
+        { role: 'user', content: `Tool "${toolCall.tool}" returned:\n\`\`\`json\n${resultStr}\n\`\`\`\n\nNow provide your final response incorporating this information. Do NOT call another tool unless absolutely necessary.` }
+      );
+
+    } catch (error) {
+      console.error("[DO IT] Error:", error);
+      yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Tool execution failed' })}\n\n`;
+      return;
+    }
+  }
+
+  yield `data: ${JSON.stringify({ choices: [{ delta: { content: '\n⚠️ Max tool iterations reached' } }] })}\n\n`;
+  yield `data: [DONE]\n\n`;
+}
+
 // Call Anthropic with streaming
 async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -261,8 +372,26 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
-  // DO IT MODE: Spawn to G (me) via OpenClaw for full tool access
+  // DO IT MODE: Execute with tools
   if (interactionMode === 'execute') {
+    // Option A: Local tool execution (fast, streaming) - default
+    const useLocalExecution = process.env.DO_IT_LOCAL !== 'false';
+
+    if (useLocalExecution) {
+      console.log('[Chat] DO IT mode: Using local tool execution');
+      userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ];
+
+      const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
+      return createStreamResponse(generator);
+    }
+
+    // Option B: Remote execution via OpenClaw (fallback when DO_IT_LOCAL=false)
+    console.log('[Chat] DO IT mode: Using OpenClaw delegation');
     const requestId = crypto.randomUUID();
 
     // Check if Supabase is configured

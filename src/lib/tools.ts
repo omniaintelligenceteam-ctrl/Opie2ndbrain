@@ -356,6 +356,27 @@ async function writeWebResponse(args: { request_id: string; response: string }) 
   execute: writeWebResponse,
 };
 
+// Tool executor dispatcher for local execution
+export async function executeTool(toolCall: { tool: string; args: Record<string, any> }): Promise<{
+  success: boolean;
+  result?: any;
+  error?: string;
+}> {
+  const tool = TOOLS[toolCall.tool as keyof typeof TOOLS];
+  if (!tool) {
+    return { success: false, error: `Unknown tool: ${toolCall.tool}` };
+  }
+  try {
+    console.log(`[Tools] Executing: ${toolCall.tool}`, toolCall.args);
+    const result = await tool.execute(toolCall.args);
+    console.log(`[Tools] Result:`, result);
+    return { success: true, result };
+  } catch (error) {
+    console.error(`[Tools] Error executing ${toolCall.tool}:`, error);
+    return { success: false, error: error instanceof Error ? error.message : 'Tool execution failed' };
+  }
+}
+
 export function getToolsPrompt(): string {
   const toolsList = Object.values(TOOLS).map(t => {
     const params = Object.entries(t.parameters.properties || {})
