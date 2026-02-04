@@ -635,7 +635,7 @@ export default function OpieKanban(): React.ReactElement {
         signal: abortControllerRef.current.signal,
       });
       const data = await res.json();
-      const reply = data.reply || 'No response';
+      const reply = data.reply || (data.error ? 'Sorry, something went wrong.' : 'Hmm, I didn\'t get a response. Try again?');
       
       // Update interaction mode if AI signaled a change
       if (data.mode && data.mode !== interactionMode) {
