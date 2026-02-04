@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS, getToolsPrompt } from '@/lib/tools';
+import { readMemory, getMemoryContext } from '@/lib/memorySync';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -362,8 +363,23 @@ export async function POST(req: NextRequest) {
     ? '\n[MODE: Plan] Discuss ideas but do NOT execute actions.'
     : '\n[MODE: DO IT] Execute actions decisively. Use any tools available.';
 
-  if (interactionMode === 'execute' && memoryContext) {
-    userMessage += `\n\n[MEMORY]\n${memoryContext}`;
+  // Add memory context from Supabase for DO IT mode
+  let memoryFromSupabase = memoryContext;
+  if (interactionMode === 'execute') {
+    try {
+      const supabaseMemory = await getMemoryContext(10);
+      if (supabaseMemory) {
+        memoryFromSupabase = memoryContext 
+          ? `${memoryContext}\n\n---\n\nRecent memories:\n${supabaseMemory}`
+          : supabaseMemory;
+      }
+    } catch (e) {
+      console.error('[Chat] Failed to load memory from Supabase:', e);
+    }
+  }
+
+  if (interactionMode === 'execute' && memoryFromSupabase) {
+    userMessage += `\n\n[MEMORY]\n${memoryFromSupabase}`;
   }
 
   const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
