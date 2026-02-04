@@ -1,8 +1,18 @@
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+const API_KEY = process.env.DASHBOARD_API_KEY || process.env.INTERNAL_API_KEY;
+
 export async function POST(req: Request) {
   try {
+    // Verify API key
+    const authHeader = req.headers.get('authorization');
+    const apiKey = authHeader?.replace('Bearer ', '') || req.headers.get('x-api-key');
+    
+    if (API_KEY && apiKey !== API_KEY) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const { message, chatHistory, memoryContext } = await req.json();
     
     // Build full context for the task
