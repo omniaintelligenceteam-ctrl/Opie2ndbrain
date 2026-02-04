@@ -1468,12 +1468,6 @@ export default function FloatingChat({
           </button>
         </div>
 
-        {/* Emoji hint */}
-        {showEmojiHint && input.length === 0 && (
-          <div style={styles.emojiHint}>
-            💡 Tip: Use voice for hands-free chat!
-          </div>
-        )}
       </div>
 
         {/* Conversation Sidebar */}
