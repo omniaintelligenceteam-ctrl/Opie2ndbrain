@@ -613,6 +613,44 @@ export default function FloatingChat({
           .typing-dot:nth-child(3) { animation-delay: 0.4s; }
           @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-4px); opacity: 1; } }
           .sync-notice { padding: 8px 16px; background: rgba(102, 126, 234, 0.1); color: rgba(255, 255, 255, 0.6); font-size: 0.75rem; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+          .mode-toggle-container {
+            padding: 8px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.15);
+          }
+          .mode-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+          }
+          .mode-btn:hover { background: rgba(255, 255, 255, 0.1); }
+          .mode-btn.active-plan {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(168, 85, 247, 0.2) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            color: #a78bfa;
+          }
+          .mode-btn.active-doit {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.3) 0%, rgba(239, 68, 68, 0.2) 100%);
+            border: 1px solid rgba(249, 115, 22, 0.5);
+            color: #fb923c;
+            animation: doItPulse 2s ease-in-out infinite;
+          }
+          @keyframes doItPulse {
+            0%, 100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.4); }
+            50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.4); }
+          }
         </style>
       </head>
       <body>
@@ -628,6 +666,14 @@ export default function FloatingChat({
             </div>
           </div>
           <div class="messages" id="messages"></div>
+          <div class="mode-toggle-container">
+            <button class="mode-btn" id="plan-btn" onclick="setMode('plan')">
+              <span>💭</span><span>Plan</span>
+            </button>
+            <button class="mode-btn" id="doit-btn" onclick="setMode('execute')">
+              <span>🔥</span><span>DO IT</span>
+            </button>
+          </div>
           <div class="input-area">
             <textarea class="text-input" id="input" placeholder="Type a message..." rows="1"></textarea>
             <button class="send-btn" id="send-btn">
@@ -641,19 +687,39 @@ export default function FloatingChat({
           const messagesEl = document.getElementById('messages');
           const inputEl = document.getElementById('input');
           const sendBtn = document.getElementById('send-btn');
-          
+          const planBtn = document.getElementById('plan-btn');
+          const doitBtn = document.getElementById('doit-btn');
+          let currentMode = 'plan';
+
           // Listen for messages from parent window
           window.addEventListener('message', (event) => {
             if (event.data.type === 'OPIE_CHAT_UPDATE') {
               renderMessages(event.data.messages, event.data.isLoading);
+              if (event.data.interactionMode) {
+                updateModeUI(event.data.interactionMode);
+              }
             }
           });
-          
+
           // Request initial state
           if (window.opener) {
             window.opener.postMessage({ type: 'OPIE_CHAT_REQUEST_STATE' }, '*');
           }
-          
+
+          function setMode(mode) {
+            currentMode = mode;
+            updateModeUI(mode);
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OPIE_CHAT_MODE_CHANGE', mode }, '*');
+            }
+          }
+
+          function updateModeUI(mode) {
+            currentMode = mode;
+            planBtn.className = 'mode-btn' + (mode === 'plan' ? ' active-plan' : '');
+            doitBtn.className = 'mode-btn' + (mode === 'execute' ? ' active-doit' : '');
+          }
+
           function renderMessages(messages, isLoading) {
             messagesEl.innerHTML = messages.map(msg => \`
               <div class="message-row \${msg.role}">
@@ -718,31 +784,36 @@ export default function FloatingChat({
           type: 'OPIE_CHAT_UPDATE',
           messages: messages.map(m => ({ role: m.role, text: m.text })),
           isLoading,
+          interactionMode,
         }, '*');
       } else if (event.data.type === 'OPIE_CHAT_SEND') {
         // Handle message sent from detached window
         setInput(event.data.text);
         setTimeout(() => onSend(event.data.text), 50);
+      } else if (event.data.type === 'OPIE_CHAT_MODE_CHANGE') {
+        // Handle mode change from detached window
+        setInteractionMode(event.data.mode);
       } else if (event.data.type === 'OPIE_CHAT_DETACHED_CLOSED') {
         setIsDetached(false);
         detachedWindowRef.current = null;
       }
     };
-    
+
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [messages, isLoading, onSend, setInput]);
+  }, [messages, isLoading, onSend, setInput, interactionMode, setInteractionMode]);
   
-  // Sync messages to detached window
+  // Sync messages and mode to detached window
   useEffect(() => {
     if (isDetached && detachedWindowRef.current && !detachedWindowRef.current.closed) {
       detachedWindowRef.current.postMessage({
         type: 'OPIE_CHAT_UPDATE',
         messages: messages.map(m => ({ role: m.role, text: m.text })),
         isLoading,
+        interactionMode,
       }, '*');
     }
-  }, [messages, isLoading, isDetached]);
+  }, [messages, isLoading, isDetached, interactionMode]);
   
   // Check if detached window was closed
   useEffect(() => {
