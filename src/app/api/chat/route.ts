@@ -310,7 +310,8 @@ export async function POST(req: NextRequest) {
     userMessage = userMessage + modeContext;
 
     let reply: string;
-    let usedProvider: string;
+    let usedProvider: Provider;
+    let usedModel: string;
 
     // === Route to selected provider ===
     if (currentProvider === 'openclaw' && OPENCLAW_AVAILABLE) {
@@ -318,10 +319,11 @@ export async function POST(req: NextRequest) {
       const fullMessage = `[System: ${SYSTEM_PROMPT}]\n\n${userMessage}`;
       reply = await callOpenClaw([{ role: 'user', content: fullMessage }], sessionId);
       usedProvider = 'openclaw';
+      usedModel = 'gateway-agent'; // OpenClaw uses its own agent/model
 
     } else if (currentProvider === 'ollama') {
       console.log('[Chat API] Using Ollama directly');
-      const modelConfig = MODELS.kimi;  // Ollama = Kimi
+      const modelConfig = MODELS.kimi;
 
       if (!conversationHistory.has(sessionId)) {
         conversationHistory.set(sessionId, []);
@@ -333,16 +335,17 @@ export async function POST(req: NextRequest) {
       reply = await callOllama(history, modelConfig.model);
       history.push({ role: 'assistant', content: reply });
       usedProvider = 'ollama';
+      usedModel = modelConfig.model;
 
     } else {
       // Default: Anthropic
-      console.log('[Chat API] Using Anthropic directly, model:', currentModel);
       const modelConfig = MODELS[currentModel];
 
       if (modelConfig.provider !== 'anthropic') {
-        // If model is ollama-based but provider is anthropic, use sonnet
         currentModel = 'sonnet';
       }
+
+      console.log('[Chat API] Using Anthropic directly, model:', MODELS[currentModel].model);
 
       if (!conversationHistory.has(sessionId)) {
         conversationHistory.set(sessionId, []);
@@ -354,6 +357,7 @@ export async function POST(req: NextRequest) {
       reply = await callAnthropic(history, MODELS[currentModel].model);
       history.push({ role: 'assistant', content: reply });
       usedProvider = 'anthropic';
+      usedModel = MODELS[currentModel].model;
     }
 
     // Parse mode indicators from response
@@ -366,22 +370,25 @@ export async function POST(req: NextRequest) {
       reply = reply.replace(/\[MODE:plan\]/g, '').trim();
     }
 
-    console.log('[Chat API] Success - provider:', usedProvider, 'reply length:', reply.length);
+    console.log('[Chat API] SUCCESS | provider:', usedProvider, '| model:', usedModel, '| reply:', reply.length, 'chars');
 
+    // Truth log: always know which path was used
     return NextResponse.json({
       reply,
       mode: newMode,
-      model: usedProvider,
+      provider: usedProvider,  // "openclaw" | "ollama" | "anthropic"
+      model: usedModel,        // actual model name
     });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Chat API] Error:', errorMessage);
+    console.error('[Chat API] ERROR | provider:', currentProvider, '|', errorMessage);
 
     return NextResponse.json({
       reply: `Sorry, I couldn't process that: ${errorMessage}`,
       error: true,
-      model: currentProvider,
+      provider: currentProvider,
+      model: null,
     });
   }
 }
