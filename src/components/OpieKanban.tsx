@@ -234,18 +234,34 @@ function KanbanColumn({
             key={`${column.id}-${index}`}
             style={{
               ...styles.kanbanTask,
+              // Staggered animation delay for entrance
+              animationDelay: `${index * 0.05}s`,
               // Fade effect for older items when showing limited view
               ...(!showAll && column.tasks.length > MAX_VISIBLE_ITEMS && index < 3 ? {
                 opacity: 0.7,
               } : {}),
             }}
             className="kanban-task-hover"
+            onMouseEnter={(e) => {
+              const target = e.currentTarget;
+              target.style.transform = 'translateX(4px) scale(1.01)';
+              target.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(6,182,212,0.05) 100%)';
+              target.style.borderColor = 'rgba(168,85,247,0.3)';
+              target.style.boxShadow = '0 4px 20px rgba(168,85,247,0.15), inset 0 1px 0 rgba(255,255,255,0.05)';
+            }}
+            onMouseLeave={(e) => {
+              const target = e.currentTarget;
+              target.style.transform = 'translateX(0) scale(1)';
+              target.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(168,85,247,0.02) 100%)';
+              target.style.borderColor = 'rgba(168,85,247,0.1)';
+              target.style.boxShadow = 'none';
+            }}
           >
             <span style={styles.kanbanTaskText}>{task}</span>
             {/* Add timestamps for all items based on column type */}
             <span style={styles.taskTimestamp}>
               {mounted ? (
-                column.id === 'done' 
+                column.id === 'done'
                   ? `Completed ${new Date(Date.now() - (visibleTasks.length - index) * 86400000 * 2).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
                   : column.id === 'progress'
                     ? `Started ${new Date(Date.now() - (visibleTasks.length - index) * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
@@ -311,7 +327,20 @@ export default function OpieKanban(): React.ReactElement {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSheetContent, setMobileSheetContent] = useState<'agents' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  
+
+  // Pinned conversations for multi-chat comparison
+  const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>([]);
+
+  const pinConversation = useCallback((id: string) => {
+    if (!pinnedConversationIds.includes(id) && pinnedConversationIds.length < 2) {
+      setPinnedConversationIds(prev => [...prev, id]);
+    }
+  }, [pinnedConversationIds]);
+
+  const unpinConversation = useCallback((id: string) => {
+    setPinnedConversationIds(prev => prev.filter(cid => cid !== id));
+  }, []);
+
   // Responsive state
   const responsive = useResponsive();
   const isMobile = responsive.isMobile;
@@ -1824,6 +1853,48 @@ export default function OpieKanban(): React.ReactElement {
         )}
       </main>
 
+      {/* Pinned Comparison Panels */}
+      {pinnedConversationIds.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 16,
+          left: 16,
+          display: 'flex',
+          gap: 8,
+          zIndex: 999,
+        }}>
+          {pinnedConversationIds.map(pinnedId => {
+            const pinnedConv = conversations.find(c => c.id === pinnedId);
+            if (!pinnedConv) return null;
+
+            return (
+              <div
+                key={pinnedId}
+                style={{
+                  width: 350,
+                  height: 450,
+                }}
+              >
+                <FloatingChat
+                  messages={pinnedConv.messages}
+                  isPinned={true}
+                  onUnpin={() => unpinConversation(pinnedId)}
+                  pinnedTitle={pinnedConv.title}
+                  input=""
+                  setInput={() => {}}
+                  isLoading={false}
+                  micOn={false}
+                  onMicToggle={() => {}}
+                  isSpeaking={false}
+                  transcript=""
+                  onSend={() => {}}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Floating Chat Box */}
       <FloatingChat
         messages={messages}
@@ -1846,6 +1917,8 @@ export default function OpieKanban(): React.ReactElement {
         onConversationDelete={deleteConversation}
         onConversationFork={forkConversation}
         onSummarizeAndContinue={handleSummarizeAndContinue}
+        pinnedConversationIds={pinnedConversationIds}
+        onPinConversation={pinConversation}
       />
 
       {/* Command Palette */}
@@ -2602,18 +2675,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '10px',
   },
   kanbanTask: {
-    background: 'rgba(255,255,255,0.03)',
-    borderRadius: '10px',
-    padding: '12px',
-    border: '1px solid rgba(255,255,255,0.06)',
-    transition: 'all 0.2s ease',
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(168,85,247,0.02) 100%)',
+    borderRadius: '12px',
+    padding: '14px',
+    border: '1px solid rgba(168,85,247,0.1)',
+    transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
     cursor: 'pointer',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+    // Stagger animation will be applied inline with index
+    animation: 'fadeInUp 0.4s ease-out backwards',
+  },
+  kanbanTaskHover: {
+    transform: 'translateX(4px) scale(1.01)',
+    background: 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(6,182,212,0.05) 100%)',
+    borderColor: 'rgba(168,85,247,0.3)',
+    boxShadow: '0 4px 20px rgba(168,85,247,0.15), inset 0 1px 0 rgba(255,255,255,0.05)',
   },
   kanbanTaskText: {
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.85)',
     fontSize: '0.85rem',
     fontWeight: 500,
     lineHeight: 1.4,
@@ -2725,13 +2806,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '18px',
   },
   kanbanColumnGrid: {
-    background: 'rgba(255,255,255,0.02)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(168,85,247,0.02) 100%)',
     borderRadius: '16px',
     borderTop: '3px solid',
     overflow: 'hidden',
-    transition: 'all 0.3s ease',
-    border: '1px solid rgba(255,255,255,0.04)',
+    transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+    border: '1px solid rgba(168,85,247,0.1)',
     borderTopWidth: '3px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
   },
   columnHeader: {
     padding: '16px 18px',

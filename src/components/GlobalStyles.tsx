@@ -227,6 +227,94 @@ export default function GlobalStyles(): React.ReactElement {
         0% { stroke-dashoffset: 100; }
         100% { stroke-dashoffset: 0; }
       }
+
+      /* ==========================================================================
+         BADASS NEON ANIMATIONS
+         ========================================================================== */
+
+      @keyframes neonPulse {
+        0%, 100% {
+          filter: brightness(1);
+          text-shadow: 0 0 10px currentColor;
+        }
+        50% {
+          filter: brightness(1.3);
+          text-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor;
+        }
+      }
+
+      @keyframes borderGlow {
+        0%, 100% {
+          border-color: rgba(168, 85, 247, 0.5);
+          box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+        }
+        50% {
+          border-color: rgba(6, 182, 212, 0.5);
+          box-shadow: 0 0 25px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2);
+        }
+      }
+
+      @keyframes textGradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      @keyframes cyberPulse {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), inset 0 0 20px rgba(168, 85, 247, 0.1);
+        }
+        50% {
+          transform: scale(1.02);
+          box-shadow: 0 0 40px rgba(168, 85, 247, 0.6), 0 0 60px rgba(6, 182, 212, 0.3), inset 0 0 30px rgba(168, 85, 247, 0.2);
+        }
+      }
+
+      @keyframes rippleNeon {
+        0% { transform: scale(0); opacity: 0.8; }
+        100% { transform: scale(4); opacity: 0; }
+      }
+
+      @keyframes floatGlow {
+        0%, 100% {
+          transform: translateY(0);
+          filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.5));
+        }
+        50% {
+          transform: translateY(-8px);
+          filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.8)) drop-shadow(0 0 40px rgba(6, 182, 212, 0.4));
+        }
+      }
+
+      @keyframes scanline {
+        0% { transform: translateY(-100%); opacity: 0; }
+        50% { opacity: 0.5; }
+        100% { transform: translateY(100vh); opacity: 0; }
+      }
+
+      @keyframes glitchFlicker {
+        0%, 90%, 100% { opacity: 1; transform: translate(0); }
+        91% { opacity: 0.8; transform: translate(-2px, 1px); }
+        93% { opacity: 0.9; transform: translate(2px, -1px); }
+        95% { opacity: 0.7; transform: translate(-1px, 2px); }
+        97% { opacity: 0.95; transform: translate(1px, -2px); }
+      }
+
+      @keyframes orbitalGlow {
+        0% {
+          box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(168, 85, 247, 0.3);
+        }
+        33% {
+          box-shadow: 0 0 30px rgba(6, 182, 212, 0.6), 0 0 60px rgba(6, 182, 212, 0.3);
+        }
+        66% {
+          box-shadow: 0 0 30px rgba(236, 72, 153, 0.6), 0 0 60px rgba(236, 72, 153, 0.3);
+        }
+        100% {
+          box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(168, 85, 247, 0.3);
+        }
+      }
       
       /* ==========================================================================
          DOCUMENT VIEWER STYLES

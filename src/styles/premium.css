@@ -5,32 +5,47 @@
   --color-bg-subtle: #101016;
   --color-bg-elevated: #14141c;
   --color-bg-hover: #1a1a24;
-  
+
   --color-border: rgba(255, 255, 255, 0.06);
   --color-border-subtle: rgba(255, 255, 255, 0.04);
   --color-border-focus: rgba(99, 102, 241, 0.5);
-  
+
   --color-text: #ffffff;
   --color-text-secondary: rgba(255, 255, 255, 0.65);
   --color-text-tertiary: rgba(255, 255, 255, 0.4);
   --color-text-muted: rgba(255, 255, 255, 0.25);
-  
+
   --color-primary: #6366f1;
   --color-primary-hover: #818cf8;
-  
+
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
-  
+
+  /* Neon Colors - Badass Mode */
+  --neon-purple: #a855f7;
+  --neon-cyan: #06b6d4;
+  --neon-pink: #ec4899;
+  --neon-green: #22c55e;
+  --neon-orange: #f97316;
+  --neon-blue: #3b82f6;
+
+  /* Glow Shadows */
+  --glow-purple: 0 0 20px rgba(168, 85, 247, 0.6), 0 0 40px rgba(168, 85, 247, 0.3), 0 0 60px rgba(168, 85, 247, 0.1);
+  --glow-cyan: 0 0 20px rgba(6, 182, 212, 0.6), 0 0 40px rgba(6, 182, 212, 0.3);
+  --glow-pink: 0 0 20px rgba(236, 72, 153, 0.6), 0 0 40px rgba(236, 72, 153, 0.3);
+  --glow-green: 0 0 20px rgba(34, 197, 94, 0.6), 0 0 40px rgba(34, 197, 94, 0.3);
+  --glow-orange: 0 0 20px rgba(249, 115, 22, 0.6), 0 0 40px rgba(249, 115, 22, 0.3);
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, monospace;
-  
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
-  
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -213,6 +228,88 @@ img {
   100% { background-position: 0% 50%; }
 }
 
+/* ============================================
+   BADASS NEON ANIMATIONS
+   ============================================ */
+
+@keyframes neonPulse {
+  0%, 100% {
+    filter: brightness(1);
+    text-shadow: 0 0 10px currentColor;
+  }
+  50% {
+    filter: brightness(1.3);
+    text-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor;
+  }
+}
+
+@keyframes borderGlow {
+  0%, 100% {
+    border-color: rgba(168, 85, 247, 0.5);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+  }
+  50% {
+    border-color: rgba(6, 182, 212, 0.5);
+    box-shadow: 0 0 25px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2);
+  }
+}
+
+@keyframes textGradientFlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.6), 0 0 60px rgba(168, 85, 247, 0.3);
+  }
+}
+
+@keyframes scanlineMove {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+@keyframes glitchFlicker {
+  0%, 90%, 100% { opacity: 1; transform: translate(0); }
+  91% { opacity: 0.8; transform: translate(-2px, 1px); }
+  93% { opacity: 0.9; transform: translate(2px, -1px); }
+  95% { opacity: 0.7; transform: translate(-1px, 2px); }
+  97% { opacity: 0.95; transform: translate(1px, -2px); }
+}
+
+@keyframes cyberPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), inset 0 0 20px rgba(168, 85, 247, 0.1);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.6), 0 0 60px rgba(6, 182, 212, 0.3), inset 0 0 30px rgba(168, 85, 247, 0.2);
+  }
+}
+
+@keyframes rippleEffect {
+  0% { transform: scale(0); opacity: 0.8; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+@keyframes floatGlow {
+  0%, 100% {
+    transform: translateY(0);
+    filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.5));
+  }
+  50% {
+    transform: translateY(-8px);
+    filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.8)) drop-shadow(0 0 40px rgba(6, 182, 212, 0.4));
+  }
+}
+
 /* Utility Classes */
 .animate-fadeIn { animation: fadeIn 0.3s ease; }
 .animate-fadeInUp { animation: fadeInUp 0.4s ease; }
@@ -221,6 +318,13 @@ img {
 .animate-pulse { animation: pulse 2s infinite; }
 .animate-glow { animation: glow 3s infinite; }
 .animate-spin { animation: spin 1s linear infinite; }
+
+/* Badass Neon Animations */
+.animate-neonPulse { animation: neonPulse 2s ease-in-out infinite; }
+.animate-borderGlow { animation: borderGlow 3s ease-in-out infinite; }
+.animate-cyberPulse { animation: cyberPulse 2.5s ease-in-out infinite; }
+.animate-floatGlow { animation: floatGlow 3s ease-in-out infinite; }
+.animate-glitch { animation: glitchFlicker 4s ease-in-out infinite; }
 
 /* Skeleton Loading */
 .skeleton {
@@ -260,6 +364,92 @@ img {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ============================================
+   BADASS NEON UTILITIES
+   ============================================ */
+
+/* Neon Text Glow */
+.neon-text {
+  text-shadow:
+    0 0 10px currentColor,
+    0 0 20px currentColor,
+    0 0 40px currentColor;
+}
+
+.neon-text-purple {
+  color: var(--neon-purple);
+  text-shadow:
+    0 0 10px rgba(168, 85, 247, 0.8),
+    0 0 20px rgba(168, 85, 247, 0.6),
+    0 0 40px rgba(168, 85, 247, 0.4);
+}
+
+.neon-text-cyan {
+  color: var(--neon-cyan);
+  text-shadow:
+    0 0 10px rgba(6, 182, 212, 0.8),
+    0 0 20px rgba(6, 182, 212, 0.6),
+    0 0 40px rgba(6, 182, 212, 0.4);
+}
+
+/* Neon Border Glow */
+.neon-border {
+  box-shadow:
+    inset 0 0 10px rgba(168, 85, 247, 0.2),
+    0 0 20px rgba(168, 85, 247, 0.4),
+    0 0 40px rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.neon-border-cyan {
+  box-shadow:
+    inset 0 0 10px rgba(6, 182, 212, 0.2),
+    0 0 20px rgba(6, 182, 212, 0.4),
+    0 0 40px rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(6, 182, 212, 0.5);
+}
+
+/* Animated Gradient Text */
+.gradient-text-animated {
+  background: linear-gradient(135deg, #a855f7, #06b6d4, #ec4899, #a855f7);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: textGradientFlow 4s ease infinite;
+}
+
+/* Neon Card Hover */
+.neon-hover {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.neon-hover:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(168, 85, 247, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+/* Pulse Glow Animation */
+.pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Cyber Scanline Effect */
+.cyber-scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent);
+  animation: scanlineMove 3s linear infinite;
 }
 
 /* Status Indicators */

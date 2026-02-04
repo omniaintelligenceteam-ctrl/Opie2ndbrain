@@ -41,56 +41,81 @@ function formatTime(dateStr: string): string {
 
 // Status Orb Component - REMOVED (as per requirements)
 
-// Metric Card Component
-function MetricCard({ 
-  icon, 
-  label, 
-  value, 
-  subtext, 
-  color = '#6366f1',
-  onClick 
-}: { 
-  icon: string; 
-  label: string; 
-  value: string | number; 
+// Metric Card Component - Enhanced with Neon Glow
+function MetricCard({
+  icon,
+  label,
+  value,
+  subtext,
+  color = '#a855f7',
+  onClick
+}: {
+  icon: string;
+  label: string;
+  value: string | number;
   subtext?: string;
   color?: string;
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  
+
   return (
-    <div 
+    <div
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: hovered 
-          ? 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.08) 100%)'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+        background: hovered
+          ? 'linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(6,182,212,0.08) 100%)'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(168,85,247,0.02) 100%)',
         borderRadius: '16px',
         padding: '20px',
-        border: hovered ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(255,255,255,0.06)',
+        border: hovered
+          ? '1px solid rgba(168,85,247,0.4)'
+          : '1px solid rgba(168,85,247,0.1)',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        transform: hovered ? 'translateY(-2px)' : 'none',
-        boxShadow: hovered ? '0 8px 30px rgba(99,102,241,0.15)' : 'none',
+        transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        transform: hovered ? 'translateY(-4px) scale(1.02)' : 'none',
+        boxShadow: hovered
+          ? '0 15px 40px rgba(0,0,0,0.3), 0 0 30px rgba(168,85,247,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
+          : '0 2px 10px rgba(0,0,0,0.2)',
+        position: 'relative' as const,
+        overflow: 'hidden',
       }}
     >
+      {/* Neon top border line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: '10%',
+        right: '10%',
+        height: '2px',
+        background: hovered
+          ? 'linear-gradient(90deg, transparent, rgba(168,85,247,0.8), rgba(6,182,212,0.8), transparent)'
+          : 'linear-gradient(90deg, transparent, rgba(168,85,247,0.3), transparent)',
+        transition: 'all 0.3s ease',
+      }} />
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-        <span style={{ fontSize: '20px' }}>{icon}</span>
+        <span style={{
+          fontSize: '22px',
+          filter: hovered ? 'drop-shadow(0 0 8px rgba(168,85,247,0.6))' : 'none',
+          transition: 'filter 0.3s ease',
+        }}>{icon}</span>
         <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', fontWeight: 500 }}>
           {label}
         </span>
       </div>
-      <div style={{ 
-        color: color, 
-        fontSize: '2.25rem', 
+      <div style={{
+        color: color,
+        fontSize: '2.25rem',
         fontWeight: 700,
         fontVariantNumeric: 'tabular-nums',
         letterSpacing: '-0.02em',
         lineHeight: 1,
         marginBottom: '6px',
+        textShadow: hovered ? `0 0 20px ${color}66` : 'none',
+        transition: 'text-shadow 0.3s ease',
       }}>
         {value}
       </div>
@@ -133,22 +158,22 @@ function ConnectionPill({ label, connected }: { label: string; connected: boolea
   );
 }
 
-// Quick Action Button
-function QuickActionButton({ 
-  icon, 
-  label, 
+// Quick Action Button - Enhanced with Neon
+function QuickActionButton({
+  icon,
+  label,
   variant = 'primary',
-  onClick 
-}: { 
-  icon: string; 
-  label: string; 
+  onClick
+}: {
+  icon: string;
+  label: string;
   variant?: 'primary' | 'secondary';
   onClick?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  
+
   const isPrimary = variant === 'primary';
-  
+
   return (
     <button
       onClick={onClick}
@@ -158,12 +183,17 @@ function QuickActionButton({
         flex: 1,
         minWidth: '120px',
         padding: '14px 20px',
-        background: isPrimary 
-          ? (hovered ? 'linear-gradient(135deg, #818cf8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)')
-          : (hovered ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)'),
-        border: isPrimary ? 'none' : '1px solid rgba(99,102,241,0.3)',
+        background: isPrimary
+          ? (hovered
+            ? 'linear-gradient(135deg, #a855f7 0%, #06b6d4 50%, #ec4899 100%)'
+            : 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)')
+          : (hovered ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.1)'),
+        backgroundSize: isPrimary ? '200% 200%' : 'auto',
+        border: isPrimary
+          ? '1px solid rgba(168,85,247,0.4)'
+          : '1px solid rgba(168,85,247,0.3)',
         borderRadius: '12px',
-        color: isPrimary ? '#fff' : '#818cf8',
+        color: isPrimary ? '#fff' : '#a78bfa',
         fontSize: '0.9rem',
         fontWeight: 600,
         cursor: 'pointer',
@@ -171,12 +201,20 @@ function QuickActionButton({
         alignItems: 'center',
         justifyContent: 'center',
         gap: '8px',
-        transition: 'all 0.2s ease',
-        transform: hovered ? 'translateY(-2px)' : 'none',
-        boxShadow: isPrimary && hovered ? '0 8px 25px rgba(99,102,241,0.4)' : 'none',
+        transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        transform: hovered ? 'translateY(-3px) scale(1.02)' : 'none',
+        boxShadow: isPrimary && hovered
+          ? '0 10px 30px rgba(168,85,247,0.4), 0 0 20px rgba(168,85,247,0.2)'
+          : hovered
+            ? '0 5px 20px rgba(168,85,247,0.2)'
+            : 'none',
+        animation: isPrimary ? 'gradientFlow 3s ease infinite' : 'none',
       }}
     >
-      <span>{icon}</span>
+      <span style={{
+        filter: hovered ? 'drop-shadow(0 0 6px currentColor)' : 'none',
+        transition: 'filter 0.3s ease',
+      }}>{icon}</span>
       <span>{label}</span>
     </button>
   );

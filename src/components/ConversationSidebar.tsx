@@ -10,6 +10,8 @@ interface ConversationSidebarProps {
   onSelectConversation: (id: string) => void;
   onNewConversation: () => void;
   onDeleteConversation: (id: string) => void;
+  pinnedConversationIds?: string[];
+  onPinConversation?: (id: string) => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -37,13 +39,17 @@ function getPreview(conversation: Conversation): string {
 const ConversationItem = memo(function ConversationItem({
   conversation,
   isActive,
+  isPinned,
   onSelect,
   onDelete,
+  onPin,
 }: {
   conversation: Conversation;
   isActive: boolean;
+  isPinned: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onPin?: () => void;
 }) {
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -54,13 +60,16 @@ const ConversationItem = memo(function ConversationItem({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         ...styles.conversationItem,
-        background: isActive ? 'rgba(102, 126, 234, 0.2)' : isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-        borderLeft: isActive ? '3px solid #667eea' : '3px solid transparent',
+        background: isActive ? 'rgba(102, 126, 234, 0.2)' : isPinned ? 'rgba(234, 179, 102, 0.1)' : isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+        borderLeft: isActive ? '3px solid #667eea' : isPinned ? '3px solid #eab366' : '3px solid transparent',
       }}
     >
       <div style={styles.conversationContent}>
         <div style={styles.conversationHeader}>
-          <span style={styles.conversationTitle}>{conversation.title}</span>
+          <span style={styles.conversationTitle}>
+            {isPinned && <span style={{ marginRight: 4 }}>📌</span>}
+            {conversation.title}
+          </span>
           <span style={styles.conversationTime}>
             {formatRelativeTime(conversation.updatedAt)}
           </span>
@@ -72,19 +81,36 @@ const ConversationItem = memo(function ConversationItem({
           <div style={styles.forkBadge}>Forked</div>
         )}
       </div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        style={{
-          ...styles.deleteButton,
-          opacity: isHovered ? 1 : 0,
-        }}
-        title="Delete conversation"
-      >
-        ×
-      </button>
+      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        {onPin && !isPinned && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPin();
+            }}
+            style={{
+              ...styles.pinButton,
+              opacity: isHovered ? 1 : 0,
+            }}
+            title="Pin to compare panel"
+          >
+            📌
+          </button>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          style={{
+            ...styles.deleteButton,
+            opacity: isHovered ? 1 : 0,
+          }}
+          title="Delete conversation"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 });
@@ -97,6 +123,8 @@ export default function ConversationSidebar({
   onSelectConversation,
   onNewConversation,
   onDeleteConversation,
+  pinnedConversationIds = [],
+  onPinConversation,
 }: ConversationSidebarProps): React.ReactElement | null {
   if (!isOpen) return null;
 
@@ -129,8 +157,10 @@ export default function ConversationSidebar({
                   key={conv.id}
                   conversation={conv}
                   isActive={conv.id === activeConversationId}
+                  isPinned={pinnedConversationIds.includes(conv.id)}
                   onSelect={() => onSelectConversation(conv.id)}
                   onDelete={() => onDeleteConversation(conv.id)}
+                  onPin={onPinConversation && pinnedConversationIds.length < 2 ? () => onPinConversation(conv.id) : undefined}
                 />
               ))
           )}
@@ -256,6 +286,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'transparent',
     color: 'rgba(255, 255, 255, 0.3)',
     fontSize: '16px',
+    cursor: 'pointer',
+    opacity: 0,
+    transition: 'opacity 0.15s',
+    flexShrink: 0,
+  },
+  pinButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    border: 'none',
+    background: 'transparent',
+    fontSize: '14px',
     cursor: 'pointer',
     opacity: 0,
     transition: 'opacity 0.15s',

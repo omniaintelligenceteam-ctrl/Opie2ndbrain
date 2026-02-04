@@ -20,13 +20,14 @@ interface ParticleBackgroundProps {
   className?: string;
 }
 
+// Neon-enhanced particle colors
 const AGENT_COLORS = [
-  'rgba(102, 126, 234, 0.6)',  // Primary purple
-  'rgba(118, 75, 162, 0.5)',   // Deep purple
-  'rgba(59, 130, 246, 0.5)',   // Blue
-  'rgba(34, 197, 94, 0.4)',    // Green
-  'rgba(139, 92, 246, 0.5)',   // Violet
-  'rgba(34, 211, 238, 0.4)',   // Cyan
+  'rgba(168, 85, 247, 0.7)',   // Neon purple
+  'rgba(6, 182, 212, 0.6)',    // Neon cyan
+  'rgba(236, 72, 153, 0.6)',   // Neon pink
+  'rgba(34, 197, 94, 0.5)',    // Neon green
+  'rgba(139, 92, 246, 0.6)',   // Violet
+  'rgba(249, 115, 22, 0.5)',   // Neon orange
 ];
 
 export default function ParticleBackground({
@@ -164,24 +165,45 @@ export default function ParticleBackground({
         ctx.fill();
       });
 
-      // Draw connections between nearby particles
+      // Draw neon connections between nearby particles
       particlesRef.current.forEach((p1, i) => {
         particlesRef.current.slice(i + 1).forEach((p2) => {
           const dx = p1.x - p2.x;
           const dy = p1.y - p2.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          if (dist < 100) {
-            const alpha = (1 - dist / 100) * 0.15;
+          if (dist < 120) {
+            const alpha = (1 - dist / 120) * 0.25;
+            // Create gradient line for neon effect
+            const gradient = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+            gradient.addColorStop(0, `rgba(168, 85, 247, ${alpha})`);
+            gradient.addColorStop(0.5, `rgba(6, 182, 212, ${alpha * 0.8})`);
+            gradient.addColorStop(1, `rgba(236, 72, 153, ${alpha})`);
+
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(102, 126, 234, ${alpha})`;
-            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 0.8;
             ctx.stroke();
           }
         });
       });
+
+      // Draw mouse glow trail
+      if (mouseAttraction && mouseRef.current.x > 0) {
+        const mouseGlow = ctx.createRadialGradient(
+          mouseRef.current.x, mouseRef.current.y, 0,
+          mouseRef.current.x, mouseRef.current.y, 80
+        );
+        mouseGlow.addColorStop(0, 'rgba(168, 85, 247, 0.15)');
+        mouseGlow.addColorStop(0.5, 'rgba(6, 182, 212, 0.08)');
+        mouseGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = mouseGlow;
+        ctx.beginPath();
+        ctx.arc(mouseRef.current.x, mouseRef.current.y, 80, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       animationRef.current = requestAnimationFrame(animate);
     };

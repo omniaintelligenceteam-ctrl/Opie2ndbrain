@@ -9,41 +9,47 @@ interface StatusOrbProps {
   showLabel?: boolean;
 }
 
+// Enhanced Neon Status Config
 const STATUS_CONFIG = {
   idle: {
     color: '#22c55e',
-    glowColor: 'rgba(34, 197, 94, 0.4)',
+    glowColor: 'rgba(34, 197, 94, 0.6)',
+    outerGlow: '0 0 30px rgba(34, 197, 94, 0.5), 0 0 60px rgba(34, 197, 94, 0.3)',
     label: 'Online',
     pulseSpeed: 3000,
-    ringCount: 2,
-  },
-  thinking: {
-    color: '#8b5cf6',
-    glowColor: 'rgba(139, 92, 246, 0.5)',
-    label: 'Thinking',
-    pulseSpeed: 800,
     ringCount: 3,
   },
+  thinking: {
+    color: '#a855f7',
+    glowColor: 'rgba(168, 85, 247, 0.7)',
+    outerGlow: '0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(6, 182, 212, 0.3)',
+    label: 'Thinking',
+    pulseSpeed: 800,
+    ringCount: 4,
+  },
   speaking: {
-    color: '#f59e0b',
-    glowColor: 'rgba(245, 158, 11, 0.5)',
+    color: '#f97316',
+    glowColor: 'rgba(249, 115, 22, 0.7)',
+    outerGlow: '0 0 30px rgba(249, 115, 22, 0.6), 0 0 60px rgba(236, 72, 153, 0.3)',
     label: 'Speaking',
     pulseSpeed: 500,
     ringCount: 4,
   },
   listening: {
-    color: '#3b82f6',
-    glowColor: 'rgba(59, 130, 246, 0.5)',
+    color: '#06b6d4',
+    glowColor: 'rgba(6, 182, 212, 0.7)',
+    outerGlow: '0 0 30px rgba(6, 182, 212, 0.6), 0 0 60px rgba(168, 85, 247, 0.3)',
     label: 'Listening',
     pulseSpeed: 1000,
-    ringCount: 3,
+    ringCount: 4,
   },
   error: {
     color: '#ef4444',
-    glowColor: 'rgba(239, 68, 68, 0.5)',
+    glowColor: 'rgba(239, 68, 68, 0.7)',
+    outerGlow: '0 0 30px rgba(239, 68, 68, 0.6), 0 0 60px rgba(239, 68, 68, 0.3)',
     label: 'Error',
     pulseSpeed: 400,
-    ringCount: 2,
+    ringCount: 3,
   },
 };
 
@@ -126,7 +132,7 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
           />
         )}
 
-        {/* Core orb */}
+        {/* Core orb - Enhanced Neon */}
         <div
           style={{
             width: size,
@@ -134,14 +140,16 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
             borderRadius: '50%',
             background: status === 'error'
               ? `radial-gradient(circle, ${config.color}, #991b1b)`
-              : `radial-gradient(circle at 30% 30%, ${config.color}, ${config.color}88)`,
+              : `radial-gradient(circle at 30% 30%, #fff, ${config.color} 40%, ${config.color}88)`,
             boxShadow: `
-              0 0 ${size * glowIntensity}px ${config.glowColor},
-              0 0 ${size * glowIntensity * 2}px ${config.glowColor},
-              inset 0 0 ${size * 0.3}px rgba(255,255,255,0.3)
+              0 0 ${size * glowIntensity * 1.5}px ${config.glowColor},
+              0 0 ${size * glowIntensity * 3}px ${config.glowColor},
+              0 0 ${size * glowIntensity * 5}px ${config.glowColor}44,
+              inset 0 0 ${size * 0.4}px rgba(255,255,255,0.5)
             `,
             transform: `scale(${breatheScale}) ${status === 'error' ? `translate(${Math.random() * 2 - 1}px, ${Math.random() * 2 - 1}px)` : ''}`,
             transition: status === 'error' ? 'none' : 'transform 0.1s ease-out',
+            border: `1px solid ${config.color}88`,
           }}
         />
 

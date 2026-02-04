@@ -53,6 +53,13 @@ interface FloatingChatProps {
   onConversationDelete?: (id: string) => void;
   onConversationFork?: (fromMessageId: string) => void;
   onSummarizeAndContinue?: () => void;
+  // Pinned panel mode (for multi-chat comparison)
+  isPinned?: boolean;
+  onUnpin?: () => void;
+  pinnedTitle?: string;
+  // Pin conversation to comparison panel
+  pinnedConversationIds?: string[];
+  onPinConversation?: (id: string) => void;
 }
 
 // ============================================================================
@@ -365,6 +372,11 @@ export default function FloatingChat({
   onConversationDelete,
   onConversationFork,
   onSummarizeAndContinue,
+  isPinned = false,
+  onUnpin,
+  pinnedTitle,
+  pinnedConversationIds = [],
+  onPinConversation,
 }: FloatingChatProps): React.ReactElement {
   // State
   const [mode, setMode] = useState<ChatMode>('closed');
@@ -987,6 +999,97 @@ export default function FloatingChat({
   // Render Functions
   // ============================================================================
 
+  // Pinned Panel Mode - simplified comparison view
+  if (isPinned) {
+    return (
+      <>
+        <style>{animationStyles}</style>
+        <div
+          style={{
+            ...styles.chatContainer,
+            position: 'relative',
+            bottom: 'auto',
+            right: 'auto',
+            width: '100%',
+            height: '100%',
+            borderRadius: 12,
+            border: '1px solid rgba(234, 179, 102, 0.3)',
+          }}
+        >
+          {/* Pinned Header */}
+          <header style={{
+            ...styles.header,
+            background: 'linear-gradient(135deg, rgba(234, 179, 102, 0.2) 0%, rgba(26, 26, 46, 0.95) 100%)',
+          }}>
+            <div style={styles.headerLeft}>
+              <span style={{ fontSize: '16px', marginRight: 8 }}>📌</span>
+              <div style={styles.headerInfo}>
+                <span style={styles.headerName}>
+                  {pinnedTitle || 'Pinned Chat'}
+                </span>
+                <span style={{ ...styles.headerStatus, color: 'rgba(234, 179, 102, 0.8)' }}>
+                  Comparison view
+                </span>
+              </div>
+            </div>
+            <div style={styles.headerRight}>
+              {onUnpin && (
+                <button
+                  onClick={onUnpin}
+                  style={styles.headerButton}
+                  title="Close panel"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* Messages (read-only) */}
+          <div style={styles.messagesContainer}>
+            {messages.length === 0 ? (
+              <div style={styles.emptyState}>
+                <span style={styles.emptyEmoji}>📜</span>
+                <p style={styles.emptyText}>No messages in this conversation</p>
+              </div>
+            ) : (
+              messages.filter(msg => msg.role === 'user' || msg.text).map((msg, i) => {
+                const isUser = msg.role === 'user';
+                const prevMsg = i > 0 ? messages[i - 1] : undefined;
+                const shouldGroup = shouldGroupMessages(msg, prevMsg);
+
+                return (
+                  <div
+                    key={msg.id}
+                    style={{
+                      ...styles.messageRow,
+                      justifyContent: isUser ? 'flex-end' : 'flex-start',
+                      marginTop: shouldGroup ? 2 : 12,
+                    }}
+                  >
+                    {!isUser && !shouldGroup && <Avatar size={28} />}
+                    {!isUser && shouldGroup && <div style={{ width: 28 }} />}
+                    <div style={{
+                      ...(isUser ? styles.userBubble : styles.assistantBubble),
+                      maxWidth: '85%',
+                    }}>
+                      <p style={styles.messageText}>{msg.text}</p>
+                      {!shouldGroup && (
+                        <span style={styles.messageTime}>
+                          {formatTime(msg.timestamp, mounted)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // Closed - Robot avatar (smaller container, zoomed in on head)
   if (mode === 'closed') {
     return (
@@ -1491,6 +1594,8 @@ export default function FloatingChat({
               setShowSidebar(false);
             }}
             onDeleteConversation={onConversationDelete || (() => {})}
+            pinnedConversationIds={pinnedConversationIds}
+            onPinConversation={onPinConversation}
           />
         )}
 
@@ -1699,14 +1804,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     transform: 'rotate(90deg)',
   },
 
-  // Header
+  // Header - Enhanced with Neon Effects
   header: {
     padding: '14px 16px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    borderBottom: '1px solid rgba(168, 85, 247, 0.2)',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    background: 'rgba(255, 255, 255, 0.02)',
+    background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.05) 0%, rgba(6, 182, 212, 0.03) 100%)',
+    boxShadow: 'inset 0 -1px 0 rgba(168, 85, 247, 0.1)',
   },
   headerLeft: {
     display: 'flex',
@@ -1719,15 +1825,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 2,
   },
   headerName: {
-    color: '#fff',
-    fontWeight: 600,
-    fontSize: '1rem',
+    background: 'linear-gradient(135deg, #a855f7, #06b6d4, #ec4899, #a855f7)',
+    backgroundSize: '300% 300%',
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    fontWeight: 700,
+    fontSize: '1.1rem',
     display: 'flex',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    animation: 'textGradient 4s ease infinite',
+    filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.3))',
   },
   headerBolt: {
-    fontSize: '0.8rem',
+    fontSize: '0.9rem',
+    animation: 'floatGlow 2s ease-in-out infinite',
+    filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
   },
   headerStatus: {
     display: 'flex',
@@ -1899,12 +2013,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     wordWrap: 'break-word',
   },
   messageBubbleUser: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #06b6d4 100%)',
     color: '#fff',
+    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.3), 0 0 20px rgba(168, 85, 247, 0.15)',
+    border: '1px solid rgba(168, 85, 247, 0.3)',
   },
   messageBubbleAssistant: {
-    background: 'rgba(255, 255, 255, 0.08)',
+    background: 'rgba(255, 255, 255, 0.06)',
     color: '#fff',
+    border: '1px solid rgba(6, 182, 212, 0.15)',
+    boxShadow: 'inset 0 0 20px rgba(6, 182, 212, 0.05)',
   },
   messageTimestamp: {
     display: 'flex',
@@ -2077,20 +2195,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'rgba(255, 255, 255, 0.4)',
   },
 
-  // Input Area
+  // Input Area - Enhanced with Neon
   inputArea: {
     padding: '12px 16px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    borderTop: '1px solid rgba(168, 85, 247, 0.15)',
     display: 'flex',
     gap: 10,
     alignItems: 'flex-end',
-    background: 'rgba(0, 0, 0, 0.2)',
+    background: 'linear-gradient(180deg, rgba(168, 85, 247, 0.03) 0%, rgba(0, 0, 0, 0.25) 100%)',
   },
   micButton: {
     width: 48,
     height: 48,
     borderRadius: '50%',
-    border: 'none',
+    border: '1px solid rgba(34, 197, 94, 0.3)',
     color: '#fff',
     fontSize: '20px',
     cursor: 'pointer',
@@ -2100,7 +2218,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 4,
     flexShrink: 0,
     transition: 'all 0.3s ease',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
+    boxShadow: '0 2px 15px rgba(0, 0, 0, 0.3)',
   },
   micSpinner: {
     animation: 'spin 1s linear infinite',
@@ -2182,8 +2300,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   textInput: {
     width: '100%',
     padding: '12px 16px',
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(168, 85, 247, 0.2)',
     borderRadius: 16,
     color: '#fff',
     fontSize: '0.9rem',
@@ -2193,7 +2311,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxHeight: 120,
     lineHeight: 1.5,
     fontFamily: 'inherit',
-    transition: 'border-color 0.2s',
+    transition: 'all 0.3s ease',
+    // Neon focus will be applied via CSS
   },
   charCount: {
     position: 'absolute',
@@ -2205,16 +2324,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 48,
     height: 48,
     borderRadius: 16,
-    border: 'none',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    border: '1px solid rgba(168, 85, 247, 0.4)',
+    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #06b6d4 100%)',
+    backgroundSize: '200% 200%',
     color: '#fff',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    transition: 'all 0.2s',
-    boxShadow: '0 2px 10px rgba(102, 126, 234, 0.3)',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4), 0 0 20px rgba(168, 85, 247, 0.2)',
+    animation: 'gradientFlow 3s ease infinite',
   },
   emojiHint: {
     padding: '8px 16px',
