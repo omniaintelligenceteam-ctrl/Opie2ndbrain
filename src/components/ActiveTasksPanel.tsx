@@ -8,7 +8,7 @@ export interface Task {
   agentName: string;
   agentEmoji: string;
   label: string;
-  startTime: Date;
+  startTime: Date | string;
   status: 'running' | 'complete' | 'failed';
   output?: string;
   progress?: number;
@@ -131,9 +131,10 @@ export default function ActiveTasksPanel({ tasks: propTasks, onTaskClick }: Acti
     return () => clearInterval(interval);
   }, []);
 
-  const formatRuntime = (startTime: Date): string => {
+  const formatRuntime = (startTime: Date | string): string => {
     if (!currentTime) return '...';
-    const diff = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
+    const start = startTime instanceof Date ? startTime : new Date(startTime);
+    const diff = Math.floor((currentTime.getTime() - start.getTime()) / 1000);
     if (diff < 60) return `${diff}s`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`;
     return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
@@ -218,7 +219,7 @@ export default function ActiveTasksPanel({ tasks: propTasks, onTaskClick }: Acti
           </div>
           <div style={styles.statBox}>
             <span style={styles.statLabel}>Started</span>
-            <span style={styles.statValue}>{task.startTime.toLocaleTimeString()}</span>
+            <span style={styles.statValue}>{new Date(task.startTime).toLocaleTimeString()}</span>
           </div>
         </div>
 
