@@ -326,6 +326,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
 export async function POST(req: NextRequest) {
   const {
     message,
+    messages: conversationHistory,
     sessionId = 'default',
     isVoice = true,
     personality,
@@ -372,7 +373,20 @@ export async function POST(req: NextRequest) {
         created_at: new Date().toISOString(),
       });
       
-      // 2. Spawn task to me (agent:main)
+      // 2. Build task with conversation context
+      let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
+      
+      if (conversationHistory && conversationHistory.length > 0) {
+        const context = conversationHistory
+          .slice(-5) // Last 5 messages
+          .map((m: any) => `${m.role}: ${m.text || m.content || ''}`)
+          .join('\n');
+        taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
+      }
+      
+      taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
+      
+      // Spawn task to me (agent:main)
       const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
         method: 'POST',
         headers: {
@@ -382,7 +396,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           tool: 'sessions_spawn',
           args: {
-            task: `[WEB APP REQUEST] User says: "${message}"\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`,
+            task: taskMessage,
             label: `webapp:${requestId}`,
             timeoutSeconds: 180,
             cleanup: 'keep',
