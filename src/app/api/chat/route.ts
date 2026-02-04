@@ -1,8 +1,6 @@
 import { NextRequest } from 'next/server';
 import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityTypes';
 import Anthropic from '@anthropic-ai/sdk';
-import { supabaseAdmin } from '@/lib/supabase';
-import { v4 as uuidv4 } from 'uuid';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -31,7 +29,7 @@ const MODELS = {
 
 type ModelAlias = keyof typeof MODELS;
 
-let currentModel: ModelAlias = 'sonnet';
+let currentModel: ModelAlias = 'kimi';
 let currentProvider: Provider = 'ollama';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
@@ -265,71 +263,7 @@ export async function POST(req: NextRequest) {
 
   const messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage }];
 
-  // DO IT mode: Use OpenClaw spawn + Supabase for async with full tool access
-  if (interactionMode === 'execute') {
-    try {
-      const requestId = uuidv4();
-      
-      // Insert pending row
-      const { error: insertError } = await supabaseAdmin
-        .from('opie_responses')
-        .insert({
-          request_id: requestId,
-          user_message: message,
-          status: 'pending',
-        });
-      
-      if (insertError) {
-        console.error('[Chat] Supabase insert error:', insertError);
-        return Response.json({ 
-          error: 'Database error', 
-          details: insertError.message || insertError.code || 'Unknown' 
-        }, { status: 500 });
-      }
-      
-      // Spawn OpenClaw session
-      const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-        },
-        body: JSON.stringify({
-          tool: 'sessions_spawn',
-          args: {
-            task: userMessage,
-            label: `opie:execute:${requestId}`,
-            timeoutSeconds: 115,
-            cleanup: 'keep',
-          },
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-      
-      const spawnData = await spawnRes.json();
-      
-      if (spawnData.ok && spawnData.result?.sessionKey) {
-        // Update with session_id
-        await supabaseAdmin
-          .from('opie_responses')
-          .update({ session_id: spawnData.result.sessionKey })
-          .eq('request_id', requestId);
-      }
-      
-      // Return request_id for polling
-      return Response.json({
-        mode: 'async',
-        request_id: requestId,
-        poll_url: `/api/chat/poll?request_id=${requestId}`,
-      });
-      
-    } catch (error) {
-      console.error('[Chat] Execute mode error:', error);
-      return Response.json({ error: 'Failed to start execution' }, { status: 500 });
-    }
-  }
-
-  // Plan mode: Use streaming for quick responses
+  // Use streaming for both Plan and DO IT modes
   let generator: AsyncGenerator<string>;
   
   // Route kimi to Ollama, anthropic to Claude, default to Ollama
