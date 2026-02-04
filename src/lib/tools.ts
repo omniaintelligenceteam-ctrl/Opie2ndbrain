@@ -309,7 +309,66 @@ export const TOOLS: Record<string, Tool> = {
     },
     execute: githubListRepo,
   },
+  github_search: {
+    name: 'github_search',
+    description: 'Search code across GitHub repositories. Find files, functions, or text within your repos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string', description: 'Repository owner (e.g., "omniaintelligenceteam-ctrl")' },
+        repo: { type: 'string', description: 'Repository name to search within (optional - leave blank to search all user repos)' },
+        query: { type: 'string', description: 'Search query (code, function names, text to find)' },
+        language: { type: 'string', description: 'Filter by programming language (e.g., "typescript", "python")', default: '' },
+      },
+      required: ['owner', 'query'],
+    },
+    execute: githubSearch,
+  },
 };
+
+// GitHub search implementation
+async function githubSearch(args: { owner: string; repo?: string; query: string; language?: string }) {
+  const { owner, repo, query, language = '' } = args;
+  const githubToken = process.env.GITHUB_TOKEN;
+  
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+    };
+    if (githubToken) {
+      headers['Authorization'] = `token ${githubToken}`;
+    }
+    
+    // Build search query
+    let searchQuery = `${query} user:${owner}`;
+    if (repo) searchQuery += ` repo:${owner}/${repo}`;
+    if (language) searchQuery += ` language:${language}`;
+    
+    const response = await fetch(
+      `https://api.github.com/search/code?q=${encodeURIComponent(searchQuery)}&per_page=10`,
+      { headers }
+    );
+    
+    if (!response.ok) {
+      return { error: `GitHub search error: ${response.status}` };
+    }
+    
+    const data = await response.json();
+    
+    return {
+      total_count: data.total_count,
+      results: data.items?.map((item: any) => ({
+        file: item.name,
+        path: item.path,
+        repository: item.repository?.full_name,
+        url: item.html_url,
+        score: item.score,
+      })) || [],
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'GitHub search failed' };
+  }
+}
 
 // Write response back to web app via Supabase
 async function writeWebResponse(args: { request_id: string; response: string }) {
@@ -404,6 +463,12 @@ ${toolsList}
 
 To read a GitHub file:
 {"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Omnia-Light-Scape-Pro-V3", "path": "src/components/Hero.tsx"}}
+
+To search code across GitHub repos:
+{"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing function", "language": "typescript"}}
+
+To list repo contents:
+{"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app"}}
 
 To search your memory:
 {"tool": "memory_search", "args": {"query": "sales leads Texas", "limit": 5}}
