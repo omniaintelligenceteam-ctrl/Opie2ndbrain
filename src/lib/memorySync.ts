@@ -39,7 +39,11 @@ export async function writeMemory(entry: Omit<MemoryEntry, 'id' | 'timestamp'>):
     .insert({
       ...entry,
       timestamp: new Date().toISOString(),
+<<<<<<< HEAD
     } as any);
+=======
+    });
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
 
   if (error) {
     console.error('[MemorySync] Write failed:', error);
@@ -48,9 +52,15 @@ export async function writeMemory(entry: Omit<MemoryEntry, 'id' | 'timestamp'>):
 
 // Read recent memory from all sources
 export async function readMemory(
+<<<<<<< HEAD
   options: {
     limit?: number;
     since?: string;
+=======
+  options: { 
+    limit?: number; 
+    since?: string; 
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
     category?: string;
     source?: string;
   } = {}
@@ -71,7 +81,11 @@ export async function readMemory(
   if (options.category) query = query.eq('category', options.category);
   if (options.source) query = query.eq('source', options.source);
 
+<<<<<<< HEAD
   const { data, error } = await query as any;
+=======
+  const { data, error } = await query;
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
 
   if (error) {
     console.error('[MemorySync] Read failed:', error);
@@ -82,7 +96,11 @@ export async function readMemory(
 }
 
 // Search memory semantically (using Supabase text search)
+<<<<<<< HEAD
 export async function searchMemory(searchQuery: string, limit = 5): Promise<MemoryEntry[]> {
+=======
+export async function searchMemory(query: string, limit = 5): Promise<MemoryEntry[]> {
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
   const supabase = getSupabase();
   if (!supabase) {
     console.error('[MemorySync] Supabase not configured');
@@ -92,8 +110,13 @@ export async function searchMemory(searchQuery: string, limit = 5): Promise<Memo
   const { data, error } = await supabase
     .from('opie_memory')
     .select('*')
+<<<<<<< HEAD
     .textSearch('content', searchQuery)
     .limit(limit) as any;
+=======
+    .textSearch('content', query)
+    .limit(limit);
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
 
   if (error) {
     console.error('[MemorySync] Search failed:', error);
@@ -106,7 +129,11 @@ export async function searchMemory(searchQuery: string, limit = 5): Promise<Memo
 // Get memory summary for context building
 export async function getMemoryContext(maxEntries = 10): Promise<string> {
   const recent = await readMemory({ limit: maxEntries });
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> f5bf29db750779d4a236311df3be6ce048747b6b
   if (recent.length === 0) return '';
 
   return recent
