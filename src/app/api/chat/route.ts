@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
     interactionMode = 'plan',
     model,
     provider,  // NEW: explicit provider selection
+    memoryContext,  // Memory context for DO IT mode
   } = await req.json();
 
   // Update provider if explicitly specified
@@ -304,9 +305,15 @@ export async function POST(req: NextRequest) {
       userMessage = `[Style: ${personalityConfig.systemModifiers}]\n\n${userMessage}`;
     }
 
-    const modeContext = interactionMode === 'plan'
+    let modeContext = interactionMode === 'plan'
       ? '\n\n[INTERACTION MODE: Plan] You are in planning/brainstorming mode. Discuss ideas but do NOT execute actions.'
-      : '\n\n[INTERACTION MODE: Execute] You are in execute mode. You may take actions.';
+      : '\n\n[INTERACTION MODE: DO IT] You are in DO IT mode. Execute actions decisively.';
+
+    // Add memory context in execute/DO IT mode
+    if (interactionMode === 'execute' && memoryContext) {
+      modeContext += `\n\n[MEMORY CONTEXT]\n${memoryContext}`;
+    }
+
     userMessage = userMessage + modeContext;
 
     let reply: string;

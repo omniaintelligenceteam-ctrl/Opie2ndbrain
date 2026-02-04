@@ -1246,12 +1246,12 @@ export default function FloatingChat({
               onClick={() => setInteractionMode('execute')}
               style={{
                 ...styles.modeButton,
-                ...(interactionMode === 'execute' ? styles.modeButtonActiveExecute : {}),
+                ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
               }}
-              title="Execute Mode - Take action on your requests"
+              title="DO IT Mode - Execute with OpenClaw power"
             >
-              <span style={styles.modeIcon}>⚡</span>
-              <span>Execute</span>
+              <span style={styles.modeIcon}>🔥</span>
+              <span>DO IT</span>
             </button>
           </div>
           
@@ -1428,6 +1428,17 @@ const animationStyles = `
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes doItPulse {
+    0%, 100% {
+      box-shadow: 0 0 5px rgba(249, 115, 22, 0.4);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.4);
+      transform: scale(1.02);
+    }
   }
   ${sidebarAnimationStyles}
   ${contextMenuAnimationStyles}
@@ -1860,10 +1871,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '1px solid rgba(139, 92, 246, 0.5)',
     color: '#a78bfa',
   },
-  modeButtonActiveExecute: {
-    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.2) 100%)',
-    border: '1px solid rgba(34, 197, 94, 0.5)',
-    color: '#4ade80',
+  modeButtonActiveDoIt: {
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.3) 0%, rgba(239, 68, 68, 0.2) 100%)',
+    border: '1px solid rgba(249, 115, 22, 0.5)',
+    color: '#fb923c',
+    animation: 'doItPulse 2s ease-in-out infinite',
   },
   modeIcon: {
     fontSize: '14px',

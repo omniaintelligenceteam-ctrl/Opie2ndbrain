@@ -28,6 +28,7 @@ import OpieStatusWidget from './OpieStatusWidget';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
+import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
 import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
@@ -322,6 +323,7 @@ export default function OpieKanban(): React.ReactElement {
   const { soundsEnabled, toggleSounds, playNotification, playSuccess } = useSounds();
   const bottomNavVisible = useBottomNav();
   const { currentParameters: personalityParams } = useAgentPersonality();
+  const { memoryContext } = useMemoryRefresh(); // Auto-refreshes on tab focus/visibility
 
   // Conversation management
   const {
@@ -714,6 +716,7 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
+          memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in DO IT mode
         }),
         signal: abortControllerRef.current.signal,
       });
