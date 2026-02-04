@@ -97,37 +97,40 @@ export default function CalendarWidget({
 
   const events = propEvents || demoEvents;
 
-  const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const toDate = (d: Date | string): Date => d instanceof Date ? d : new Date(d);
+
+  const formatTime = (date: Date | string): string => {
+    return toDate(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  const formatDate = (date: Date): string => {
+  const formatDate = (date: Date | string): string => {
+    const d = toDate(date);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    if (date.toDateString() === today.toDateString()) {
+    if (d.toDateString() === today.toDateString()) {
       return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
+    } else if (d.toDateString() === tomorrow.toDateString()) {
       return 'Tomorrow';
     }
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
   const isEventNow = (event: CalendarEvent): boolean => {
     if (!currentTime) return false;
-    return currentTime >= event.start && currentTime <= event.end;
+    return currentTime >= toDate(event.start) && currentTime <= toDate(event.end);
   };
 
   const isEventSoon = (event: CalendarEvent): boolean => {
     if (!currentTime) return false;
-    const diff = event.start.getTime() - currentTime.getTime();
+    const diff = toDate(event.start).getTime() - currentTime.getTime();
     return diff > 0 && diff <= 30 * 60 * 1000; // Within 30 minutes
   };
 
   const getTimeUntil = (event: CalendarEvent): string => {
     if (!currentTime) return '...';
-    const diff = event.start.getTime() - currentTime.getTime();
+    const diff = toDate(event.start).getTime() - currentTime.getTime();
     if (diff <= 0) return 'Now';
     const minutes = Math.floor(diff / 60000);
     if (minutes < 60) return `in ${minutes}m`;

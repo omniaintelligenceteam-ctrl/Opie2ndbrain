@@ -151,18 +151,24 @@ export function SidebarCalendarWidget() {
     return () => clearInterval(interval);
   }, []);
 
-  const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const formatTime = (date: Date | string): string => {
+    const d = date instanceof Date ? date : new Date(date);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
+
+  const toDate = (d: Date | string): Date => d instanceof Date ? d : new Date(d);
 
   const isEventNow = (event: CalendarEvent): boolean => {
     if (!currentTime) return false;
-    return currentTime >= event.start && currentTime <= event.end;
+    const start = toDate(event.start);
+    const end = toDate(event.end);
+    return currentTime >= start && currentTime <= end;
   };
 
   const isEventSoon = (event: CalendarEvent): boolean => {
     if (!currentTime) return false;
-    const diff = event.start.getTime() - currentTime.getTime();
+    const start = toDate(event.start);
+    const diff = start.getTime() - currentTime.getTime();
     return diff > 0 && diff <= 30 * 60 * 1000;
   };
 
@@ -172,8 +178,8 @@ export function SidebarCalendarWidget() {
   }
 
   const upcomingEvents = events
-    .filter(e => e.end >= currentTime)
-    .sort((a, b) => a.start.getTime() - b.start.getTime())
+    .filter(e => toDate(e.end) >= currentTime)
+    .sort((a, b) => toDate(a.start).getTime() - toDate(b.start).getTime())
     .slice(0, 3);
 
   return (

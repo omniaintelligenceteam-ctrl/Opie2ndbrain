@@ -70,15 +70,17 @@ function generateId(): string {
   return `msg-${Date.now()}-${idCounter}`;
 }
 
-function formatTime(date: Date, mounted: boolean): string {
+function formatTime(date: Date | string, mounted: boolean): string {
   if (!mounted) return '...';
-  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatRelativeTime(date: Date, mounted: boolean): string {
+function formatRelativeTime(date: Date | string, mounted: boolean): string {
   if (!mounted) return '...';
+  const d = date instanceof Date ? date : new Date(date);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  const diff = now.getTime() - d.getTime();
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);

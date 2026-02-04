@@ -348,7 +348,7 @@ export function SystemHealthPanel() {
 
       {/* Last Updated */}
       <div style={healthStyles.footer}>
-        Last updated: {lastPing && mounted ? lastPing.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Checking...'}
+        Last updated: {lastPing && mounted ? (lastPing instanceof Date ? lastPing : new Date(lastPing)).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Checking...'}
       </div>
     </div>
   );
