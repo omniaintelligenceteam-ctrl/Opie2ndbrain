@@ -309,6 +309,51 @@ export const TOOLS: Record<string, Tool> = {
   },
 };
 
+// Write response back to web app via Supabase
+async function writeWebResponse(args: { request_id: string; response: string }) {
+  const { request_id, response } = args;
+  
+  try {
+    const supabase = createClient(
+      'https://wsiedmznnwaejwonuraj.supabase.co',
+      process.env.SUPABASE_SERVICE_KEY || '',
+      { auth: { persistSession: false } }
+    );
+    
+    const { error } = await supabase
+      .from('opie_requests')
+      .update({
+        response,
+        status: 'complete',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('request_id', request_id);
+    
+    if (error) {
+      return { error: `Failed to write response: ${error.message}` };
+    }
+    
+    return { success: true, message: 'Response written to web app' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to write response' };
+  }
+}
+
+// Add to TOOLS after defining the function
+(TOOLS as any).write_web_response = {
+  name: 'write_web_response',
+  description: 'Write the final response to the web app via Supabase. Use this ONLY when completing a DO IT task that came from the web app. Requires request_id from the task.',
+  parameters: {
+    type: 'object',
+    properties: {
+      request_id: { type: 'string', description: 'The request ID from the web app task (e.g., "webapp:abc123")' },
+      response: { type: 'string', description: 'The complete response to send to the web app user' },
+    },
+    required: ['request_id', 'response'],
+  },
+  execute: writeWebResponse,
+};
+
 export function getToolsPrompt(): string {
   const toolsList = Object.values(TOOLS).map(t => {
     const params = Object.entries(t.parameters.properties || {})
