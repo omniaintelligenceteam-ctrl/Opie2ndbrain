@@ -191,22 +191,55 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
 
 // Parse tool call JSON from AI response
 function parseToolCall(text: string): { tool: string; args: Record<string, any> } | null {
-  // Look for JSON objects in the text
-  // Match from { to } with "tool" key somewhere inside
-  const jsonMatches = text.match(/\{[\s\S]*?"tool"[\s\S]*?\}/g);
-  if (!jsonMatches) return null;
-
-  // Try each match to find valid JSON with required fields
-  for (const match of jsonMatches) {
+  console.log('[parseToolCall] Input:', text.slice(0, 500).replace(/\n/g, '\\n'));
+  
+  // Find all potential JSON objects with "tool" key
+  // Search for positions of {"tool" or { "tool"
+  const toolIndices = [];
+  let pos = 0;
+  while ((pos = text.indexOf('"tool"', pos)) !== -1) {
+    toolIndices.push(pos);
+    pos++;
+  }
+  
+  console.log('[parseToolCall] Found "tool" at positions:', toolIndices);
+  
+  // For each "tool" found, try to extract the surrounding JSON object
+  for (const idx of toolIndices) {
+    // Find the opening brace before "tool"
+    let start = idx;
+    while (start > 0 && text[start] !== '{') {
+      start--;
+    }
+    if (text[start] !== '{') continue;
+    
+    // Find the closing brace by counting
+    let braceCount = 1;
+    let end = start + 1;
+    while (end < text.length && braceCount > 0) {
+      if (text[end] === '{') braceCount++;
+      else if (text[end] === '}') braceCount--;
+      end++;
+    }
+    
+    if (braceCount !== 0) continue; // Unmatched braces
+    
+    const jsonStr = text.slice(start, end);
+    console.log('[parseToolCall] Trying JSON:', jsonStr.slice(0, 200));
+    
     try {
-      const parsed = JSON.parse(match);
+      const parsed = JSON.parse(jsonStr);
       if (parsed.tool && typeof parsed.tool === 'string' && TOOLS[parsed.tool]) {
+        console.log('[parseToolCall] SUCCESS - tool:', parsed.tool);
         return { tool: parsed.tool, args: parsed.args || {} };
       }
-    } catch {
+    } catch (e) {
+      console.log('[parseToolCall] Parse error:', e);
       continue;
     }
   }
+  
+  console.log('[parseToolCall] No valid tool found');
   return null;
 }
 
