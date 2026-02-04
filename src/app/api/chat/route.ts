@@ -116,7 +116,7 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
     yield `data: [DONE]\n\n`;
 
   } catch (error) {
-    console.error("[Ollama] Error:", error);
+    console.error("[OpenClaw] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'OpenClaw failed' })}\n\n`;
   }
 }
@@ -189,106 +189,8 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
   }
 }
 
-// Ollama with tool support for DO IT mode
-async function* streamOllamaWithTools(messages: Array<{role: string, content: string}>, model: string) {
-  const ollamaKey = process.env.OLLAMA_API_KEY;
-  if (!ollamaKey) {
-    yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
-    return;
-  }
-
-  try {
-    // First pass: Check if AI wants to use tools
-    const firstResponse = await fetch('https://ollama.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ollamaKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        stream: false,
-        messages: messages,
-        max_tokens: 1024,
-      }),
-    });
-
-    if (!firstResponse.ok) {
-      const error = await firstResponse.text();
-      yield `data: ${JSON.stringify({ error: `Ollama: ${error.slice(0, 200)}` })}\n\n`;
-      return;
-    }
-
-    const firstData = await firstResponse.json();
-    const firstContent = firstData.choices?.[0]?.message?.content || '';
-
-    // Check for tool call in response (JSON format: {"tool": "name", "args": {...}})
-    let toolCall = null;
-    try {
-      // Look for JSON object in the response
-      const jsonMatch = firstContent.match(/\{[\s\S]*"tool"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.tool && TOOLS[parsed.tool]) {
-          toolCall = parsed;
-        }
-      }
-    } catch {
-      // Not a valid tool call, treat as regular response
-    }
-
-    let finalContent = firstContent;
-
-    // If tool call detected, execute it and get final response
-    if (toolCall) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Executing ${toolCall.tool}...\n` } }] })}\n\n`;
-
-      const tool = TOOLS[toolCall.tool];
-      const toolResult = await tool.execute(toolCall.args || {});
-
-      // Second pass: Send tool result back to AI
-      const messagesWithTool = [
-        ...messages,
-        { role: 'assistant' as const, content: firstContent },
-        { role: 'user' as const, content: `Tool "${toolCall.tool}" result:\n\n${JSON.stringify(toolResult, null, 2)}\n\nBased on this result, provide your final response.` },
-      ];
-
-      const finalResponse = await fetch('https://ollama.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ollamaKey}`,
-        },
-        body: JSON.stringify({
-          model: model,
-          stream: false,
-          messages: messagesWithTool,
-          max_tokens: 1024,
-        }),
-      });
-
-      if (finalResponse.ok) {
-        const finalData = await finalResponse.json();
-        finalContent = finalData.choices?.[0]?.message?.content || firstContent;
-      }
-    }
-
-    // Stream the final response
-    const chunks = finalContent.split(/\s+/); // Word-by-word streaming
-    for (const chunk of chunks) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: chunk + ' ' } }] })}\n\n`;
-      await new Promise(r => setTimeout(r, 10)); // Small delay for effect
-    }
-    yield `data: [DONE]\n\n`;
-
-  } catch (error) {
-    console.error("[Ollama Tools] Error:", error);
-    yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Ollama failed' })}\n\n`;
-  }
-}
-
 // Call Anthropic with streaming
-async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string, imageDataUrl?: string) {
+async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string) {
   if (!process.env.ANTHROPIC_API_KEY) {
     yield `data: ${JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' })}\n\n`;
     return;
@@ -317,7 +219,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
     yield `data: [DONE]\n\n`;
 
   } catch (error) {
-    console.error("[Ollama] Error:", error);
+    console.error("[Anthropic] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Anthropic failed' })}\n\n`;
   }
 }
@@ -354,7 +256,7 @@ export async function POST(req: NextRequest) {
 
   // Select system prompt based on mode
   const PLAN_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
-  
+
   const DO_IT_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
@@ -377,20 +279,20 @@ export async function POST(req: NextRequest) {
         source: 'web_app',
         created_at: new Date().toISOString(),
       });
-      
+
       // 2. Build task with conversation context
       let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
-      
+
       if (conversationHistory && conversationHistory.length > 0) {
         const context = conversationHistory
           .slice(-5) // Last 5 messages
-          .map((m: any) => `${m.role}: ${m.text || m.content || ''}`)
+          .map((m: { role: string; text?: string; content?: string }) => `${m.role}: ${m.text || m.content || ''}`)
           .join('\n');
         taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
       }
-      
+
       taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
-      
+
       // Spawn task to me (agent:main)
       const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
         method: 'POST',
@@ -409,16 +311,16 @@ export async function POST(req: NextRequest) {
         }),
         signal: AbortSignal.timeout(10000),
       });
-      
+
       const spawnData = await spawnRes.json();
-      
+
       // 3. Update with session info
       if (spawnData.ok && spawnData.result?.sessionKey) {
         await supabaseAdmin.from('opie_requests').update({
           session_id: spawnData.result.sessionKey,
         }).eq('request_id', requestId);
       }
-      
+
       // 4. Return async response for polling
       return Response.json({
         mode: 'async',
@@ -426,10 +328,10 @@ export async function POST(req: NextRequest) {
         poll_url: `/api/chat/poll?request_id=${requestId}`,
         message: 'Task sent to G - checking for result...',
       });
-      
+
     } catch (error) {
       console.error('[Chat] DO IT spawn error:', error);
-      return Response.json({ 
+      return Response.json({
         error: 'Failed to spawn task',
         details: error instanceof Error ? error.message : 'Unknown error'
       }, { status: 500 });
