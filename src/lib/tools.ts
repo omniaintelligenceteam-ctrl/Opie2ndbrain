@@ -451,42 +451,42 @@ ${params}`;
   return `
 ## TOOL ACCESS
 
-You have access to the following tools. When you need to use a tool, respond with ONLY a JSON object in this exact format:
-{"tool": "tool_name", "args": {"param1": "value1", "param2": "value2"}}
+You have access to the following tools. To use a tool, respond with ONLY a JSON object:
+{"tool": "tool_name", "args": {"param1": "value1"}}
 
-After receiving tool results, provide your final response incorporating that information.
+CRITICAL: When calling a tool, your ENTIRE response must be ONLY the JSON object.
+- No text before the JSON
+- No text after the JSON
+- No explanations, questions, or commentary
+- The system will execute the tool and give you the result
+- THEN you provide your analysis in a follow-up response
 
 ### AVAILABLE TOOLS
 ${toolsList}
 
-### IMPORTANT EXAMPLES
+### EXAMPLES
 
-To read a GitHub file:
-{"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Omnia-Light-Scape-Pro-V3", "path": "src/components/Hero.tsx"}}
+CORRECT tool call (entire response is just JSON):
+{"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain"}}
 
-To search code across GitHub repos:
-{"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing function", "language": "typescript"}}
+CORRECT final response (after receiving tool result):
+Based on the repository contents, I can see the src folder contains components, hooks, and lib directories...
 
-To list repo contents:
-{"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app"}}
+WRONG (mixing tool call with text - DO NOT DO THIS):
+Let me check that. {"tool": "github_list_repo", "args": {...}} I'll analyze the results.
 
-To search your memory:
-{"tool": "memory_search", "args": {"query": "sales leads Texas", "limit": 5}}
+### TOOL EXAMPLES
 
-To list a directory:
-{"tool": "file_list", "args": {"path": "memory"}}
-
-To read a local file:
-{"tool": "file_read", "args": {"path": "MEMORY.md"}}
-
-To search the web:
-{"tool": "web_search", "args": {"query": "landscape lighting design principles", "count": 5}}
+GitHub file: {"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app/page.tsx"}}
+GitHub search: {"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing", "language": "typescript"}}
+GitHub list: {"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src"}}
+Memory search: {"tool": "memory_search", "args": {"query": "sales leads", "limit": 5}}
+Web search: {"tool": "web_search", "args": {"query": "landscape lighting design", "count": 5}}
 
 ### RULES
-1. When the user asks about GitHub repos, files, or code - USE the github_read_file or github_list_repo tools
-2. When the user asks about past work or memory - USE memory_search
-3. When the user asks about local files - USE file_read or file_list
-4. When the user asks for research - USE web_search
-5. Always respond with tool JSON FIRST, then provide analysis after receiving results
+1. To use a tool: output ONLY the JSON object, nothing else
+2. After receiving results: provide your analysis (no more tool calls unless absolutely needed)
+3. Never ask "did you get it?" or "should I search?" - tool execution is automatic
+4. If you need multiple tools, call them one at a time and wait for results
 `;
 }
