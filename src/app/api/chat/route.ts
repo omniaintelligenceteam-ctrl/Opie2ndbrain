@@ -77,11 +77,12 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
         'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
       },
       body: JSON.stringify({
-        tool: 'sessions_send',
+        tool: 'sessions_spawn',
         args: {
-          sessionKey: `opie:chat:${sessionId}`,
-          message: lastUserMessage.content,
+          task: lastUserMessage.content,
+          label: `opie:chat:${sessionId}`,
           timeoutSeconds: 115,
+          cleanup: 'keep',
         },
       }),
     });
@@ -97,7 +98,12 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
 
     if (data.ok && data.result) {
       const result = data.result;
-      if (result.details?.reply) reply = result.details.reply;
+      // Check for error response
+      if (result.details?.status === 'error' || result.status === 'error') {
+        const errorMsg = result.details?.error || result.error || 'Unknown error';
+        reply = `Error: ${errorMsg}`;
+      }
+      else if (result.details?.reply) reply = result.details.reply;
       else if (result.reply) reply = result.reply;
       else if (result.text) reply = result.text;
       else if (typeof result === 'string') reply = result;
@@ -257,15 +263,16 @@ export async function POST(req: NextRequest) {
 
   const messages = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage }];
 
-  // Route to provider
+  // Route to provider based on model
   let generator: AsyncGenerator<string>;
-
-  if (currentProvider === 'openclaw' && OPENCLAW_AVAILABLE) {
-    generator = streamOpenClaw(messages, sessionId);
-  } else if (currentProvider === 'ollama') {
+  
+  // Route kimi to Ollama, anthropic to Claude, default to Ollama
+  if (currentModel === 'kimi') {
     generator = streamOllama(messages, MODELS.kimi.model);
-  } else {
+  } else if (currentProvider === 'anthropic' || ['opus', 'sonnet', 'haiku'].includes(currentModel)) {
     generator = streamAnthropic(messages, MODELS[currentModel].model, image);
+  } else {
+    generator = streamOllama(messages, MODELS.kimi.model);
   }
 
   return createStreamResponse(generator);
