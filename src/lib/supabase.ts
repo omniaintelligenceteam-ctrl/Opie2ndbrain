@@ -1,18 +1,49 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+let _supabaseAdmin: SupabaseClient | null = null;
+let _supabase: SupabaseClient | null = null;
 
-// Server-side client (uses service key for full access)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false }
-});
+function getSupabaseUrl(): string {
+  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+}
 
-// Client-side safe client (uses anon key, respects RLS)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false }
-});
+function getSupabaseServiceKey(): string {
+  return process.env.SUPABASE_SERVICE_KEY || '';
+}
+
+function getSupabaseAnonKey(): string {
+  return process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+}
+
+// Server-side client (uses service key for full access) - lazy loaded
+export const supabaseAdmin = {
+  from: (table: string) => {
+    if (!_supabaseAdmin) {
+      const url = getSupabaseUrl();
+      const key = getSupabaseServiceKey();
+      if (!url || !key) {
+        throw new Error('Supabase not configured - missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
+      }
+      _supabaseAdmin = createClient(url, key, { auth: { persistSession: false } });
+    }
+    return _supabaseAdmin.from(table);
+  }
+};
+
+// Client-side safe client (uses anon key, respects RLS) - lazy loaded
+export const supabase = {
+  from: (table: string) => {
+    if (!_supabase) {
+      const url = getSupabaseUrl();
+      const key = getSupabaseAnonKey();
+      if (!url || !key) {
+        throw new Error('Supabase not configured');
+      }
+      _supabase = createClient(url, key, { auth: { persistSession: false } });
+    }
+    return _supabase.from(table);
+  }
+};
 
 export interface OpieResponse {
   id: string;
