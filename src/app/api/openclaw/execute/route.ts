@@ -2,17 +2,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  // Validate API key
-  const apiKey = req.headers.get('x-api-key');
-  const expectedKey = process.env.DASHBOARD_API_KEY;
-
-  if (expectedKey && apiKey !== expectedKey) {
-    return Response.json(
-      { error: 'Unauthorized', message: 'Invalid or missing API key' },
-      { status: 401 }
-    );
-  }
-
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
@@ -35,30 +24,30 @@ ${(chatHistory || []).slice(-5).map((m: any) => `${m.role}: ${m.content}`).join(
 
 You have full workspace access through OpenClaw. When asked to perform actions (write files, run commands, search, etc.), do them directly.`;
 
-    // Call Anthropic API directly with full context
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+    // Call Ollama API with Kimi K2.5
+    const ollamaRes = await fetch('https://ollama.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${process.env.OLLAMA_API_KEY || ''}`,
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: message }],
+        model: 'kimi-k2.5',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
         stream: true,
       }),
     });
 
-    if (!anthropicRes.ok) {
-      const error = await anthropicRes.text();
-      throw new Error(`Anthropic error: ${error}`);
+    if (!ollamaRes.ok) {
+      const error = await ollamaRes.text();
+      throw new Error(`Ollama error: ${error}`);
     }
 
     // Stream response back to client
-    return new Response(anthropicRes.body, {
+    return new Response(ollamaRes.body, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',

@@ -2,14 +2,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that don't require authentication
-// ALL dashboard internal routes are public (URL itself is the security)
+// ALL routes are public - this is a personal dashboard
 const PUBLIC_ROUTES = [
-  '/api/',  // Allow ALL /api/* routes - this is a personal dashboard
-  '/api/openclaw/', // Explicitly allow OpenClaw routes
-  '/api/memory/',   // Explicitly allow memory routes
-  '/_next',
-  '/favicon',
-  '/manifest',
+  '/',  // Allow everything - add auth only where needed
 ];
 
 // Routes that require authentication (only truly external-facing)
@@ -74,35 +69,7 @@ function extractApiKey(request: NextRequest): string | null {
 }
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Skip auth for public routes
-  if (isPublicRoute(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Only check auth for API routes that need protection
-  if (isProtectedRoute(pathname)) {
-    const apiKey = extractApiKey(request);
-
-    if (!validateApiKey(apiKey)) {
-      // Return 401 Unauthorized
-      return NextResponse.json(
-        {
-          error: 'Unauthorized',
-          message: 'Valid API key required. Provide via x-api-key header or ?apiKey query parameter.',
-        },
-        {
-          status: 401,
-          headers: {
-            'WWW-Authenticate': 'ApiKey realm="Dashboard API"',
-          },
-        }
-      );
-    }
-  }
-
-  // Allow request to proceed
+  // Auth disabled for now - all routes public
   return NextResponse.next();
 }
 
