@@ -17,7 +17,7 @@ interface UseConversationsReturn {
   switchConversation: (id: string) => void;
   forkConversation: (fromMessageId: string) => Conversation;
   deleteConversation: (id: string) => void;
-  updateMessages: (messages: ChatMessage[]) => void;
+  updateMessages: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   updateTitle: (conversationId: string, title: string) => void;
   setSummary: (conversationId: string, summary: string) => void;
 }
@@ -110,14 +110,21 @@ export function useConversations(): UseConversationsReturn {
     });
   }, []);
 
-  const updateMessages = useCallback((messages: ChatMessage[]): void => {
+  const updateMessages = useCallback((
+    updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
+  ): void => {
     setStore(prev => {
       if (!prev.activeConversationId) return prev;
 
+      // Get current messages and apply updater
+      const currentConv = prev.conversations.find(c => c.id === prev.activeConversationId);
+      const currentMessages = currentConv?.messages || [];
+      const newMessages = typeof updater === 'function' ? updater(currentMessages) : updater;
+
       // Trim messages if over limit
-      const trimmedMessages = messages.length > MAX_MESSAGES_PER_CONVERSATION
-        ? messages.slice(-MAX_MESSAGES_PER_CONVERSATION)
-        : messages;
+      const trimmedMessages = newMessages.length > MAX_MESSAGES_PER_CONVERSATION
+        ? newMessages.slice(-MAX_MESSAGES_PER_CONVERSATION)
+        : newMessages;
 
       return {
         ...prev,
