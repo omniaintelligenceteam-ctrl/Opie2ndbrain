@@ -396,6 +396,7 @@ export default function OpieKanban(): React.ReactElement {
     conversations,
     activeConversation,
     createConversation,
+    createConversationForSecondary,
     switchConversation,
     forkConversation,
     deleteConversation,
@@ -2021,7 +2022,7 @@ export default function OpieKanban(): React.ReactElement {
       {pinnedConversationIds.length < 2 && (
         <button
           onClick={() => {
-            const newConv = createConversation();
+            const newConv = createConversationForSecondary();
             pinConversation(newConv.id);
           }}
           style={{

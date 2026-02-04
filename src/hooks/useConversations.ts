@@ -14,6 +14,7 @@ interface UseConversationsReturn {
   conversations: Conversation[];
   activeConversation: Conversation | null;
   createConversation: () => Conversation;
+  createConversationForSecondary: () => Conversation;
   switchConversation: (id: string) => void;
   forkConversation: (fromMessageId: string) => Conversation;
   deleteConversation: (id: string) => void;
@@ -52,6 +53,17 @@ export function useConversations(): UseConversationsReturn {
     setStore(prev => ({
       conversations: [newConv, ...prev.conversations],
       activeConversationId: newConv.id,
+    }));
+    return newConv;
+  }, []);
+
+  // Create conversation without switching (for secondary chat windows)
+  const createConversationForSecondary = useCallback((): Conversation => {
+    const newConv = createEmptyConversation();
+    setStore(prev => ({
+      ...prev,
+      conversations: [newConv, ...prev.conversations],
+      // Keep activeConversationId unchanged
     }));
     return newConv;
   }, []);
@@ -188,6 +200,7 @@ export function useConversations(): UseConversationsReturn {
     conversations: store.conversations,
     activeConversation,
     createConversation,
+    createConversationForSecondary,
     switchConversation,
     forkConversation,
     deleteConversation,
