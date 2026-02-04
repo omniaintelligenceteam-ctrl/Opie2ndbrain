@@ -770,10 +770,10 @@ export default function OpieKanban(): React.ReactElement {
       const isStreaming = contentType.includes('text/event-stream');
 
       let reply: string | null = null;
+      const assistantMsgId = generateMessageId(); // Define outside for both branches
 
       if (isStreaming && res.body) {
         // SSE streaming response - create assistant message and update as chunks arrive
-        const assistantMsgId = generateMessageId();
         const assistantMessage: ChatMessage = {
           id: assistantMsgId,
           role: 'assistant',
