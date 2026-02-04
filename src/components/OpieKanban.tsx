@@ -20,6 +20,8 @@ import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import MobileChat from './MobileChat';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
 import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
+import { useConversations } from '@/hooks/useConversations';
+import { Conversation } from '@/types/conversation';
 // Real-time dashboard components
 import SmartDashboardHome from './SmartDashboardHome';
 import OpieStatusWidget from './OpieStatusWidget';
@@ -234,7 +236,7 @@ function KanbanColumn({
 }
 
 export default function OpieKanban(): React.ReactElement {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
   const [micOn, setMicOn] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -321,12 +323,70 @@ export default function OpieKanban(): React.ReactElement {
   const bottomNavVisible = useBottomNav();
   const { currentParameters: personalityParams } = useAgentPersonality();
 
+  // Conversation management
+  const {
+    conversations,
+    activeConversation,
+    createConversation,
+    switchConversation,
+    forkConversation,
+    deleteConversation,
+    updateMessages,
+    updateTitle,
+    setSummary,
+  } = useConversations();
+
+  // Use conversation messages instead of local state
+  const messages = activeConversation?.messages || [];
+
+  // Wrapper to maintain setMessages API while using updateMessages
+  const setMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    const currentMessages = activeConversation?.messages || [];
+    const newMessages = typeof updater === 'function' ? updater(currentMessages) : updater;
+    updateMessages(newMessages);
+  }, [activeConversation?.messages, updateMessages]);
+
   // Load saved state on mount
   useEffect(() => {
     setActiveView(getSavedView() as ViewId);
     setSidebarExpanded(getSidebarState());
   }, []);
-  
+
+  // Initialize conversation on first load
+  useEffect(() => {
+    if (conversations.length === 0) {
+      createConversation();
+    }
+  }, [conversations.length, createConversation]);
+
+  // Auto-generate title after first exchange
+  useEffect(() => {
+    const generateTitle = async () => {
+      if (!activeConversation) return;
+      if (activeConversation.title !== 'New conversation') return;
+      if (activeConversation.messages.length < 2) return;
+
+      const hasAssistantReply = activeConversation.messages.some(m => m.role === 'assistant');
+      if (!hasAssistantReply) return;
+
+      try {
+        const response = await fetch('/api/chat/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: activeConversation.messages.slice(0, 2) }),
+        });
+        const data = await response.json();
+        if (data.title) {
+          updateTitle(activeConversation.id, data.title);
+        }
+      } catch (error) {
+        console.error('Failed to generate title:', error);
+      }
+    };
+
+    generateTitle();
+  }, [activeConversation?.messages.length, activeConversation?.id, activeConversation?.title, updateTitle]);
+
   const handleViewChange = useCallback((view: ViewId) => {
     setActiveView(view);
     saveView(view);
@@ -585,6 +645,26 @@ export default function OpieKanban(): React.ReactElement {
       console.error('[TTS] Fetch error:', err);
       setIsSpeaking(false);
       setTimeout(() => startRecognition(), 300);
+    }
+  };
+
+  const handleSummarizeAndContinue = async () => {
+    if (!activeConversation || activeConversation.messages.length === 0) return;
+
+    try {
+      const response = await fetch('/api/chat/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: activeConversation.messages }),
+      });
+      const data = await response.json();
+
+      if (data.summary) {
+        const newConv = createConversation();
+        setSummary(newConv.id, data.summary);
+      }
+    } catch (error) {
+      console.error('Failed to summarize:', error);
     }
   };
 
@@ -1611,7 +1691,7 @@ export default function OpieKanban(): React.ReactElement {
       </main>
 
       {/* Floating Chat Box */}
-      <FloatingChat 
+      <FloatingChat
         messages={messages}
         input={input}
         setInput={setInput}
@@ -1625,6 +1705,13 @@ export default function OpieKanban(): React.ReactElement {
         onInteractionModeChange={setInteractionMode}
         selectedModel={selectedModel}
         onModelChange={handleModelChange}
+        conversations={conversations}
+        activeConversationId={activeConversation?.id || null}
+        onConversationCreate={createConversation}
+        onConversationSwitch={switchConversation}
+        onConversationDelete={deleteConversation}
+        onConversationFork={forkConversation}
+        onSummarizeAndContinue={handleSummarizeAndContinue}
       />
 
       {/* Command Palette */}
