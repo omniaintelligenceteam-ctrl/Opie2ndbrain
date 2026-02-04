@@ -5,49 +5,53 @@ export async function POST(req: Request) {
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
-    const openclawUrl = process.env.OPENCLAW_URL || 'http://143.198.128.209:3457';
-    const openclawToken = process.env.OPENCLAW_TOKEN;
-    
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    
-    if (openclawToken) {
-      headers['Authorization'] = `Bearer ${openclawToken}`;
-    }
-    
-    const response = await fetch(`${openclawUrl}/v1/chat/completions`, {
+    // Build full context for the task
+    const fullTask = `Task from Opie2ndbrain (DO IT mode):
+
+User message: ${message}
+
+Recent chat context:
+${(chatHistory || []).map((m: any) => `${m.role}: ${m.content}`).join('\n')}
+
+Memory context:
+${memoryContext || 'No additional memory context'}
+
+Execute this task with full workspace access.`;
+
+    // Spawn a session via OpenClaw
+    const spawnRes = await fetch('http://143.198.128.209:18789/v1/sessions/spawn', {
       method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: 'ollama/kimi-k2.5:cloud',
-        messages: [
-          { 
-            role: 'system', 
-            content: `You are Opie, Wes's voice assistant with full workspace access. You can read/write files, execute commands, and access long-term memory.\n\n${memoryContext || ''}` 
-          },
-          ...(chatHistory || []),
-          { role: 'user', content: message }
-        ],
-        stream: true
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OpenClaw error: ${response.status}`);
-    }
-    
-    return new Response(response.body, {
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        agentId: 'main',
+        task: fullTask,
+        deliver: true, // Result will be delivered back
+        label: `opie-doit-${Date.now()}`,
+        timeoutSeconds: 300,
+      }),
+    });
+
+    if (!spawnRes.ok) {
+      const error = await spawnRes.text();
+      throw new Error(`Spawn failed: ${error}`);
+    }
+
+    const spawnData = await spawnRes.json();
+    
+    // Return the session info - the result will come via message/callback
+    return Response.json({
+      success: true,
+      sessionKey: spawnData.sessionKey,
+      message: 'Task spawned. Result will be delivered.',
+      spawnedAt: new Date().toISOString(),
     });
     
   } catch (error) {
     console.error('DO IT mode error:', error);
     return Response.json(
-      { error: 'OpenClaw unavailable', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to spawn session', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 503 }
     );
   }
