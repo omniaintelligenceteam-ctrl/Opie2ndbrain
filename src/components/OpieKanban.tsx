@@ -730,50 +730,133 @@ export default function OpieKanban(): React.ReactElement {
         throw new Error(`Server error (${res.status}): ${errorText.slice(0, 100)}`);
       }
 
-      const data = await res.json();
+      // Check if response is SSE streaming
+      const contentType = res.headers.get('content-type') || '';
+      const isStreaming = contentType.includes('text/event-stream');
 
-      // Extract reply - check for valid string
       let reply: string | null = null;
-      if (data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
-        reply = data.reply;
-      } else if (data.error) {
-        reply = `Sorry, something went wrong: ${data.error === true ? 'Unknown error' : data.error}`;
-      }
 
-      // If still no reply, show helpful message
-      if (!reply) {
-        reply = 'Hmm, I didn\'t get a response. The server may be busy - please try again.';
-      }
+      if (isStreaming && res.body) {
+        // SSE streaming response - create assistant message and update as chunks arrive
+        const assistantMsgId = generateMessageId();
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+        };
 
-      // Update interaction mode if AI signaled a change
-      if (data.mode && data.mode !== interactionMode) {
-        setInteractionMode(data.mode);
-      }
+        // Update user message to delivered and add empty assistant message
+        setMessages(prev => [
+          ...prev.map(m => m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m),
+          assistantMessage,
+        ]);
 
-      // Update user message to delivered
-      setMessages(prev => prev.map(m =>
-        m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
-      ));
+        // Read SSE stream
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
 
-      // Add assistant response
-      const assistantMessage: ChatMessage = {
-        id: generateMessageId(),
-        role: 'assistant',
-        text: reply,
-        timestamp: new Date(),
-      };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      setMessages(prev => [...prev, assistantMessage]);
-      setIsLoading(false);
+          buffer += decoder.decode(value, { stream: true });
 
-      // Mark user message as read once assistant responds
-      setMessages(prev => prev.map(m =>
-        m.id === userMessage.id ? { ...m, status: 'read' as const } : m
-      ));
+          // Process complete SSE events (lines ending with \n\n)
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-      // Only call TTS if we have a valid, non-error reply
-      if (reply && !data.error) {
-        await speak(reply);
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                // Anthropic SSE format: content_block_delta with text
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                  fullText += parsed.delta.text;
+                  setMessages(prev => prev.map(m =>
+                    m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  ));
+                }
+                // OpenAI-compatible format (Ollama)
+                else if (parsed.choices?.[0]?.delta?.content) {
+                  fullText += parsed.choices[0].delta.content;
+                  setMessages(prev => prev.map(m =>
+                    m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  ));
+                }
+              } catch {
+                // Ignore parse errors for non-JSON lines
+              }
+            }
+          }
+        }
+
+        reply = fullText || 'No response received';
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgId ? { ...m, text: reply! } : m
+        ));
+        setIsLoading(false);
+
+        // Mark user message as read
+        setMessages(prev => prev.map(m =>
+          m.id === userMessage.id ? { ...m, status: 'read' as const } : m
+        ));
+
+        // TTS for streamed response
+        if (reply && reply !== 'No response received') {
+          await speak(reply);
+        }
+      } else {
+        // Regular JSON response
+        const data = await res.json();
+
+        // Extract reply - check for valid string
+        if (data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
+          reply = data.reply;
+        } else if (data.error) {
+          reply = `Sorry, something went wrong: ${data.error === true ? 'Unknown error' : data.error}`;
+        }
+
+        // If still no reply, show helpful message
+        if (!reply) {
+          reply = 'Hmm, I didn\'t get a response. The server may be busy - please try again.';
+        }
+
+        // Update interaction mode if AI signaled a change
+        if (data.mode && data.mode !== interactionMode) {
+          setInteractionMode(data.mode);
+        }
+
+        // Update user message to delivered
+        setMessages(prev => prev.map(m =>
+          m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
+        ));
+
+        // Add assistant response
+        const assistantMessage: ChatMessage = {
+          id: generateMessageId(),
+          role: 'assistant',
+          text: reply,
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+        setIsLoading(false);
+
+        // Mark user message as read once assistant responds
+        setMessages(prev => prev.map(m =>
+          m.id === userMessage.id ? { ...m, status: 'read' as const } : m
+        ));
+
+        // Only call TTS if we have a valid, non-error reply
+        if (reply && !data.error) {
+          await speak(reply);
+        }
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
