@@ -189,6 +189,113 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
   }
 }
 
+// Ollama with tool support - checks for tool calls, executes, then streams final response
+async function* streamOllamaWithTools(messages: Array<{role: string, content: string}>, model: string) {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}
+
+`;
+    return;
+  }
+
+  try {
+    // First pass: Get AI response and check for tool calls
+    const response = await fetch('https://ollama.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ollamaKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        stream: false,
+        messages: messages,
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      yield `data: ${JSON.stringify({ error: `Ollama: ${error.slice(0, 200)}` })}
+
+`;
+      return;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+
+    // Check for tool call in response
+    let toolCall = null;
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*"tool"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.tool && TOOLS[parsed.tool]) {
+          toolCall = parsed;
+        }
+      }
+    } catch {
+      // Not a valid tool call
+    }
+
+    let finalContent = content;
+
+    // If tool call detected, execute it
+    if (toolCall) {
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Executing ${toolCall.tool}...\n` } }] })}
+
+`;
+
+      const tool = TOOLS[toolCall.tool];
+      const toolResult = await tool.execute(toolCall.args || {});
+
+      // Second pass: Send tool result to AI for final response
+      const messagesWithTool = [
+        ...messages,
+        { role: 'assistant' as const, content },
+        { role: 'user' as const, content: `Tool "${toolCall.tool}" result:\n\n${JSON.stringify(toolResult, null, 2)}\n\nProvide your final response.` },
+      ];
+
+      const finalResponse = await fetch('https://ollama.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ollamaKey}`,
+        },
+        body: JSON.stringify({
+          model: model,
+          stream: false,
+          messages: messagesWithTool,
+          max_tokens: 1024,
+        }),
+      });
+
+      if (finalResponse.ok) {
+        const finalData = await finalResponse.json();
+        finalContent = finalData.choices?.[0]?.message?.content || content;
+      }
+    }
+
+    // Stream final response word by word
+    const chunks = finalContent.split(/\s+/);
+    for (const chunk of chunks) {
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: chunk + ' ' } }] })}
+
+`;
+    }
+    yield 'data: [DONE]\n
+';
+
+  } catch (error) {
+    console.error("[Ollama Tools] Error:", error);
+    yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Ollama failed' })}
+
+`;
+  }
+}
+
 // Call Anthropic with streaming
 async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string) {
   if (!process.env.ANTHROPIC_API_KEY) {
