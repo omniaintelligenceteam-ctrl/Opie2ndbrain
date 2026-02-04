@@ -1,7 +1,7 @@
 // Gateway configuration - centralized for all API routes
 // Supports both OPENCLAW_ (new) and MOLTBOT_ (legacy) env vars
-export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'http://localhost:18789';
-export const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || '';
+export const GATEWAY_URL = 'http://143.198.128.209:3457';
+export const GATEWAY_TOKEN = 'opie_web_35637bfc27f353c9d88943a558b1248fed8883d87f7f865c6cebe114fd9b1f93';
 
 // Check if we're likely in a production environment without local gateway
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
