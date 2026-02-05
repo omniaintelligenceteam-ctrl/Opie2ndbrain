@@ -414,6 +414,7 @@ export async function POST(req: NextRequest) {
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
   // DO IT MODE: Execute with tools
+  console.log('[Chat] DO IT mode entered, interactionMode:', interactionMode);
   if (interactionMode === 'execute') {
     // Option A: Local tool execution (fast, streaming) - default
     const useLocalExecution = process.env.DO_IT_LOCAL !== 'false';
@@ -423,12 +424,15 @@ export async function POST(req: NextRequest) {
       userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
 
       // Build messages with conversation history - include sessionId for context tracking
+      console.log('[Chat] Building prompt with history count:', conversationHistory?.length || 0);
+      console.log('[Chat] History sample:', JSON.stringify(conversationHistory?.slice(-2)));
+      
       const contextualPrompt = conversationHistory?.length > 1 
         ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
         : userMessage;
 
-      console.log('[Chat] Contextual prompt length:', contextualPrompt.length);
-      console.log('[Chat] Context preview:', contextualPrompt.slice(0, 200));
+      console.log('[Chat] Final prompt length:', contextualPrompt.length);
+      console.log('[Chat] Has history:', contextualPrompt.includes('CONVERSATION HISTORY'));
 
       const messages = [
         { role: 'system', content: systemPrompt },
