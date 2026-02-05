@@ -837,7 +837,8 @@ export default function OpieKanban(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMsg || 'What do you see in this image?',
-          messages: prepareMessagesWithContext(updatedMessages), // Include just-added user message
+          messages: prepareMessagesWithContext(updatedMessages),
+          _debug: `Sending ${updatedMessages.length} messages`
           sessionId,
           personality: personalityParams,
           image: image, // Include image in API call

@@ -374,6 +374,10 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
 
 // Main handler
 export async function POST(req: NextRequest) {
+  const body = await req.json();
+  console.log('[Chat API] Request body keys:', Object.keys(body));
+  console.log('[Chat API] Messages count:', body.messages?.length || 0);
+  
   const {
     message,
     messages: conversationHistory,
@@ -385,7 +389,7 @@ export async function POST(req: NextRequest) {
     provider,
     memoryContext,
     image,
-  } = await req.json();
+  } = body;
 
   if (provider && ['openclaw', 'ollama', 'anthropic'].includes(provider)) {
     currentProvider = provider as Provider;
@@ -418,14 +422,14 @@ export async function POST(req: NextRequest) {
       console.log('[Chat] DO IT mode: Using local tool execution');
       userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
 
-      // Build messages with conversation history
+      // Build messages with conversation history - include sessionId for context tracking
+      const contextualPrompt = conversationHistory?.length > 1 
+        ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
+        : userMessage;
+
       const messages = [
         { role: 'system', content: systemPrompt },
-        ...(conversationHistory || []).map((m: any) => ({
-          role: m.role,
-          content: m.text || m.content || ''
-        })),
-        { role: 'user', content: userMessage }
+        { role: 'user', content: contextualPrompt }
       ];
 
       const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
