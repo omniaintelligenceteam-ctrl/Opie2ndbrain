@@ -380,18 +380,7 @@ export default function OpieKanban(): React.ReactElement {
   const [mobileSheetContent, setMobileSheetContent] = useState<'agents' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  // Pinned conversations for multi-chat comparison
-  const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>([]);
-
-  const pinConversation = useCallback((id: string) => {
-    if (!pinnedConversationIds.includes(id) && pinnedConversationIds.length < 2) {
-      setPinnedConversationIds(prev => [...prev, id]);
-    }
-  }, [pinnedConversationIds]);
-
-  const unpinConversation = useCallback((id: string) => {
-    setPinnedConversationIds(prev => prev.filter(cid => cid !== id));
-  }, []);
+  // Pinned conversations from useConversations hook (persisted)
 
   // Responsive state
   const responsive = useResponsive();
@@ -448,6 +437,7 @@ export default function OpieKanban(): React.ReactElement {
   const {
     conversations,
     activeConversation,
+    pinnedConversationIds,
     createConversation,
     createConversationForSecondary,
     switchConversation,
@@ -457,6 +447,8 @@ export default function OpieKanban(): React.ReactElement {
     updateMessagesForConversation,
     updateTitle,
     setSummary,
+    pinConversation,
+    unpinConversation,
   } = useConversations();
 
   // State for secondary chat windows (interactive pinned chats)

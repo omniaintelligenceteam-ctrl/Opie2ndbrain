@@ -13,6 +13,7 @@ import {
 interface UseConversationsReturn {
   conversations: Conversation[];
   activeConversation: Conversation | null;
+  pinnedConversationIds: string[];
   createConversation: () => Conversation;
   createConversationForSecondary: () => Conversation;
   switchConversation: (id: string) => void;
@@ -22,11 +23,13 @@ interface UseConversationsReturn {
   updateMessagesForConversation: (conversationId: string, updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   updateTitle: (conversationId: string, title: string) => void;
   setSummary: (conversationId: string, summary: string) => void;
+  pinConversation: (id: string) => void;
+  unpinConversation: (id: string) => void;
   isLoading: boolean;
 }
 
 export function useConversations(): UseConversationsReturn {
-  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeConversationId: null });
+  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeConversationId: null, pinnedConversationIds: [] });
   const [isLoading, setIsLoading] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isLoadedRef = useRef(false);
@@ -243,9 +246,28 @@ export function useConversations(): UseConversationsReturn {
     }));
   }, []);
 
+  const pinConversation = useCallback((id: string): void => {
+    setStore(prev => {
+      if (prev.pinnedConversationIds.includes(id)) return prev;
+      if (prev.pinnedConversationIds.length >= 2) return prev; // Max 2 pinned
+      return {
+        ...prev,
+        pinnedConversationIds: [...prev.pinnedConversationIds, id],
+      };
+    });
+  }, []);
+
+  const unpinConversation = useCallback((id: string): void => {
+    setStore(prev => ({
+      ...prev,
+      pinnedConversationIds: prev.pinnedConversationIds.filter(pid => pid !== id),
+    }));
+  }, []);
+
   return {
     conversations: store.conversations,
     activeConversation,
+    pinnedConversationIds: store.pinnedConversationIds,
     createConversation,
     createConversationForSecondary,
     switchConversation,
@@ -255,6 +277,8 @@ export function useConversations(): UseConversationsReturn {
     updateMessagesForConversation,
     updateTitle,
     setSummary,
+    pinConversation,
+    unpinConversation,
     isLoading,
   };
 }

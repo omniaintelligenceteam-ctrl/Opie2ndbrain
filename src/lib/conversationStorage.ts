@@ -3,7 +3,7 @@ import { Conversation, ConversationStore } from '@/types/conversation';
 import { supabase } from './supabaseClient';
 
 const STORAGE_KEY = 'opie-conversations';
-const MAX_CONVERSATIONS = 100;
+const MAX_CONVERSATIONS = 20; // Keep 20 most recent + any pinned
 
 // Generate unique conversation ID
 export function generateConversationId(): string {
@@ -73,18 +73,22 @@ function loadFromLocalStorage(): ConversationStore {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-      return { conversations: [], activeConversationId: null };
+      return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
     }
 
     const parsed = JSON.parse(stored) as ConversationStore;
     if (!Array.isArray(parsed.conversations)) {
-      return { conversations: [], activeConversationId: null };
+      return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
     }
 
-    return parsed;
+    // Ensure pinnedConversationIds exists (migration from old format)
+    return {
+      ...parsed,
+      pinnedConversationIds: parsed.pinnedConversationIds || [],
+    };
   } catch (error) {
     console.error('[ConversationStorage] Failed to load:', error);
-    return { conversations: [], activeConversationId: null };
+    return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
   }
 }
 
@@ -92,16 +96,23 @@ function loadFromLocalStorage(): ConversationStore {
 export async function saveConversations(store: ConversationStore): Promise<void> {
   if (typeof window === 'undefined') return;
 
-  // Always save to localStorage as backup
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-
-  // Prune if over limit
+  const pinnedIds = store.pinnedConversationIds || [];
+  
+  // Prune if over limit: keep all pinned + 20 most recent unpinned
   let conversations = store.conversations;
-  if (conversations.length > MAX_CONVERSATIONS) {
-    conversations = [...conversations]
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, MAX_CONVERSATIONS);
-  }
+  const pinned = conversations.filter(c => pinnedIds.includes(c.id));
+  const unpinned = conversations
+    .filter(c => !pinnedIds.includes(c.id))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, MAX_CONVERSATIONS);
+  
+  conversations = [...pinned, ...unpinned];
+  
+  // Update store with pruned conversations
+  const prunedStore = { ...store, conversations };
+
+  // Always save to localStorage
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(prunedStore));
 
   try {
     const sessionId = getSessionId();
