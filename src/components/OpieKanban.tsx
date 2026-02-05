@@ -40,6 +40,7 @@ import ParticleBackground from './ParticleBackground';
 import ImmersiveVoiceMode from './ImmersiveVoiceMode';
 import StatusOrb from './StatusOrb';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
+import { useVoiceEngine } from '../hooks/useVoiceEngine';
 
 
 // Persistence helpers
@@ -344,9 +345,6 @@ function KanbanColumn({
 export default function OpieKanban(): React.ReactElement {
   // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
-  const [micOn, setMicOn] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
@@ -420,10 +418,6 @@ export default function OpieKanban(): React.ReactElement {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   
-  const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const micOnRef = useRef(false);
-  const recognitionRestartingRef = useRef(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
   
@@ -537,294 +531,41 @@ export default function OpieKanban(): React.ReactElement {
     saveSidebarState(newState);
   };
 
-  const isSpeakingRef = useRef(false);
-  const isLoadingRef = useRef(false);
-  
-  // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
-  const SILENCE_TIMEOUT_MS = 1000;
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingTranscriptRef = useRef('');
-  const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
   const abortControllerRef = useRef<AbortController | null>(null);  // Cancel pending API requests
-  
-  useEffect(() => { micOnRef.current = micOn; }, [micOn]);
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
-  useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+
   useEffect(() => { setSessionId(getSessionId()); }, []);
 
-  // Function to stop TTS playback (for barge-in/interrupt)
-  const stopSpeaking = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-    setIsSpeaking(false);
+  // ─── Voice Engine (new unified system) ─────────────────────────
+  // The voice engine handles: mic input → STT → silence detection → send → TTS → playback
+  // with proper state machine, barge-in, cleanup, and browser compat.
+  const handleVoiceSend = useCallback(async (text: string): Promise<string | void> => {
+    // This is called by the voice engine when silence is detected.
+    // We trigger handleSend and return the response for TTS.
+    // handleSend is defined below, so we use the ref pattern.
+    return handleSendRef.current(text);
   }, []);
 
-  // Function to cancel pending API request (for interrupt while thinking)
-  const cancelPendingRequest = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsLoading(false);
-  }, []);
+  const voiceEngine = useVoiceEngine({
+    onSend: handleVoiceSend,
+    autoSpeak: true,
+  });
 
-  const startRecognition = useCallback(() => {
-    if (recognitionRef.current && micOnRef.current) {
-      try { recognitionRef.current.start(); } catch(e) {}
-    }
-  }, []);
+  const {
+    micOn,
+    transcript,
+    isSpeaking,
+    voiceState,
+    toggleMic,
+    stopSpeaking,
+    cancelProcessing: cancelVoiceProcessing,
+    speak,
+    notifyResponse,
+    audioRef,
+    browserSupport: voiceBrowserSupport,
+  } = voiceEngine;
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    audioRef.current = new Audio();
-    
-    // Store current audio ref for cleanup
-    const audio = audioRef.current;
-    let currentUrl: string | null = null;
-    
-    audio.onended = () => {
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
-      // Clean up the blob URL after playback
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl);
-        currentUrl = null;
-      }
-    };
-    audio.onerror = (e) => {
-      console.error('[Audio] Playback error:', e);
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
-      // Clean up the blob URL on error
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl);
-        currentUrl = null;
-      }
-    };
-    
-    // Store a setter on the audio element to receive the URL from speak()
-    (audio as any).__setCurrentUrl = (url: string) => {
-      if (currentUrl) URL.revokeObjectURL(currentUrl);
-      currentUrl = url;
-    };
-  }, [startRecognition]);
-  
-  // Clear timers and abort pending requests on unmount
-  useEffect(() => {
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!('webkitSpeechRecognition' in window)) {
-      console.error('[Voice] webkitSpeechRecognition not available in this browser');
-      return;
-    }
-    const SR = (window as any).webkitSpeechRecognition;
-    const recognition = new SR();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (e: any) => {
-      // BARGE-IN: If AI is speaking and user starts talking, interrupt it immediately
-      // Don't clear transcript - let user finish their thought
-      if (isSpeakingRef.current) {
-        stopSpeaking();
-      }
-
-      // INTERRUPT THINKING: If AI is thinking and user starts talking, cancel the request
-      // This lets user add more context or correct themselves before getting an answer
-      if (isLoadingRef.current) {
-        cancelPendingRequest();
-      }
-
-      // Build complete transcript from ALL results (not just from resultIndex)
-      let finalText = '';
-      let interimText = '';
-      
-      for (let i = 0; i < e.results.length; i++) {
-        const result = e.results[i];
-        if (result.isFinal) {
-          finalText += result[0].transcript + ' ';
-        } else {
-          interimText += result[0].transcript;
-        }
-      }
-      
-      // Store accumulated finals (DON'T send yet - wait for silence!)
-      if (finalText.trim()) {
-        accumulatedTranscriptRef.current = finalText.trim();
-      }
-      
-      // Display current state: accumulated + interim
-      const displayText = (accumulatedTranscriptRef.current + ' ' + interimText).trim();
-      setTranscript(displayText);
-      pendingTranscriptRef.current = displayText;
-      
-      // SILENCE DETECTION: Reset timer on ANY activity
-      // This is the ONLY thing that triggers a send
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      
-      silenceTimerRef.current = setTimeout(() => {
-        const textToSend = accumulatedTranscriptRef.current.trim() || pendingTranscriptRef.current.trim();
-        if (textToSend && !isLoadingRef.current && !isSpeakingRef.current) {
-          accumulatedTranscriptRef.current = '';
-          pendingTranscriptRef.current = '';
-          setTranscript('');
-          handleSend(textToSend);
-        }
-      }, SILENCE_TIMEOUT_MS);
-    };
-    recognition.onend = () => {
-      // Restart if mic should still be on
-      if (micOnRef.current && !recognitionRestartingRef.current) {
-        recognitionRestartingRef.current = true;
-        setTimeout(() => { 
-          recognitionRestartingRef.current = false;
-          try { recognition.start(); } catch(e) { /* ignore */ }
-        }, 150);
-      }
-    };
-    recognition.onerror = (e: any) => {
-      // 'no-speech' is common - user didn't speak yet. Just restart.
-      if (e.error === 'no-speech') {
-        if (micOnRef.current && !recognitionRestartingRef.current) {
-          recognitionRestartingRef.current = true;
-          setTimeout(() => {
-            recognitionRestartingRef.current = false;
-            try { recognition.start(); } catch(e) {}
-          }, 300);
-        }
-        return;
-      }
-      
-      // 'aborted' happens when we stop/start quickly - ignore
-      if (e.error === 'aborted') {
-        return;
-      }
-      
-      console.error('[Voice] Speech recognition error:', e.error);
-      
-      // Only turn off mic for permission errors, not transient ones
-      if (e.error === 'not-allowed') {
-        console.error('[Voice] Mic permission denied');
-        setMicOn(false);
-      } else if (e.error === 'audio-capture') {
-        console.error('[Voice] No microphone found');
-        setMicOn(false);
-      } else if (e.error === 'network') {
-        console.error('[Voice] Network error - speech service unavailable');
-      } else if (micOnRef.current && !recognitionRestartingRef.current) {
-        // For other errors, try to restart
-        recognitionRestartingRef.current = true;
-        setTimeout(() => {
-          recognitionRestartingRef.current = false;
-          try { recognition.start(); } catch(e) {}
-        }, 500);
-      }
-    };
-    recognitionRef.current = recognition;
-  }, [stopSpeaking]);
-
-  const toggleMic = () => {
-    if (!micOn) {
-      // Check if speech recognition is available
-      if (!recognitionRef.current) {
-        console.error('[Voice] Speech recognition not initialized. Browser may not support it.');
-        alert('Voice input not available. This browser may not support speech recognition. Try Chrome or Edge.');
-        return;
-      }
-      setMicOn(true);
-      // Stop first to ensure clean state, then start
-      try { recognitionRef.current?.stop(); } catch(e) {}
-      setTimeout(() => {
-        try { 
-          recognitionRef.current?.start(); 
-          console.log('[Voice] Recognition started');
-        } catch(e) { 
-          console.error('[Voice] Start error:', e); 
-          setMicOn(false);
-        }
-      }, 100);
-    } else {
-      setMicOn(false);
-      try { recognitionRef.current?.stop(); } catch(e) {}
-      setTranscript('');
-      // Clear pending transcript and silence timer
-      pendingTranscriptRef.current = '';
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    }
-  };
-
-  const speak = async (text: string) => {
-    setIsSpeaking(true);
-    // DON'T stop recognition - keep it running for barge-in capability
-    // This lets user interrupt AI mid-speech
-    try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      
-      // Check if response is OK
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        console.error('[TTS] API error:', res.status, errorData);
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
-      }
-      
-      // Check content type to ensure we got audio
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('audio')) {
-        console.error('[TTS] Invalid content type:', contentType);
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
-      }
-      
-      const blob = await res.blob();
-      
-      // Validate blob size (audio should be more than a few hundred bytes)
-      if (blob.size < 1000) {
-        console.error('[TTS] Audio blob too small:', blob.size, 'bytes');
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
-      }
-      
-      console.log('[TTS] Received audio:', blob.size, 'bytes');
-      const url = URL.createObjectURL(blob);
-      
-      if (audioRef.current) {
-        // Track the URL for cleanup when playback ends/errors
-        (audioRef.current as any).__setCurrentUrl?.(url);
-        audioRef.current.src = url;
-        try {
-          await audioRef.current.play();
-          console.log('[Audio] Playback started');
-        } catch (playError) {
-          console.error('[Audio] Play failed (autoplay policy?):', playError);
-          setIsSpeaking(false);
-          setTimeout(() => startRecognition(), 300);
-          // Clean up the URL - also handled by onerror handler
-          URL.revokeObjectURL(url);
-          (audioRef.current as any).__setCurrentUrl?.(null);
-        }
-      }
-    } catch (err) {
-      console.error('[TTS] Fetch error:', err);
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
-    }
-  };
+  // Ref for handleSend to avoid circular dependency with voice engine
+  const handleSendRef = useRef<(text: string) => Promise<string | void>>(async () => {});
 
   const handleSummarizeAndContinue = async () => {
     if (!activeConversation || activeConversation.messages.length === 0) return;
@@ -859,10 +600,6 @@ export default function OpieKanban(): React.ReactElement {
     }
     
     const userMsg = messageText.trim();
-    
-    // Clear any pending silence timer
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    pendingTranscriptRef.current = '';
     
     // Create user message with proper structure
     const userMessage: ChatMessage = {
@@ -1006,9 +743,9 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // TTS for streamed response
-        if (reply && reply !== 'No response received') {
-          await speak(reply);
+        // Voice engine handles TTS — notify it of the response
+        if (reply && reply !== 'No response received' && micOn) {
+          notifyResponse(reply);
         }
 
         // Auto-extract memory every 10 messages
@@ -1071,9 +808,9 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // Only call TTS if we have a valid, non-error reply
-        if (reply && !data.error) {
-          await speak(reply);
+        // Voice engine handles TTS — notify it of the response
+        if (reply && !data.error && micOn) {
+          notifyResponse(reply);
         }
       }
     } catch (err: any) {
@@ -1123,8 +860,13 @@ export default function OpieKanban(): React.ReactElement {
 
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
-      setTimeout(() => startRecognition(), 500);
     }
+  };
+
+  // Connect handleSend to the voice engine via ref (avoids circular dependency)
+  handleSendRef.current = async (text: string): Promise<string | void> => {
+    await handleSend(text);
+    // Return is handled via notifyResponse in handleSend
   };
 
   // Handle send for secondary/pinned chat windows
@@ -1608,7 +1350,7 @@ export default function OpieKanban(): React.ReactElement {
           isLoading={isLoading}
           transcript={transcript}
           lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
-          onClose={() => setMicOn(false)}
+          onClose={() => { if (micOn) toggleMic(); }}
           onMicToggle={toggleMic}
           micOn={micOn}
         />
@@ -2204,6 +1946,7 @@ export default function OpieKanban(): React.ReactElement {
         onMicToggle={toggleMic}
         isSpeaking={isSpeaking}
         onStopSpeaking={stopSpeaking}
+        onCancelProcessing={cancelVoiceProcessing}
         transcript={transcript}
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}
