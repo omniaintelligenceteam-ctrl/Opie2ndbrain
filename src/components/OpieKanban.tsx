@@ -599,9 +599,13 @@ export default function OpieKanban(): React.ReactElement {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!('webkitSpeechRecognition' in window)) return;
+    if (!('webkitSpeechRecognition' in window)) {
+      console.error('[Voice] webkitSpeechRecognition not available in this browser');
+      return;
+    }
     const SR = (window as any).webkitSpeechRecognition;
     const recognition = new SR();
+    recognition.lang = 'en-US';
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
@@ -672,10 +676,16 @@ export default function OpieKanban(): React.ReactElement {
       }
     };
     recognition.onerror = (e: any) => {
-      console.log('Speech recognition error:', e.error);
+      console.error('[Voice] Speech recognition error:', e.error);
       // Only turn off mic for permission errors, not transient ones
-      if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+      if (e.error === 'not-allowed') {
+        console.error('[Voice] Mic permission denied');
         setMicOn(false);
+      } else if (e.error === 'audio-capture') {
+        console.error('[Voice] No microphone found');
+        setMicOn(false);
+      } else if (e.error === 'network') {
+        console.error('[Voice] Network error - speech service unavailable');
       } else if (micOnRef.current) {
         // For other errors, try to restart
         setTimeout(() => {
@@ -688,11 +698,23 @@ export default function OpieKanban(): React.ReactElement {
 
   const toggleMic = () => {
     if (!micOn) {
+      // Check if speech recognition is available
+      if (!recognitionRef.current) {
+        console.error('[Voice] Speech recognition not initialized. Browser may not support it.');
+        alert('Voice input not available. This browser may not support speech recognition. Try Chrome or Edge.');
+        return;
+      }
       setMicOn(true);
       // Stop first to ensure clean state, then start
       try { recognitionRef.current?.stop(); } catch(e) {}
       setTimeout(() => {
-        try { recognitionRef.current?.start(); } catch(e) { console.log('Start error:', e); }
+        try { 
+          recognitionRef.current?.start(); 
+          console.log('[Voice] Recognition started');
+        } catch(e) { 
+          console.error('[Voice] Start error:', e); 
+          setMicOn(false);
+        }
       }, 100);
     } else {
       setMicOn(false);
