@@ -524,7 +524,13 @@ export async function POST(req: NextRequest) {
   // Add mode context
   userMessage += '\n[MODE: Plan] Discuss ideas but do NOT execute actions.';
 
-  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
+  // Build contextual prompt with conversation history (same as DO IT mode)
+  console.log('[Chat] Plan mode - history count:', conversationHistory?.length || 0);
+  const contextualPrompt = conversationHistory?.length > 1 
+    ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
+    : userMessage;
+
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: contextualPrompt }];
   const generator = streamOllama(messages, MODELS.kimi.model);
   return createStreamResponse(generator);
 }
