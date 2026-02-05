@@ -98,6 +98,7 @@ export function useConversations(): UseConversationsReturn {
   const createConversation = useCallback((): Conversation => {
     const newConv = createEmptyConversation();
     setStore(prev => ({
+      ...prev,
       conversations: [newConv, ...prev.conversations],
       activeConversationId: newConv.id,
     }));
@@ -147,6 +148,7 @@ export function useConversations(): UseConversationsReturn {
     };
 
     setStore(prev => ({
+      ...prev,
       conversations: [forkedConv, ...prev.conversations],
       activeConversationId: forkedConv.id,
     }));
@@ -164,6 +166,7 @@ export function useConversations(): UseConversationsReturn {
       }
 
       return {
+        ...prev,
         conversations: filtered,
         activeConversationId: newActiveId,
       };
