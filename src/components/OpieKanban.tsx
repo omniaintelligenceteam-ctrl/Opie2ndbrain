@@ -2069,6 +2069,7 @@ export default function OpieKanban(): React.ReactElement {
         micOn={micOn}
         onMicToggle={toggleMic}
         isSpeaking={isSpeaking}
+        onStopSpeaking={stopSpeaking}
         transcript={transcript}
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}

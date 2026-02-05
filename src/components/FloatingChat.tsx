@@ -43,6 +43,7 @@ interface FloatingChatProps {
   isSpeaking: boolean;
   transcript: string;
   onCancelProcessing?: () => void;
+  onStopSpeaking?: () => void;
   interactionMode?: InteractionMode;
   onInteractionModeChange?: (mode: InteractionMode) => void;
   selectedModel?: AIModel;
@@ -368,6 +369,7 @@ export default function FloatingChat({
   isSpeaking,
   transcript,
   onCancelProcessing,
+  onStopSpeaking,
   interactionMode: controlledInteractionMode,
   onInteractionModeChange,
   selectedModel: controlledModel,
@@ -1698,6 +1700,20 @@ export default function FloatingChat({
               title="Cancel"
             >
               ✕
+            </button>
+          )}
+
+          {/* Stop speaking button */}
+          {voiceState === 'speaking' && onStopSpeaking && (
+            <button
+              onClick={onStopSpeaking}
+              style={{
+                ...styles.cancelButton,
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              }}
+              title="Stop speaking"
+            >
+              ⏹
             </button>
           )}
 
