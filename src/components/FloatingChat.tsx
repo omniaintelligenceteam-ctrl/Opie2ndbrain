@@ -709,7 +709,7 @@ export default function FloatingChat({
               <span>💭</span><span>Plan</span>
             </button>
             <button class="mode-btn" id="doit-btn" onclick="setMode('execute')">
-              <span>🔥</span><span>DO IT</span>
+              <span>🔥</span><span>EXECUTE</span>
             </button>
           </div>
           <div class="input-area">
@@ -1257,7 +1257,7 @@ export default function FloatingChat({
                 }}
               >
                 <span style={styles.modeIcon}>🔥</span>
-                <span>DO IT</span>
+                <span>EXECUTE</span>
               </button>
             </div>
           </div>
@@ -1658,10 +1658,10 @@ export default function FloatingChat({
                 ...styles.modeButton,
                 ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
               }}
-              title="DO IT Mode - Execute with OpenClaw power"
+              title="EXECUTE Mode - Execute with OpenClaw power"
             >
               <span style={styles.modeIcon}>🔥</span>
-              <span>DO IT</span>
+              <span>EXECUTE</span>
             </button>
           </div>
           

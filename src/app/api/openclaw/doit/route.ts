@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     });
     
   } catch (error) {
-    console.error('DO IT mode error:', error);
+    console.error('EXECUTE mode error:', error);
     return Response.json(
       { error: 'OpenClaw unavailable', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 503 }

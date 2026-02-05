@@ -1,4 +1,4 @@
-// Server-side tools for DO IT mode
+// Server-side tools for EXECUTE mode
 // These execute on the server and return results to the AI
 
 import { createClient } from '@supabase/supabase-js';
@@ -560,7 +560,7 @@ async function writeWebResponse(args: { request_id: string; response: string }) 
 // Add to TOOLS after defining the function
 (TOOLS as any).write_web_response = {
   name: 'write_web_response',
-  description: 'Write the final response to the web app via Supabase. Use this ONLY when completing a DO IT task that came from the web app. Requires request_id from the task.',
+  description: 'Write the final response to the web app via Supabase. Use this ONLY when completing a EXECUTE task that came from the web app. Requires request_id from the task.',
   parameters: {
     type: 'object',
     properties: {

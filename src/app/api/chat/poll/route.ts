@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Poll for async DO IT task status
+// Poll for async EXECUTE task status
 export async function GET(req: NextRequest) {
   const requestId = req.nextUrl.searchParams.get('request_id');
   

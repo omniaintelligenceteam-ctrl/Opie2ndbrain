@@ -154,7 +154,7 @@ function prepareMessagesWithContext(messages: ChatMessage[]): Array<{role: strin
   ];
 }
 
-// Poll for async response from Supabase (DO IT mode)
+// Poll for async response from Supabase (EXECUTE mode)
 async function pollForAsyncResponse(
   pollUrl: string,
   userMsgId: string,
@@ -797,6 +797,15 @@ export default function OpieKanban(): React.ReactElement {
   const handleSend = async (text?: string, image?: string) => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
+    
+    // Ensure we have an active conversation before sending
+    if (!activeConversation) {
+      console.log('[Chat] No active conversation, creating one...');
+      createConversation();
+      // Wait a tick for state to update
+      await new Promise(r => setTimeout(r, 50));
+    }
+    
     const userMsg = messageText.trim();
     
     // Clear any pending silence timer
@@ -845,7 +854,7 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
-          memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in DO IT mode
+          memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in EXECUTE mode
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -963,7 +972,7 @@ export default function OpieKanban(): React.ReactElement {
         // Regular JSON response
         const data = await res.json();
 
-        // Check for async mode (DO IT)
+        // Check for async mode (EXECUTE)
         if (data.mode === 'async' && data.poll_url) {
           // Start polling for async response
           reply = await pollForAsyncResponse(

@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     const sessionLabel = `opie-doit-${Date.now()}`;
     
     // Build comprehensive task for the spawned session
-    const task = `DO IT MODE - Execute this task with full workspace access:
+    const task = `EXECUTE MODE - Execute this task with full workspace access:
 
 USER REQUEST: ${message}
 
@@ -23,7 +23,7 @@ ${memoryContext || 'No additional context'}
 
 INSTRUCTIONS:
 - You have full tool access: read/write files, execute commands, git operations, web search
-- Do the work requested immediately ("DO IT" = execute)
+- Do the work requested immediately ("EXECUTE" = execute)
 - After completing, write your response to Supabase via REST API:
   POST ${supabaseUrl}/rest/v1/opie_responses
   Headers: apikey: ${supabaseKey}, Authorization: Bearer ${supabaseKey}

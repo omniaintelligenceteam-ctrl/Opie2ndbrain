@@ -45,16 +45,24 @@ export function useConversations(): UseConversationsReturn {
     });
   }, []);
 
-  // Debounced save to Supabase
+  // Save to localStorage immediately, Supabase debounced
   useEffect(() => {
     if (isLoading || !isLoadedRef.current) return;
     
+    // Always save to localStorage immediately (fast, reliable)
+    try {
+      localStorage.setItem('opie-conversations', JSON.stringify(store));
+    } catch (e) {
+      console.warn('[useConversations] localStorage save failed:', e);
+    }
+    
+    // Debounce Supabase saves to reduce API calls
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(() => {
       saveConversations(store);
-    }, 500);
+    }, 1000);
 
     return () => {
       if (saveTimeoutRef.current) {
@@ -62,6 +70,23 @@ export function useConversations(): UseConversationsReturn {
       }
     };
   }, [store, isLoading]);
+
+  // Save before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isLoadedRef.current) {
+        // Sync save to localStorage before unload
+        try {
+          localStorage.setItem('opie-conversations', JSON.stringify(store));
+        } catch (e) {
+          console.warn('[useConversations] beforeunload save failed:', e);
+        }
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [store]);
 
   const activeConversation = store.activeConversationId
     ? store.conversations.find(c => c.id === store.activeConversationId) || null
@@ -146,7 +171,10 @@ export function useConversations(): UseConversationsReturn {
     updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
   ): void => {
     setStore(prev => {
-      if (!prev.activeConversationId) return prev;
+      if (!prev.activeConversationId) {
+        console.warn('[useConversations] updateMessages called with no active conversation!');
+        return prev;
+      }
 
       // Get current messages and apply updater
       const currentConv = prev.conversations.find(c => c.id === prev.activeConversationId);

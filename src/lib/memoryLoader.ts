@@ -1,5 +1,5 @@
 /**
- * Memory context loader for DO IT mode
+ * Memory context loader for EXECUTE mode
  * Fetches recent memories to include in system prompts
  */
 
