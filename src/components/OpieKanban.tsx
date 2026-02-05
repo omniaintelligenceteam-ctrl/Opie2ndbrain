@@ -28,6 +28,7 @@ import OpieStatusWidget from './OpieStatusWidget';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
+import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
 import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
@@ -434,6 +435,7 @@ export default function OpieKanban(): React.ReactElement {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
+  const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
   
   // Theme, sounds, and mobile hooks
   const { theme, themeName, toggleTheme } = useTheme();
@@ -946,6 +948,16 @@ export default function OpieKanban(): React.ReactElement {
         // TTS for streamed response
         if (reply && reply !== 'No response received') {
           await speak(reply);
+        }
+
+        // Auto-extract memory every 10 messages
+        const currentMsgCount = messagesRef.current.length;
+        if (shouldExtractMemory(currentMsgCount, lastExtractionCountRef.current, 10)) {
+          console.log('[Memory] Triggering auto-extraction at', currentMsgCount, 'messages');
+          lastExtractionCountRef.current = currentMsgCount;
+          extractMemory(messagesRef.current, conversationId, 'default')
+            .then(result => console.log('[Memory] Extraction result:', result))
+            .catch(err => console.error('[Memory] Extraction error:', err));
         }
       } else {
         // Regular JSON response
