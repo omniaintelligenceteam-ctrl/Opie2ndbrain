@@ -191,18 +191,55 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
 
 // Parse tool call JSON from AI response
 function parseToolCall(text: string): { tool: string; args: Record<string, any> } | null {
-  // Look for JSON object with tool and args keys
-  const jsonMatch = text.match(/\{[\s\S]*?"tool"[\s\S]*?"args"[\s\S]*?\}/);
-  if (!jsonMatch) return null;
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (parsed.tool && typeof parsed.tool === 'string') {
-      return { tool: parsed.tool, args: parsed.args || {} };
-    }
-  } catch {
-    return null;
+  console.log('[parseToolCall] Input:', text.slice(0, 500).replace(/\n/g, '\\n'));
+  
+  // Find all potential JSON objects with "tool" key
+  // Search for positions of {"tool" or { "tool"
+  const toolIndices = [];
+  let pos = 0;
+  while ((pos = text.indexOf('"tool"', pos)) !== -1) {
+    toolIndices.push(pos);
+    pos++;
   }
+  
+  console.log('[parseToolCall] Found "tool" at positions:', toolIndices);
+  
+  // For each "tool" found, try to extract the surrounding JSON object
+  for (const idx of toolIndices) {
+    // Find the opening brace before "tool"
+    let start = idx;
+    while (start > 0 && text[start] !== '{') {
+      start--;
+    }
+    if (text[start] !== '{') continue;
+    
+    // Find the closing brace by counting
+    let braceCount = 1;
+    let end = start + 1;
+    while (end < text.length && braceCount > 0) {
+      if (text[end] === '{') braceCount++;
+      else if (text[end] === '}') braceCount--;
+      end++;
+    }
+    
+    if (braceCount !== 0) continue; // Unmatched braces
+    
+    const jsonStr = text.slice(start, end);
+    console.log('[parseToolCall] Trying JSON:', jsonStr.slice(0, 200));
+    
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.tool && typeof parsed.tool === 'string' && TOOLS[parsed.tool]) {
+        console.log('[parseToolCall] SUCCESS - tool:', parsed.tool);
+        return { tool: parsed.tool, args: parsed.args || {} };
+      }
+    } catch (e) {
+      console.log('[parseToolCall] Parse error:', e);
+      continue;
+    }
+  }
+  
+  console.log('[parseToolCall] No valid tool found');
   return null;
 }
 
@@ -210,7 +247,7 @@ function parseToolCall(text: string): { tool: string; args: Record<string, any> 
 async function* streamOllamaWithTools(
   messages: Array<{ role: string; content: string }>,
   model: string,
-  maxToolIterations = 3
+  maxToolIterations = 25
 ): AsyncGenerator<string> {
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
@@ -337,6 +374,10 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
 
 // Main handler
 export async function POST(req: NextRequest) {
+  const body = await req.json();
+  console.log('[Chat API] Request body keys:', Object.keys(body));
+  console.log('[Chat API] Messages count:', body.messages?.length || 0);
+  
   const {
     message,
     messages: conversationHistory,
@@ -348,7 +389,7 @@ export async function POST(req: NextRequest) {
     provider,
     memoryContext,
     image,
-  } = await req.json();
+  } = body;
 
   if (provider && ['openclaw', 'ollama', 'anthropic'].includes(provider)) {
     currentProvider = provider as Provider;
@@ -365,25 +406,51 @@ export async function POST(req: NextRequest) {
   let userMessage = message;
   if (isVoice) userMessage = VOICE_INSTRUCTIONS + userMessage;
 
-  // Select system prompt based on mode
-  const PLAN_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
+  // Fetch user memory for context injection
+  let userMemoryBlock = '';
+  try {
+    const memoryRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/memory/get?sessionId=${sessionId}&limit=30`);
+    if (memoryRes.ok) {
+      const memoryData = await memoryRes.json();
+      userMemoryBlock = memoryData.formatted || '';
+      if (userMemoryBlock) {
+        console.log('[Chat] Injecting user memory:', memoryData.total, 'items');
+      }
+    }
+  } catch (e) {
+    console.log('[Chat] Memory fetch skipped:', e instanceof Error ? e.message : 'unknown');
+  }
 
-  const DO_IT_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
+  // Select system prompt based on mode (with memory injection)
+  const memorySection = userMemoryBlock ? `\n\n${userMemoryBlock}\n` : '';
+  
+  const PLAN_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
+
+  const DO_IT_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
   // DO IT MODE: Execute with tools
+  console.log('[Chat] DO IT mode entered, interactionMode:', interactionMode);
   if (interactionMode === 'execute') {
     // Option A: Local tool execution (fast, streaming) - default
     const useLocalExecution = process.env.DO_IT_LOCAL !== 'false';
 
     if (useLocalExecution) {
       console.log('[Chat] DO IT mode: Using local tool execution');
-      userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
+      
+      // Build native message array (proper multi-turn format)
+      const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.text || m.content || ''
+      }));
+      
+      console.log('[Chat] Native message array - history count:', historyMessages.length);
 
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
+        ...historyMessages,
+        { role: 'user', content: userMessage + '\n[MODE: DO IT] Execute tasks using available tools.' }
       ];
 
       const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
@@ -468,10 +535,20 @@ export async function POST(req: NextRequest) {
   }
 
   // PLAN MODE: Fast streaming via Ollama
-  // Add mode context
-  userMessage += '\n[MODE: Plan] Discuss ideas but do NOT execute actions.';
+  // Build native message array (proper multi-turn format)
+  const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.text || m.content || ''
+  }));
+  
+  console.log('[Chat] Plan mode - native message array, history count:', historyMessages.length);
 
-  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...historyMessages,
+    { role: 'user', content: userMessage + '\n[MODE: Plan] Discuss ideas but do NOT execute actions.' }
+  ];
+  
   const generator = streamOllama(messages, MODELS.kimi.model);
   return createStreamResponse(generator);
 }

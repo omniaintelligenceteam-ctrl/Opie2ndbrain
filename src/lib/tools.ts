@@ -135,8 +135,8 @@ async function shellExec(args: { command: string; cwd?: string }) {
 }
 
 // Read file from GitHub
-async function githubReadFile(args: { owner: string; repo: string; path: string; branch?: string }) {
-  const { owner, repo, path, branch = 'main' } = args;
+async function githubReadFile(args: { owner: string; repo: string; path: string; ref?: string }) {
+  const { owner, repo, path, ref = 'main' } = args;
   const githubToken = process.env.GITHUB_TOKEN;
   
   try {
@@ -148,7 +148,7 @@ async function githubReadFile(args: { owner: string; repo: string; path: string;
     }
     
     const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${ref}`,
       { headers }
     );
     
@@ -176,8 +176,8 @@ async function githubReadFile(args: { owner: string; repo: string; path: string;
 }
 
 // List directory in GitHub repo
-async function githubListRepo(args: { owner: string; repo: string; path?: string; branch?: string }) {
-  const { owner, repo, path = '', branch = 'main' } = args;
+async function githubListRepo(args: { owner: string; repo: string; path?: string; ref?: string }) {
+  const { owner, repo, path = '', ref = 'main' } = args;
   const githubToken = process.env.GITHUB_TOKEN;
   
   try {
@@ -189,7 +189,7 @@ async function githubListRepo(args: { owner: string; repo: string; path?: string
     }
     
     const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${ref}`,
       { headers }
     );
     
@@ -288,7 +288,7 @@ export const TOOLS: Record<string, Tool> = {
         owner: { type: 'string', description: 'Repository owner (e.g., "omniaintelligenceteam-ctrl")' },
         repo: { type: 'string', description: 'Repository name (e.g., "Omnia-Light-Scape-Pro-V3")' },
         path: { type: 'string', description: 'File path within repo (e.g., "src/components/Hero.tsx")' },
-        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+        ref: { type: 'string', description: 'Branch name, tag, or commit SHA (default: main)', default: 'main' },
       },
       required: ['owner', 'repo', 'path'],
     },
@@ -303,7 +303,7 @@ export const TOOLS: Record<string, Tool> = {
         owner: { type: 'string', description: 'Repository owner' },
         repo: { type: 'string', description: 'Repository name' },
         path: { type: 'string', description: 'Directory path (default: root)', default: '' },
-        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+        ref: { type: 'string', description: 'Branch name, tag, or commit SHA (default: main)', default: 'main' },
       },
       required: ['owner', 'repo'],
     },

@@ -22,14 +22,33 @@ interface UseConversationsReturn {
   updateMessagesForConversation: (conversationId: string, updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   updateTitle: (conversationId: string, title: string) => void;
   setSummary: (conversationId: string, summary: string) => void;
+  isLoading: boolean;
 }
 
 export function useConversations(): UseConversationsReturn {
-  const [store, setStore] = useState<ConversationStore>(() => loadConversations());
+  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeConversationId: null });
+  const [isLoading, setIsLoading] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoadedRef = useRef(false);
 
-  // Debounced save
+  // Initial load from Supabase
   useEffect(() => {
+    if (isLoadedRef.current) return;
+    
+    loadConversations().then(loaded => {
+      setStore(loaded);
+      setIsLoading(false);
+      isLoadedRef.current = true;
+    }).catch(error => {
+      console.error('[useConversations] Failed to load:', error);
+      setIsLoading(false);
+    });
+  }, []);
+
+  // Debounced save to Supabase
+  useEffect(() => {
+    if (isLoading || !isLoadedRef.current) return;
+    
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -42,7 +61,7 @@ export function useConversations(): UseConversationsReturn {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [store]);
+  }, [store, isLoading]);
 
   const activeConversation = store.activeConversationId
     ? store.conversations.find(c => c.id === store.activeConversationId) || null
@@ -208,5 +227,6 @@ export function useConversations(): UseConversationsReturn {
     updateMessagesForConversation,
     updateTitle,
     setSummary,
+    isLoading,
   };
 }
