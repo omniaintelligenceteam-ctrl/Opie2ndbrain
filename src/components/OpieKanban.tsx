@@ -102,34 +102,54 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// Prepare messages with smart context: 15 recent + summarized older
+// Prepare messages with tiered compression strategy
 function prepareMessagesWithContext(messages: ChatMessage[]): Array<{role: string, content: string}> {
-  const RECENT_COUNT = 15;
+  const total = messages.length;
   
-  if (messages.length <= RECENT_COUNT) {
-    // Return all if under limit
-    return messages.map(m => ({
-      role: m.role,
-      content: m.text
-    }));
+  // Under 15: send all full
+  if (total <= 15) {
+    return messages.map(m => ({ role: m.role, content: m.text }));
   }
   
-  // Split: older messages to summarize, recent to keep full
-  const olderMessages = messages.slice(0, messages.length - RECENT_COUNT);
-  const recentMessages = messages.slice(-RECENT_COUNT);
+  // Always keep last 15 full
+  const recentFull = messages.slice(-15);
+  const older = messages.slice(0, total - 15);
   
-  // Simple summarization of older context
-  const summary = olderMessages.slice(0, 5).map(m => {
-    const preview = m.text.slice(0, 100);
-    return `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${preview}${m.text.length > 100 ? '...' : ''}`;
-  }).join('\n');
+  let contextBlock = '';
+  
+  // Tiered compression of older messages
+  if (older.length > 0) {
+    // 16-25: 2 paragraphs (first 10 of older)
+    const tier1 = older.slice(0, 10); 
+    if (tier1.length > 0) {
+      const summary1 = tier1.map(m => `${m.role === 'user' ? 'Q' : 'A'}: ${m.text.slice(0, 80)}${m.text.length > 80 ? '...' : ''}`).join('\n');
+      contextBlock += `Earlier (messages ${Math.max(1, total-14-tier1.length)}-${total-15}):\n${summary1}\n\n`;
+    }
+    
+    // 26-35: 1 paragraph (next 10)
+    const tier2 = older.slice(10, 20);
+    if (tier2.length > 0) {
+      const keyPoints = tier2.map(m => m.text.slice(0, 60)).join('; ');
+      contextBlock += `Previous (${tier2.length} msgs): ${keyPoints.slice(0, 150)}...\n\n`;
+    }
+    
+    // 36-45: 2 sentences
+    const tier3 = older.slice(20, 30);
+    if (tier3.length > 0) {
+      const topics = tier3.map(m => m.text.split('.')[0].slice(0, 40)).join('. ');
+      contextBlock += `Earlier context: We discussed ${topics}.\n\n`;
+    }
+    
+    // 46+: 1 sentence, cut at 100 messages max
+    const tier4 = older.slice(30, 85); // Cap at 100 total (15+85)
+    if (tier4.length > 0) {
+      contextBlock += `Prior context includes ${tier4.length} additional messages about lead generation, pricing, and system setup.\n`;
+    }
+  }
   
   return [
-    { role: 'system', content: `Previous conversation context:\n${summary}` },
-    ...recentMessages.map(m => ({
-      role: m.role,
-      content: m.text
-    }))
+    ...(contextBlock ? [{ role: 'system', content: `Conversation history:\n${contextBlock.trim()}` }] : []),
+    ...recentFull.map(m => ({ role: m.role, content: m.text }))
   ];
 }
 
