@@ -3,7 +3,8 @@ export const fetchCache = 'force-no-store';
 
 export async function GET() {
   try {
-    const res = await fetch('http://143.198.128.209:3456/memory', {
+    const memoryUrl = process.env.MEMORY_SERVER_URL || 'http://localhost:3456';
+    const res = await fetch(`${memoryUrl}/memory`, {
       cache: 'no-store'
     });
     const data = await res.json();

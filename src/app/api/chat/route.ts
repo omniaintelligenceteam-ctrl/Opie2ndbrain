@@ -12,9 +12,9 @@ export const maxDuration = 120;
 // Provider Configuration
 type Provider = 'openclaw' | 'ollama' | 'anthropic';
 
-const OPENCLAW_GATEWAY_URL = 'http://143.198.128.209:3457';
-const OPENCLAW_GATEWAY_TOKEN = 'opie-token-123';
-const OPENCLAW_AVAILABLE = true; // Bridge is always available
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'http://localhost:18789';
+const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || '';
+const OPENCLAW_AVAILABLE = !!OPENCLAW_GATEWAY_TOKEN; // Only available if token is configured
 
 const REQUEST_TIMEOUT_MS = 120_000;
 

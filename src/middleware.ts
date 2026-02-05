@@ -69,7 +69,19 @@ function extractApiKey(request: NextRequest): string | null {
 }
 
 export function middleware(request: NextRequest) {
-  // Auth disabled for now - all routes public
+  const { pathname } = request.nextUrl;
+
+  // Check if this is a protected route
+  if (isProtectedRoute(pathname)) {
+    const apiKey = extractApiKey(request);
+    if (!validateApiKey(apiKey)) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid API key required' },
+        { status: 401 }
+      );
+    }
+  }
+
   return NextResponse.next();
 }
 

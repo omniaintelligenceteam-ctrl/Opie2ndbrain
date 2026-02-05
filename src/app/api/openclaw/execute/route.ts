@@ -2,6 +2,16 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  // Validate API key for execute endpoint
+  const apiKey = req.headers.get('x-api-key');
+  const expectedKey = process.env.DASHBOARD_API_KEY;
+  if (expectedKey && apiKey !== expectedKey) {
+    return Response.json(
+      { error: 'Unauthorized', message: 'Invalid or missing API key' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
