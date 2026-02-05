@@ -249,7 +249,7 @@ export function useConversations(): UseConversationsReturn {
   const pinConversation = useCallback((id: string): void => {
     setStore(prev => {
       if (prev.pinnedConversationIds.includes(id)) return prev;
-      if (prev.pinnedConversationIds.length >= 2) return prev; // Max 2 pinned
+      if (prev.pinnedConversationIds.length >= 5) return prev; // Max 5 pinned
       return {
         ...prev,
         pinnedConversationIds: [...prev.pinnedConversationIds, id],
