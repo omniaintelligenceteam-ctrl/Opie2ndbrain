@@ -40,3 +40,7 @@ CREATE POLICY "Allow all on summaries" ON opie_conversation_summaries
 CREATE INDEX idx_user_memory_session ON opie_user_memory(session_id);
 CREATE INDEX idx_user_memory_category ON opie_user_memory(category);
 CREATE INDEX idx_summaries_session ON opie_conversation_summaries(session_id);
+
+-- Unique constraint for deduplication (used by upsert)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_memory_unique 
+  ON opie_user_memory(session_id, category, content);
