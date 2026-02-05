@@ -55,6 +55,7 @@ export async function loadConversations(): Promise<ConversationStore> {
       const store: ConversationStore = {
         conversations,
         activeConversationId: conversations[0]?.id || null,
+        pinnedConversationIds: [],
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
       console.log('[ConversationStorage] Loaded', conversations.length, 'conversations from Supabase');
