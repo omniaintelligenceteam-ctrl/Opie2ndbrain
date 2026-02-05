@@ -421,22 +421,19 @@ export async function POST(req: NextRequest) {
 
     if (useLocalExecution) {
       console.log('[Chat] DO IT mode: Using local tool execution');
-      userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
-
-      // Build messages with conversation history - include sessionId for context tracking
-      console.log('[Chat] Building prompt with history count:', conversationHistory?.length || 0);
-      console.log('[Chat] History sample:', JSON.stringify(conversationHistory?.slice(-2)));
       
-      const contextualPrompt = conversationHistory?.length > 1 
-        ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
-        : userMessage;
-
-      console.log('[Chat] Final prompt length:', contextualPrompt.length);
-      console.log('[Chat] Has history:', contextualPrompt.includes('CONVERSATION HISTORY'));
+      // Build native message array (proper multi-turn format)
+      const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.text || m.content || ''
+      }));
+      
+      console.log('[Chat] Native message array - history count:', historyMessages.length);
 
       const messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: contextualPrompt }
+        ...historyMessages,
+        { role: 'user', content: userMessage + '\n[MODE: DO IT] Execute tasks using available tools.' }
       ];
 
       const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
@@ -521,16 +518,20 @@ export async function POST(req: NextRequest) {
   }
 
   // PLAN MODE: Fast streaming via Ollama
-  // Add mode context
-  userMessage += '\n[MODE: Plan] Discuss ideas but do NOT execute actions.';
+  // Build native message array (proper multi-turn format)
+  const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.text || m.content || ''
+  }));
+  
+  console.log('[Chat] Plan mode - native message array, history count:', historyMessages.length);
 
-  // Build contextual prompt with conversation history (same as DO IT mode)
-  console.log('[Chat] Plan mode - history count:', conversationHistory?.length || 0);
-  const contextualPrompt = conversationHistory?.length > 1 
-    ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
-    : userMessage;
-
-  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: contextualPrompt }];
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...historyMessages,
+    { role: 'user', content: userMessage + '\n[MODE: Plan] Discuss ideas but do NOT execute actions.' }
+  ];
+  
   const generator = streamOllama(messages, MODELS.kimi.model);
   return createStreamResponse(generator);
 }
