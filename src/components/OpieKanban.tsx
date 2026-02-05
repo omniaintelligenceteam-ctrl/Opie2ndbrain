@@ -102,6 +102,37 @@ function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// Prepare messages with smart context: 15 recent + summarized older
+function prepareMessagesWithContext(messages: ChatMessage[]): Array<{role: string, content: string}> {
+  const RECENT_COUNT = 15;
+  
+  if (messages.length <= RECENT_COUNT) {
+    // Return all if under limit
+    return messages.map(m => ({
+      role: m.role,
+      content: m.text
+    }));
+  }
+  
+  // Split: older messages to summarize, recent to keep full
+  const olderMessages = messages.slice(0, messages.length - RECENT_COUNT);
+  const recentMessages = messages.slice(-RECENT_COUNT);
+  
+  // Simple summarization of older context
+  const summary = olderMessages.slice(0, 5).map(m => {
+    const preview = m.text.slice(0, 100);
+    return `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${preview}${m.text.length > 100 ? '...' : ''}`;
+  }).join('\n');
+  
+  return [
+    { role: 'system', content: `Previous conversation context:\n${summary}` },
+    ...recentMessages.map(m => ({
+      role: m.role,
+      content: m.text
+    }))
+  ];
+}
+
 // Poll for async response from Supabase (DO IT mode)
 async function pollForAsyncResponse(
   pollUrl: string,
@@ -777,7 +808,7 @@ export default function OpieKanban(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMsg || 'What do you see in this image?',
-          messages: messages.slice(-10), // Last 10 messages for context
+          messages: prepareMessagesWithContext(messages), // 15 recent + summarized older context
           sessionId,
           personality: personalityParams,
           image: image, // Include image in API call
