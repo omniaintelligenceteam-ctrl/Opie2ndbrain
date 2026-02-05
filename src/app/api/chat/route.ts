@@ -427,6 +427,9 @@ export async function POST(req: NextRequest) {
         ? `[CONVERSATION HISTORY]\n${conversationHistory.slice(-10).map((m: any) => `${m.role}: ${m.text || m.content || ''}`).join('\n')}\n\n[CURRENT MESSAGE]\n${userMessage}`
         : userMessage;
 
+      console.log('[Chat] Contextual prompt length:', contextualPrompt.length);
+      console.log('[Chat] Context preview:', contextualPrompt.slice(0, 200));
+
       const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: contextualPrompt }
