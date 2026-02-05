@@ -955,7 +955,7 @@ export default function OpieKanban(): React.ReactElement {
         if (shouldExtractMemory(currentMsgCount, lastExtractionCountRef.current, 10)) {
           console.log('[Memory] Triggering auto-extraction at', currentMsgCount, 'messages');
           lastExtractionCountRef.current = currentMsgCount;
-          extractMemory(messagesRef.current, conversationId, 'default')
+          extractMemory(messagesRef.current, activeConversation?.id || 'default', 'default')
             .then(result => console.log('[Memory] Extraction result:', result))
             .catch(err => console.error('[Memory] Extraction error:', err));
         }
