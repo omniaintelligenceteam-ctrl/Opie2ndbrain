@@ -247,7 +247,7 @@ function parseToolCall(text: string): { tool: string; args: Record<string, any> 
 async function* streamOllamaWithTools(
   messages: Array<{ role: string; content: string }>,
   model: string,
-  maxToolIterations = 3
+  maxToolIterations = 10
 ): AsyncGenerator<string> {
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
