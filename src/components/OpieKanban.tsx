@@ -463,8 +463,14 @@ export default function OpieKanban(): React.ReactElement {
 
   // Use conversation messages instead of local state
   const messages = activeConversation?.messages || [];
+  
+  // Ref for synchronous access to latest messages (avoids stale closure)
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
-  // Wrapper to maintain setMessages API - updateMessages now supports functional updates
+  // Wrapper to maintain setMessages API - updateMessages now supports functional updates  
   const setMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
     updateMessages(updater);
   }, [updateMessages]);
@@ -805,8 +811,9 @@ export default function OpieKanban(): React.ReactElement {
       image: image,
     };
     
-    // Update state AND create updated array for API call (avoid stale closure)
-    const updatedMessages = [...messages, userMessage];
+    // Use ref for synchronous access to latest messages (prevents stale closure)
+    const currentMessages = messagesRef.current;
+    const updatedMessages = [...currentMessages, userMessage];
     setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
