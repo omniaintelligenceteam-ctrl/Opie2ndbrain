@@ -423,6 +423,7 @@ export default function OpieKanban(): React.ReactElement {
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
+  const recognitionRestartingRef = useRef(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
   
@@ -660,8 +661,10 @@ export default function OpieKanban(): React.ReactElement {
     };
     recognition.onend = () => {
       // Restart if mic should still be on
-      if (micOnRef.current) {
+      if (micOnRef.current && !recognitionRestartingRef.current) {
+        recognitionRestartingRef.current = true;
         setTimeout(() => { 
+          recognitionRestartingRef.current = false;
           try { recognition.start(); } catch(e) { /* ignore */ }
         }, 150);
       }
@@ -669,9 +672,10 @@ export default function OpieKanban(): React.ReactElement {
     recognition.onerror = (e: any) => {
       // 'no-speech' is common - user didn't speak yet. Just restart.
       if (e.error === 'no-speech') {
-        console.log('[Voice] No speech detected, restarting...');
-        if (micOnRef.current) {
+        if (micOnRef.current && !recognitionRestartingRef.current) {
+          recognitionRestartingRef.current = true;
           setTimeout(() => {
+            recognitionRestartingRef.current = false;
             try { recognition.start(); } catch(e) {}
           }, 300);
         }
@@ -680,7 +684,6 @@ export default function OpieKanban(): React.ReactElement {
       
       // 'aborted' happens when we stop/start quickly - ignore
       if (e.error === 'aborted') {
-        console.log('[Voice] Recognition aborted (normal on stop/start)');
         return;
       }
       
@@ -695,9 +698,11 @@ export default function OpieKanban(): React.ReactElement {
         setMicOn(false);
       } else if (e.error === 'network') {
         console.error('[Voice] Network error - speech service unavailable');
-      } else if (micOnRef.current) {
+      } else if (micOnRef.current && !recognitionRestartingRef.current) {
         // For other errors, try to restart
+        recognitionRestartingRef.current = true;
         setTimeout(() => {
+          recognitionRestartingRef.current = false;
           try { recognition.start(); } catch(e) {}
         }, 500);
       }
