@@ -418,8 +418,13 @@ export async function POST(req: NextRequest) {
       console.log('[Chat] DO IT mode: Using local tool execution');
       userMessage += '\n[MODE: DO IT] Execute tasks using available tools. If you need information, use a tool.';
 
+      // Build messages with conversation history
       const messages = [
         { role: 'system', content: systemPrompt },
+        ...(conversationHistory || []).map((m: any) => ({
+          role: m.role,
+          content: m.text || m.content || ''
+        })),
         { role: 'user', content: userMessage }
       ];
 
