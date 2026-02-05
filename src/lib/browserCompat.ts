@@ -14,11 +14,17 @@ export interface BrowserVoiceSupport {
   /** Browser name for logging */
   browser: 'chrome' | 'safari' | 'edge' | 'firefox' | 'unknown';
   /** Whether the browser requires user gesture to start audio */
-  requiresUserGesture: boolean;
+  needsUserGesture: boolean;
   /** Whether continuous recognition is supported */
   supportsContinuous: boolean;
   /** Whether interimResults are supported */
   supportsInterimResults: boolean;
+  /** Whether the browser needs recognition restart workaround (Safari) */
+  needsRestartWorkaround: boolean;
+  /** SpeechRecognition constructor if available */
+  speechRecognition: (new () => SpeechRecognition) | null;
+  /** Any warnings about browser compatibility */
+  warnings: string[];
 }
 
 /**
@@ -31,9 +37,12 @@ export function detectVoiceSupport(): BrowserVoiceSupport {
       hasAudioContext: false,
       hasMediaDevices: false,
       browser: 'unknown',
-      requiresUserGesture: true,
+      needsUserGesture: true,
       supportsContinuous: false,
       supportsInterimResults: false,
+      needsRestartWorkaround: false,
+      speechRecognition: null,
+      warnings: ['SpeechRecognition not available (server-side rendering)'],
     };
   }
 
@@ -50,8 +59,8 @@ export function detectVoiceSupport(): BrowserVoiceSupport {
     browser = 'firefox';
   }
 
-  const SpeechRecognitionClass = getSpeechRecognitionClass();
-  const hasSpeechRecognition = SpeechRecognitionClass !== null;
+  const speechRecognition = getSpeechRecognitionClass();
+  const hasSpeechRecognition = speechRecognition !== null;
 
   const hasAudioContext = !!(
     (window as any).AudioContext || (window as any).webkitAudioContext
@@ -62,21 +71,39 @@ export function detectVoiceSupport(): BrowserVoiceSupport {
   );
 
   // Safari and iOS require user gesture to play audio
-  const requiresUserGesture = browser === 'safari';
+  const needsUserGesture = browser === 'safari';
 
   // Firefox doesn't support SpeechRecognition natively
   // Safari has quirks with continuous mode
   const supportsContinuous = hasSpeechRecognition && browser !== 'firefox';
   const supportsInterimResults = hasSpeechRecognition && browser !== 'firefox';
 
+  // Safari needs recognition restart after each result (no true continuous mode)
+  const needsRestartWorkaround = browser === 'safari';
+
+  // Collect warnings
+  const warnings: string[] = [];
+  if (!hasSpeechRecognition) {
+    warnings.push(`SpeechRecognition not supported in ${browser}. Voice input unavailable.`);
+  }
+  if (browser === 'firefox') {
+    warnings.push('Firefox has limited SpeechRecognition support. Consider Chrome or Edge.');
+  }
+  if (!hasMediaDevices) {
+    warnings.push('MediaDevices API not available. Microphone access may fail.');
+  }
+
   return {
     hasSpeechRecognition,
     hasAudioContext,
     hasMediaDevices,
     browser,
-    requiresUserGesture,
+    needsUserGesture,
     supportsContinuous,
     supportsInterimResults,
+    needsRestartWorkaround,
+    speechRecognition,
+    warnings,
   };
 }
 
@@ -102,7 +129,7 @@ export function getSpeechRecognitionClass(): (new () => SpeechRecognition) | nul
  * Required on Safari/iOS to enable audio playback after user gesture.
  * Call this on the first user interaction (click/tap).
  */
-export async function warmUpAudio(): Promise<void> {
+export async function warmUpAudio(existingAudio?: HTMLAudioElement): Promise<void> {
   if (typeof window === 'undefined') return;
 
   try {
