@@ -14,7 +14,7 @@ export function generateConversationId(): string {
 export async function loadConversations(): Promise<ConversationStore> {
   // Server-side or no window
   if (typeof window === 'undefined') {
-    return { conversations: [], activeConversationId: null };
+    return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
   }
 
   // Always load from localStorage first (fast, reliable)
