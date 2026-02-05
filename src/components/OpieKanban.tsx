@@ -676,7 +676,25 @@ export default function OpieKanban(): React.ReactElement {
       }
     };
     recognition.onerror = (e: any) => {
+      // 'no-speech' is common - user didn't speak yet. Just restart.
+      if (e.error === 'no-speech') {
+        console.log('[Voice] No speech detected, restarting...');
+        if (micOnRef.current) {
+          setTimeout(() => {
+            try { recognition.start(); } catch(e) {}
+          }, 300);
+        }
+        return;
+      }
+      
+      // 'aborted' happens when we stop/start quickly - ignore
+      if (e.error === 'aborted') {
+        console.log('[Voice] Recognition aborted (normal on stop/start)');
+        return;
+      }
+      
       console.error('[Voice] Speech recognition error:', e.error);
+      
       // Only turn off mic for permission errors, not transient ones
       if (e.error === 'not-allowed') {
         console.error('[Voice] Mic permission denied');
