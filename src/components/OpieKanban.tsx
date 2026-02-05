@@ -659,20 +659,11 @@ export default function OpieKanban(): React.ReactElement {
       }, SILENCE_TIMEOUT_MS);
     };
     recognition.onend = () => {
-      // Always try to restart if mic should be on, regardless of loading state
+      // Restart if mic should still be on
       if (micOnRef.current) {
         setTimeout(() => { 
-          try { 
-            recognition.start(); 
-          } catch(e) {
-            // If start fails, try again in a bit
-            setTimeout(() => {
-              if (micOnRef.current) {
-                try { recognition.start(); } catch(e) {}
-              }
-            }, 500);
-          }
-        }, 100);
+          try { recognition.start(); } catch(e) { /* ignore */ }
+        }, 150);
       }
     };
     recognition.onerror = (e: any) => {
