@@ -579,14 +579,35 @@ export default function OpieKanban(): React.ReactElement {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     audioRef.current = new Audio();
-    audioRef.current.onended = () => {
+    
+    // Store current audio ref for cleanup
+    const audio = audioRef.current;
+    let currentUrl: string | null = null;
+    
+    audio.onended = () => {
       setIsSpeaking(false);
       setTimeout(() => startRecognition(), 300);
+      // Clean up the blob URL after playback
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        currentUrl = null;
+      }
     };
-    audioRef.current.onerror = (e) => {
+    audio.onerror = (e) => {
       console.error('[Audio] Playback error:', e);
       setIsSpeaking(false);
       setTimeout(() => startRecognition(), 300);
+      // Clean up the blob URL on error
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        currentUrl = null;
+      }
+    };
+    
+    // Store a setter on the audio element to receive the URL from speak()
+    (audio as any).__setCurrentUrl = (url: string) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      currentUrl = url;
     };
   }, [startRecognition]);
   
@@ -783,6 +804,8 @@ export default function OpieKanban(): React.ReactElement {
       const url = URL.createObjectURL(blob);
       
       if (audioRef.current) {
+        // Track the URL for cleanup when playback ends/errors
+        (audioRef.current as any).__setCurrentUrl?.(url);
         audioRef.current.src = url;
         try {
           await audioRef.current.play();
@@ -791,8 +814,9 @@ export default function OpieKanban(): React.ReactElement {
           console.error('[Audio] Play failed (autoplay policy?):', playError);
           setIsSpeaking(false);
           setTimeout(() => startRecognition(), 300);
-          // Clean up the URL
+          // Clean up the URL - also handled by onerror handler
           URL.revokeObjectURL(url);
+          (audioRef.current as any).__setCurrentUrl?.(null);
         }
       }
     } catch (err) {
@@ -1585,7 +1609,7 @@ export default function OpieKanban(): React.ReactElement {
           transcript={transcript}
           lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
           onClose={() => setMicOn(false)}
-          onMicToggle={() => setMicOn(!micOn)}
+          onMicToggle={toggleMic}
           micOn={micOn}
         />
 
