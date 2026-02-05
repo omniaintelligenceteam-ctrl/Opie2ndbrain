@@ -406,10 +406,27 @@ export async function POST(req: NextRequest) {
   let userMessage = message;
   if (isVoice) userMessage = VOICE_INSTRUCTIONS + userMessage;
 
-  // Select system prompt based on mode
-  const PLAN_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
+  // Fetch user memory for context injection
+  let userMemoryBlock = '';
+  try {
+    const memoryRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/memory/get?sessionId=${sessionId}&limit=30`);
+    if (memoryRes.ok) {
+      const memoryData = await memoryRes.json();
+      userMemoryBlock = memoryData.formatted || '';
+      if (userMemoryBlock) {
+        console.log('[Chat] Injecting user memory:', memoryData.total, 'items');
+      }
+    }
+  } catch (e) {
+    console.log('[Chat] Memory fetch skipped:', e instanceof Error ? e.message : 'unknown');
+  }
 
-  const DO_IT_PROMPT = `${SYSTEM_PROMPT}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
+  // Select system prompt based on mode (with memory injection)
+  const memorySection = userMemoryBlock ? `\n\n${userMemoryBlock}\n` : '';
+  
+  const PLAN_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
+
+  const DO_IT_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
 
   const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
 
