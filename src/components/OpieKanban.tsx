@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 'react';
 import { useKeyboardShortcuts, ViewId } from '../hooks/useKeyboardShortcuts';
+import { apiFetch } from '../lib/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
 import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
@@ -763,7 +764,7 @@ export default function OpieKanban(): React.ReactElement {
     }
 
     try {
-      const res = await fetch('/api/tts', {
+      const res = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: ttsText }),
@@ -889,7 +890,7 @@ export default function OpieKanban(): React.ReactElement {
     }, 120_000); // 120 second timeout
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
