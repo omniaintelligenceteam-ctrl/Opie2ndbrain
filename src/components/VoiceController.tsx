@@ -157,20 +157,31 @@ export function useVoiceController(props: VoiceControllerProps): VoiceController
     if (typeof window === 'undefined') return;
     
     const audio = new Audio();
-    if (audioRef.current !== audio) {
-      // @ts-expect-error - we need to set the ref directly
-      audioRef.current = audio;
-    }
+    // @ts-expect-error - we need to set the ref directly
+    audioRef.current = audio;
     
+    let endedTimer: ReturnType<typeof setTimeout> | null = null;
+    let errorTimer: ReturnType<typeof setTimeout> | null = null;
+
     audio.onended = () => {
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
+      endedTimer = setTimeout(() => startRecognition(), 300);
     };
     
     audio.onerror = (e) => {
       console.error('[Audio] Playback error:', e);
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
+      errorTimer = setTimeout(() => startRecognition(), 300);
+    };
+
+    return () => {
+      // Clean up audio element and pending timers on re-render / unmount
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.onended = null;
+      audio.onerror = null;
+      if (endedTimer) clearTimeout(endedTimer);
+      if (errorTimer) clearTimeout(errorTimer);
     };
   }, [audioRef, setIsSpeaking, startRecognition]);
 
