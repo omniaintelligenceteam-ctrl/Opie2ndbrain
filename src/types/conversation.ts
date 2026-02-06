@@ -15,8 +15,9 @@ export interface Conversation {
 export interface ConversationStore {
   conversations: Conversation[];
   activeConversationId: string | null;
+  pinnedConversationIds: string[];
 }
 
 export const STORAGE_KEY = 'opie-conversations';
-export const MAX_CONVERSATIONS = 100;
+export const MAX_CONVERSATIONS = 20; // Keep 20 most recent + any pinned
 export const MAX_MESSAGES_PER_CONVERSATION = 500;

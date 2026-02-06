@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Routes that don't require authentication
-// ALL routes are public - this is a personal dashboard
+// Public routes that never require authentication
 const PUBLIC_ROUTES = [
-  '/',  // Allow everything - add auth only where needed
+  '/',              // Landing / dashboard page
+  '/opie',          // Main Opie UI
+  '/api/status',    // Health-check (no secrets exposed)
+  '/api/chat',      // Chat API
+  '/api/chat/:path*', // All chat sub-routes (poll, etc.)
+  '/api/tts',       // Text-to-speech
+  '/api/openclaw/:path*', // OpenClaw integration
 ];
 
-// Routes that require authentication (only truly external-facing)
-const PROTECTED_API_ROUTES = [
-  '/api/email',    // Send emails externally
-  '/api/calendar', // Calendar modifications
-];
+// API routes that require a valid DASHBOARD_API_KEY
+// All /api/* routes are protected by default unless listed above.
 
 /**
  * Validate API key against the configured dashboard key
@@ -24,9 +26,9 @@ function validateApiKey(apiKey: string | null): boolean {
     return true;
   }
 
-  // No key configured in production = deny all (fail secure)
+  // No key configured = allow all (key must be set to enable auth)
   if (!configuredKey) {
-    return false;
+    return true;
   }
 
   // Validate the provided key
@@ -34,25 +36,24 @@ function validateApiKey(apiKey: string | null): boolean {
 }
 
 /**
- * Check if a path should be protected
- */
-function isProtectedRoute(pathname: string): boolean {
-  return PROTECTED_API_ROUTES.some(route => pathname.startsWith(route));
-}
-
-/**
  * Check if a path is public (doesn't need auth)
  */
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some(route => pathname.startsWith(route));
+  return PUBLIC_ROUTES.some(route => matchesPattern(pathname, route));
 }
 
 /**
  * Extract API key from request
- * Checks x-api-key header first, then ?apiKey query param
+ * Checks Authorization Bearer, x-api-key header, then ?apiKey query param
  */
 function extractApiKey(request: NextRequest): string | null {
-  // Check header first (preferred method)
+  // Check Authorization: Bearer <token>
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
+  // Check x-api-key header
   const headerKey = request.headers.get('x-api-key');
   if (headerKey) {
     return headerKey;
@@ -69,7 +70,31 @@ function extractApiKey(request: NextRequest): string | null {
 }
 
 export function middleware(request: NextRequest) {
-  // Auth disabled for now - all routes public
+  const { pathname } = request.nextUrl;
+
+  // If no DASHBOARD_API_KEY is configured, skip all auth checks
+  const configuredKey = process.env.DASHBOARD_API_KEY;
+  if (!configuredKey) {
+    return NextResponse.next();
+  }
+
+  // Allow public routes without auth
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  // All /api/* routes require authentication
+  if (pathname.startsWith('/api/')) {
+    const apiKey = extractApiKey(request);
+
+    if (!validateApiKey(apiKey)) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid API key required' },
+        { status: 401 }
+      );
+    }
+  }
+
   return NextResponse.next();
 }
 
@@ -80,3 +105,12 @@ export const config = {
     '/api/:path*',
   ],
 };
+
+// Helper to check if path matches pattern (supports wildcards)
+function matchesPattern(pathname: string, pattern: string): boolean {
+  if (pattern.includes(':path*')) {
+    const base = pattern.replace('/:path*', '');
+    return pathname === base || pathname.startsWith(base + '/');
+  }
+  return pathname === pattern || pathname.startsWith(pattern + '/');
+}

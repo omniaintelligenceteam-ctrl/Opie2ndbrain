@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useSidebarCrons, CronJob as SidebarCronJob } from '@/hooks/useSidebarData';
+import { apiFetch } from '@/lib/api';
 
 interface CronJob {
   id: string;
@@ -202,7 +203,7 @@ export default function CronsPanel({
   const fetchHistory = useCallback(async (cronId: string) => {
     try {
       setHistoryLoading(true);
-      const res = await fetch(`/api/crons/${cronId}/history`);
+      const res = await apiFetch(`/api/crons/${cronId}/history`);
       if (res.ok) {
         const data = await res.json();
         if (data.history) setHistory(data.history);
@@ -224,7 +225,7 @@ export default function CronsPanel({
   const handleRunNow = async (cronId: string) => {
     setRunningCrons(prev => new Set(prev).add(cronId));
     try {
-      await fetch(`/api/crons/${cronId}/run`, { method: 'POST' });
+      await apiFetch(`/api/crons/${cronId}/run`, { method: 'POST' });
       await refreshCrons();
     } catch (err) {
       console.error('Failed to run cron');
@@ -242,7 +243,7 @@ export default function CronsPanel({
   const handleToggle = async (cron: CronJob) => {
     const updated = { ...cron, enabled: !cron.enabled };
     try {
-      await fetch(`/api/crons/${cron.id}`, {
+      await apiFetch(`/api/crons/${cron.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
@@ -257,7 +258,7 @@ export default function CronsPanel({
     if (!confirm('Delete this cron job?')) return;
     setSelectedCron(null);
     try {
-      await fetch(`/api/crons/${cronId}`, { method: 'DELETE' });
+      await apiFetch(`/api/crons/${cronId}`, { method: 'DELETE' });
       await refreshCrons();
     } catch (err) {
       console.error('Failed to delete cron');
@@ -277,13 +278,13 @@ export default function CronsPanel({
     
     try {
       if (editingCron) {
-        await fetch(`/api/crons/${editingCron.id}`, {
+        await apiFetch(`/api/crons/${editingCron.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newCron),
         });
       } else {
-        await fetch('/api/crons', {
+        await apiFetch('/api/crons', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newCron),

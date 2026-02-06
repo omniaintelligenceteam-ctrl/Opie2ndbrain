@@ -11,7 +11,7 @@ export async function POST(req: Request) {
 Core facts about Wes:
 - Direct, no fluff communication style
 - 2-3 sentences default, expand only when asked
-- "DO IT" means execute immediately
+- "EXECUTE" means execute immediately
 - Late night worker (10PM-2AM MST)
 - Age 37, Scottsdale AZ (MST no DST)
 - Premier Landscape Lighting + Omnia Light Scape Pro

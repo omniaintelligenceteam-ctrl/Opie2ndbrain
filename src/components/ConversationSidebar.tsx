@@ -160,7 +160,7 @@ export default function ConversationSidebar({
                   isPinned={pinnedConversationIds.includes(conv.id)}
                   onSelect={() => onSelectConversation(conv.id)}
                   onDelete={() => onDeleteConversation(conv.id)}
-                  onPin={onPinConversation && pinnedConversationIds.length < 2 ? () => onPinConversation(conv.id) : undefined}
+                  onPin={onPinConversation && pinnedConversationIds.length < 5 ? () => onPinConversation(conv.id) : undefined}
                 />
               ))
           )}

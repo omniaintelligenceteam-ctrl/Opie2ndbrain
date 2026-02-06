@@ -12,8 +12,10 @@ export const maxDuration = 120;
 // Provider Configuration
 type Provider = 'openclaw' | 'ollama' | 'anthropic';
 
-const OPENCLAW_GATEWAY_URL = 'http://143.198.128.209:3457';
-const OPENCLAW_GATEWAY_TOKEN = 'opie-token-123';
+// Use centralized gateway config — never hardcode secrets or IPs
+import { GATEWAY_URL as _GW_URL, GATEWAY_TOKEN as _GW_TOKEN } from '@/lib/gateway';
+const OPENCLAW_GATEWAY_URL = _GW_URL;
+const OPENCLAW_GATEWAY_TOKEN = _GW_TOKEN;
 const OPENCLAW_AVAILABLE = true; // Bridge is always available
 
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -31,8 +33,11 @@ const MODELS = {
 
 type ModelAlias = keyof typeof MODELS;
 
-let currentModel: ModelAlias = 'kimi';
-let currentProvider: Provider = 'ollama';
+// NOTE: In serverless environments module-level mutable state is unreliable
+// (each invocation may get a fresh instance). These defaults are used when
+// the request body does not supply model/provider.
+const DEFAULT_MODEL: ModelAlias = 'kimi';
+const DEFAULT_PROVIDER: Provider = 'ollama';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -243,7 +248,7 @@ function parseToolCall(text: string): { tool: string; args: Record<string, any> 
   return null;
 }
 
-// Call Ollama with tool execution loop (for DO IT mode)
+// Call Ollama with tool execution loop (for EXECUTE mode)
 async function* streamOllamaWithTools(
   messages: Array<{ role: string; content: string }>,
   model: string,
@@ -260,7 +265,7 @@ async function* streamOllamaWithTools(
 
   while (iterations < maxToolIterations) {
     iterations++;
-    console.log(`[DO IT] Tool iteration ${iterations}/${maxToolIterations}`);
+    console.log(`[EXECUTE] Tool iteration ${iterations}/${maxToolIterations}`);
 
     // Call Ollama and collect full response (non-streaming to check for tool calls)
     try {
@@ -286,27 +291,27 @@ async function* streamOllamaWithTools(
 
       const data = await response.json();
       const fullResponse = data.choices?.[0]?.message?.content || '';
-      console.log(`[DO IT] AI response:`, fullResponse.slice(0, 200));
+      console.log(`[EXECUTE] AI response:`, fullResponse.slice(0, 200));
 
       // Check for tool call
       const toolCall = parseToolCall(fullResponse);
 
       if (!toolCall) {
         // No tool call - stream the final response
-        console.log(`[DO IT] No tool call, streaming final response`);
+        console.log(`[EXECUTE] No tool call, streaming final response`);
         yield `data: ${JSON.stringify({ choices: [{ delta: { content: fullResponse } }] })}\n\n`;
         yield `data: [DONE]\n\n`;
         return;
       }
 
       // Execute the tool
-      console.log(`[DO IT] Executing tool: ${toolCall.tool}`, toolCall.args);
+      console.log(`[EXECUTE] Executing tool: ${toolCall.tool}`, toolCall.args);
       yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n🔧 Executing ${toolCall.tool}...\n` } }] })}\n\n`;
 
       const toolResult = await executeTool(toolCall);
 
       if (!toolResult.success) {
-        console.error(`[DO IT] Tool error:`, toolResult.error);
+        console.error(`[EXECUTE] Tool error:`, toolResult.error);
         yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ Tool error: ${toolResult.error}\n` } }] })}\n\n`;
         // Add error to context and continue
         currentMessages.push(
@@ -318,7 +323,7 @@ async function* streamOllamaWithTools(
 
       // Add tool result to conversation
       const resultStr = JSON.stringify(toolResult.result, null, 2);
-      console.log(`[DO IT] Tool result:`, resultStr.slice(0, 500));
+      console.log(`[EXECUTE] Tool result:`, resultStr.slice(0, 500));
       yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n✅ Got results\n` } }] })}\n\n`;
 
       currentMessages.push(
@@ -327,7 +332,7 @@ async function* streamOllamaWithTools(
       );
 
     } catch (error) {
-      console.error("[DO IT] Error:", error);
+      console.error("[EXECUTE] Error:", error);
       yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Tool execution failed' })}\n\n`;
       return;
     }
@@ -391,11 +396,15 @@ export async function POST(req: NextRequest) {
     image,
   } = body;
 
+  // Use request-scoped variables — module-level mutation is unreliable in serverless
+  let activeProvider: Provider = DEFAULT_PROVIDER;
+  let activeModel: ModelAlias = DEFAULT_MODEL;
+
   if (provider && ['openclaw', 'ollama', 'anthropic'].includes(provider)) {
-    currentProvider = provider as Provider;
+    activeProvider = provider as Provider;
   }
   if (model && model in MODELS) {
-    currentModel = model as ModelAlias;
+    activeModel = model as ModelAlias;
   }
 
   if (!message) {
@@ -426,18 +435,18 @@ export async function POST(req: NextRequest) {
   
   const PLAN_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in PLAN mode. Your job is to discuss and strategize. Present options, don't execute without permission.`;
 
-  const DO_IT_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in DO IT mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
+  const EXECUTE_PROMPT = `${SYSTEM_PROMPT}${memorySection}\n\nYou are in EXECUTE mode. Your job is to take action and execute tasks. Be decisive, use tools, provide clear status updates.${getToolsPrompt()}`;
 
-  const systemPrompt = interactionMode === 'execute' ? DO_IT_PROMPT : PLAN_PROMPT;
+  const systemPrompt = interactionMode === 'execute' ? EXECUTE_PROMPT : PLAN_PROMPT;
 
-  // DO IT MODE: Execute with tools
-  console.log('[Chat] DO IT mode entered, interactionMode:', interactionMode);
+  // EXECUTE MODE: Execute with tools
+  console.log('[Chat] EXECUTE mode entered, interactionMode:', interactionMode);
   if (interactionMode === 'execute') {
     // Option A: Local tool execution (fast, streaming) - default
-    const useLocalExecution = process.env.DO_IT_LOCAL !== 'false';
+    const useLocalExecution = process.env.EXECUTE_LOCAL !== 'false';
 
     if (useLocalExecution) {
-      console.log('[Chat] DO IT mode: Using local tool execution');
+      console.log('[Chat] EXECUTE mode: Using local tool execution');
       
       // Build native message array (proper multi-turn format)
       const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
@@ -450,20 +459,20 @@ export async function POST(req: NextRequest) {
       const messages = [
         { role: 'system', content: systemPrompt },
         ...historyMessages,
-        { role: 'user', content: userMessage + '\n[MODE: DO IT] Execute tasks using available tools.' }
+        { role: 'user', content: userMessage + '\n[MODE: EXECUTE] Execute tasks using available tools.' }
       ];
 
       const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
       return createStreamResponse(generator);
     }
 
-    // Option B: Remote execution via OpenClaw (fallback when DO_IT_LOCAL=false)
-    console.log('[Chat] DO IT mode: Using OpenClaw delegation');
+    // Option B: Remote execution via OpenClaw (fallback when EXECUTE_LOCAL=false)
+    console.log('[Chat] EXECUTE mode: Using OpenClaw delegation');
     const requestId = crypto.randomUUID();
 
     // Check if Supabase is configured
     if (!supabaseAdmin) {
-      return Response.json({ error: 'Supabase not configured for DO IT mode' }, { status: 503 });
+      return Response.json({ error: 'Supabase not configured for EXECUTE mode' }, { status: 503 });
     }
 
     try {
@@ -526,7 +535,7 @@ export async function POST(req: NextRequest) {
       });
 
     } catch (error) {
-      console.error('[Chat] DO IT spawn error:', error);
+      console.error('[Chat] EXECUTE spawn error:', error);
       return Response.json({
         error: 'Failed to spawn task',
         details: error instanceof Error ? error.message : 'Unknown error'

@@ -4,8 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 const VALID_MODELS = ['kimi', 'opus', 'sonnet', 'haiku'] as const;
 type ModelAlias = typeof VALID_MODELS[number];
 
-// Default to Kimi
-let currentModel: ModelAlias = 'kimi';
+// NOTE: Module-level mutable state is unreliable in serverless (each cold start
+// resets it, and concurrent instances don't share memory). This default is used
+// only until the client sends a POST. For durable model selection, persist to
+// a database or cookie.
+const DEFAULT_MODEL: ModelAlias = 'kimi';
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,8 +24,10 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    currentModel = model;
-    console.log('[Model API] Set model to:', model);
+    // In a serverless environment the model preference should be persisted
+    // (e.g. in a cookie, query-param, or database). For now we acknowledge
+    // the selection and let the client pass it on subsequent chat requests.
+    console.log('[Model API] Client selected model:', model);
 
     return NextResponse.json({ success: true, model });
 
@@ -36,5 +41,6 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ model: currentModel });
+  // Return the default — actual preference is client-side
+  return NextResponse.json({ model: DEFAULT_MODEL });
 }

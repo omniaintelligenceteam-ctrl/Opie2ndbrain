@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   try {
     const { message, chatHistory, memoryContext } = await req.json();
     
-    const openclawUrl = process.env.OPENCLAW_URL || 'http://143.198.128.209:3000';
+    const openclawUrl = process.env.OPENCLAW_URL || 'http://localhost:3000';
     const openclawToken = process.env.OPENCLAW_TOKEN;
     
     const headers: Record<string, string> = {
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     });
     
   } catch (error) {
-    console.error('DO IT mode error:', error);
+    console.error('EXECUTE mode error:', error);
     return Response.json(
       { error: 'OpenClaw unavailable', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 503 }

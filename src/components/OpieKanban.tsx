@@ -1,45 +1,49 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 'react';
-import AgentsPanel from './AgentsPanel';
-import SkillsPanel from './SkillsPanel';
-import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
-import OrchestrationStatus from './OrchestrationStatus';
-import CronsPanel from './CronsPanel';
-import ActivityFeed from './ActivityFeed';
-import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import { useKeyboardShortcuts, ViewId } from '../hooks/useKeyboardShortcuts';
+import { apiFetch } from '../lib/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
 import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
-import MemoryPanel from './MemoryPanel';
-import WorkspaceBrowser from './WorkspaceBrowser';
-// Removed: CalendarWidget, EmailWidget
-// Removed: QuickActionsPanel
-// AnalyticsDashboard removed - was showing placeholder data
-import MobileNavigation, { MobileHeader } from './MobileNavigation';
-import MobileChat from './MobileChat';
-import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
 import { useConversations } from '@/hooks/useConversations';
 import { Conversation } from '@/types/conversation';
-// Real-time dashboard components
-import SmartDashboardHome from './SmartDashboardHome';
-import OpieStatusWidget from './OpieStatusWidget';
-import { NotificationBell, NotificationProvider } from './NotificationCenter';
-import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
-import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
-import AgentLeaderboard from './AgentLeaderboard';
-import ContextWindowVisualizer from './ContextWindowVisualizer';
-import AgentPersonalityPanel from './AgentPersonalityPanel';
-import ParticleBackground from './ParticleBackground';
-import ImmersiveVoiceMode from './ImmersiveVoiceMode';
-import StatusOrb from './StatusOrb';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
+
+// ─── Always-visible / critical-path components (loaded eagerly) ──────────────
+import CommandPalette, { ShortcutsHelp } from './CommandPalette';
+import MobileNavigation, { MobileHeader } from './MobileNavigation';
+import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
+import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
+import { NotificationBell, NotificationProvider } from './NotificationCenter';
+import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
+import StatusOrb from './StatusOrb';
+
+// ─── Lazy-loaded panels (only imported when their view is active) ────────────
+const AgentsPanel = lazy(() => import('./AgentsPanel'));
+const SkillsPanel = lazy(() => import('./SkillsPanel'));
+const ActiveTasksPanel = lazy(() => import('./ActiveTasksPanel'));
+const OrchestrationStatus = lazy(() => import('./OrchestrationStatus'));
+const CronsPanel = lazy(() => import('./CronsPanel'));
+const ActivityFeed = lazy(() => import('./ActivityFeed'));
+const MemoryPanel = lazy(() => import('./MemoryPanel'));
+const WorkspaceBrowser = lazy(() => import('./WorkspaceBrowser'));
+const MobileChat = lazy(() => import('./MobileChat'));
+const SmartDashboardHome = lazy(() => import('./SmartDashboardHome'));
+const OpieStatusWidget = lazy(() => import('./OpieStatusWidget'));
+const SidebarWidgets = lazy(() => import('./SidebarWidgets'));
+const AgentLeaderboard = lazy(() => import('./AgentLeaderboard'));
+const ContextWindowVisualizer = lazy(() => import('./ContextWindowVisualizer'));
+const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
+const ParticleBackground = lazy(() => import('./ParticleBackground'));
+const ImmersiveVoiceMode = lazy(() => import('./ImmersiveVoiceMode'));
+
+// Re-export Task type for backward compat (lazy can't export types directly)
+import type { Task } from './ActiveTasksPanel';
 
 
 // Persistence helpers
@@ -154,7 +158,7 @@ function prepareMessagesWithContext(messages: ChatMessage[]): Array<{role: strin
   ];
 }
 
-// Poll for async response from Supabase (DO IT mode)
+// Poll for async response from Supabase (EXECUTE mode)
 async function pollForAsyncResponse(
   pollUrl: string,
   userMsgId: string,
@@ -380,18 +384,7 @@ export default function OpieKanban(): React.ReactElement {
   const [mobileSheetContent, setMobileSheetContent] = useState<'agents' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  // Pinned conversations for multi-chat comparison
-  const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>([]);
-
-  const pinConversation = useCallback((id: string) => {
-    if (!pinnedConversationIds.includes(id) && pinnedConversationIds.length < 2) {
-      setPinnedConversationIds(prev => [...prev, id]);
-    }
-  }, [pinnedConversationIds]);
-
-  const unpinConversation = useCallback((id: string) => {
-    setPinnedConversationIds(prev => prev.filter(cid => cid !== id));
-  }, []);
+  // Pinned conversations from useConversations hook (persisted)
 
   // Responsive state
   const responsive = useResponsive();
@@ -434,6 +427,7 @@ export default function OpieKanban(): React.ReactElement {
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const micOnRef = useRef(false);
+  const recognitionRestartingRef = useRef(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
   
@@ -448,6 +442,7 @@ export default function OpieKanban(): React.ReactElement {
   const {
     conversations,
     activeConversation,
+    pinnedConversationIds,
     createConversation,
     createConversationForSecondary,
     switchConversation,
@@ -457,6 +452,8 @@ export default function OpieKanban(): React.ReactElement {
     updateMessagesForConversation,
     updateTitle,
     setSummary,
+    pinConversation,
+    unpinConversation,
   } = useConversations();
 
   // State for secondary chat windows (interactive pinned chats)
@@ -548,7 +545,7 @@ export default function OpieKanban(): React.ReactElement {
   const isLoadingRef = useRef(false);
   
   // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
-  const SILENCE_TIMEOUT_MS = 1000;
+  const SILENCE_TIMEOUT_MS = 3000;
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingTranscriptRef = useRef('');
   const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
@@ -601,15 +598,19 @@ export default function OpieKanban(): React.ReactElement {
   useEffect(() => {
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
+      // Abort controller cleanup handled in finally block
     };
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!('webkitSpeechRecognition' in window)) return;
+    if (!('webkitSpeechRecognition' in window)) {
+      console.error('[Voice] webkitSpeechRecognition not available in this browser');
+      return;
+    }
     const SR = (window as any).webkitSpeechRecognition;
     const recognition = new SR();
+    recognition.lang = 'en-US';
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (e: any) => {
@@ -663,30 +664,49 @@ export default function OpieKanban(): React.ReactElement {
       }, SILENCE_TIMEOUT_MS);
     };
     recognition.onend = () => {
-      // Always try to restart if mic should be on, regardless of loading state
-      if (micOnRef.current) {
+      // Restart if mic should still be on
+      if (micOnRef.current && !recognitionRestartingRef.current) {
+        recognitionRestartingRef.current = true;
         setTimeout(() => { 
-          try { 
-            recognition.start(); 
-          } catch(e) {
-            // If start fails, try again in a bit
-            setTimeout(() => {
-              if (micOnRef.current) {
-                try { recognition.start(); } catch(e) {}
-              }
-            }, 500);
-          }
-        }, 100);
+          recognitionRestartingRef.current = false;
+          try { recognition.start(); } catch(e) { /* ignore */ }
+        }, 150);
       }
     };
     recognition.onerror = (e: any) => {
-      console.log('Speech recognition error:', e.error);
+      // 'no-speech' is common - user didn't speak yet. Just restart.
+      if (e.error === 'no-speech') {
+        if (micOnRef.current && !recognitionRestartingRef.current) {
+          recognitionRestartingRef.current = true;
+          setTimeout(() => {
+            recognitionRestartingRef.current = false;
+            try { recognition.start(); } catch(e) {}
+          }, 300);
+        }
+        return;
+      }
+      
+      // 'aborted' happens when we stop/start quickly - ignore
+      if (e.error === 'aborted') {
+        return;
+      }
+      
+      console.error('[Voice] Speech recognition error:', e.error);
+      
       // Only turn off mic for permission errors, not transient ones
-      if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+      if (e.error === 'not-allowed') {
+        console.error('[Voice] Mic permission denied');
         setMicOn(false);
-      } else if (micOnRef.current) {
+      } else if (e.error === 'audio-capture') {
+        console.error('[Voice] No microphone found');
+        setMicOn(false);
+      } else if (e.error === 'network') {
+        console.error('[Voice] Network error - speech service unavailable');
+      } else if (micOnRef.current && !recognitionRestartingRef.current) {
         // For other errors, try to restart
+        recognitionRestartingRef.current = true;
         setTimeout(() => {
+          recognitionRestartingRef.current = false;
           try { recognition.start(); } catch(e) {}
         }, 500);
       }
@@ -696,11 +716,23 @@ export default function OpieKanban(): React.ReactElement {
 
   const toggleMic = () => {
     if (!micOn) {
+      // Check if speech recognition is available
+      if (!recognitionRef.current) {
+        console.error('[Voice] Speech recognition not initialized. Browser may not support it.');
+        alert('Voice input not available. This browser may not support speech recognition. Try Chrome or Edge.');
+        return;
+      }
       setMicOn(true);
       // Stop first to ensure clean state, then start
       try { recognitionRef.current?.stop(); } catch(e) {}
       setTimeout(() => {
-        try { recognitionRef.current?.start(); } catch(e) { console.log('Start error:', e); }
+        try { 
+          recognitionRef.current?.start(); 
+          console.log('[Voice] Recognition started');
+        } catch(e) { 
+          console.error('[Voice] Start error:', e); 
+          setMicOn(false);
+        }
       }, 100);
     } else {
       setMicOn(false);
@@ -716,11 +748,26 @@ export default function OpieKanban(): React.ReactElement {
     setIsSpeaking(true);
     // DON'T stop recognition - keep it running for barge-in capability
     // This lets user interrupt AI mid-speech
+
+    // Strip code blocks and error-like content before TTS
+    let ttsText = text
+      .replace(/```[\s\S]*?```/g, ' (code block omitted) ')  // Remove fenced code blocks
+      .replace(/`[^`]+`/g, '')  // Remove inline code
+      .replace(/^\s*(?:Error|TypeError|SyntaxError|ReferenceError):.*$/gm, '')  // Remove error lines
+      .replace(/https?:\/\/\S+/g, '')  // Remove URLs
+      .replace(/\n{3,}/g, '\n\n')  // Collapse excessive newlines
+      .trim();
+
+    if (!ttsText) {
+      setIsSpeaking(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/tts', {
+      const res = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: ttsText }),
       });
       
       // Check if response is OK
@@ -797,6 +844,15 @@ export default function OpieKanban(): React.ReactElement {
   const handleSend = async (text?: string, image?: string) => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
+    
+    // Ensure we have an active conversation before sending
+    if (!activeConversation) {
+      console.log('[Chat] No active conversation, creating one...');
+      createConversation();
+      // Wait a tick for state to update
+      await new Promise(r => setTimeout(r, 50));
+    }
+    
     const userMsg = messageText.trim();
     
     // Clear any pending silence timer
@@ -828,13 +884,13 @@ export default function OpieKanban(): React.ReactElement {
     }, 300);
 
     // Create abort controller for this request with 120s timeout
-    abortControllerRef.current = new AbortController();
+    const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
-      abortControllerRef.current?.abort();
+      abortController.abort();
     }, 120_000); // 120 second timeout
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -845,9 +901,9 @@ export default function OpieKanban(): React.ReactElement {
           personality: personalityParams,
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
-          memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in DO IT mode
+          memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in EXECUTE mode
         }),
-        signal: abortControllerRef.current.signal,
+        signal: abortController.signal,
       });
 
       clearTimeout(timeoutId);
@@ -963,7 +1019,7 @@ export default function OpieKanban(): React.ReactElement {
         // Regular JSON response
         const data = await res.json();
 
-        // Check for async mode (DO IT)
+        // Check for async mode (EXECUTE)
         if (data.mode === 'async' && data.poll_url) {
           // Start polling for async response
           reply = await pollForAsyncResponse(
@@ -1021,7 +1077,7 @@ export default function OpieKanban(): React.ReactElement {
       // If user interrupted while thinking, don't show error - just mark as cancelled
       if (err?.name === 'AbortError') {
         // Check if it was a timeout vs user cancel
-        const isTimeout = err?.message?.includes('timeout') || !abortControllerRef.current;
+        const isTimeout = err?.message?.includes('timeout') || err?.name === 'AbortError';
         setMessages(prev => prev.map(m =>
           m.id === userMessage.id ? {
             ...m,
@@ -1230,7 +1286,7 @@ export default function OpieKanban(): React.ReactElement {
 
     // Actually spawn the agent via API
     try {
-      const response = await fetch('/api/agents/spawn', {
+      const response = await apiFetch('/api/agents/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1401,15 +1457,17 @@ export default function OpieKanban(): React.ReactElement {
           padding: sidebarExpanded ? '16px' : '12px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
         }}>
-          <OpieStatusWidget 
-            size={sidebarExpanded ? "medium" : "small"}
-            showDetails={sidebarExpanded}
-            onClick={() => handleViewChange('settings')}
-          />
+          <Suspense fallback={null}>
+            <OpieStatusWidget 
+              size={sidebarExpanded ? "medium" : "small"}
+              showDetails={sidebarExpanded}
+              onClick={() => handleViewChange('settings')}
+            />
+          </Suspense>
         </div>
         
         {/* Sidebar Widgets - Calendar, Email, System Health */}
-        {!isMobile && <SidebarWidgets isExpanded={sidebarExpanded} />}
+        {!isMobile && <Suspense fallback={null}><SidebarWidgets isExpanded={sidebarExpanded} /></Suspense>}
         
         {/* Collapse/Expand Toggle */}
         {!isMobile && (
@@ -1533,24 +1591,28 @@ export default function OpieKanban(): React.ReactElement {
     <NotificationProvider>
       <div style={styles.container}>
         {/* Premium particle background */}
-        <ParticleBackground
-          particleCount={50}
-          intensity="low"
-          mouseAttraction={!isMobile}
-        />
+        <Suspense fallback={null}>
+          <ParticleBackground
+            particleCount={50}
+            intensity="low"
+            mouseAttraction={!isMobile}
+          />
+        </Suspense>
 
         {/* Immersive voice mode overlay */}
-        <ImmersiveVoiceMode
-          isActive={activeView === 'voice' && micOn && !isMobile}
-          isSpeaking={isSpeaking}
-          isListening={micOn && !isLoading && !isSpeaking}
-          isLoading={isLoading}
-          transcript={transcript}
-          lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
-          onClose={() => setMicOn(false)}
-          onMicToggle={() => setMicOn(!micOn)}
-          micOn={micOn}
-        />
+        <Suspense fallback={null}>
+          <ImmersiveVoiceMode
+            isActive={activeView === 'voice' && micOn && !isMobile}
+            isSpeaking={isSpeaking}
+            isListening={micOn && !isLoading && !isSpeaking}
+            isLoading={isLoading}
+            transcript={transcript}
+            lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
+            onClose={() => setMicOn(false)}
+            onMicToggle={() => setMicOn(!micOn)}
+            micOn={micOn}
+          />
+        </Suspense>
 
         {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
         {isMobile && <MobileOverlay />}
@@ -1563,6 +1625,7 @@ export default function OpieKanban(): React.ReactElement {
         paddingTop: isMobile && activeView !== 'voice' ? '0' : 0,
         minHeight: isMobile ? '100dvh' : '100vh',
       }}>
+        <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>Loading…</div>}>
         {/* Dashboard View - Smart Real-Time Dashboard */}
         {activeView === 'dashboard' && (
           <div style={{
@@ -2061,6 +2124,7 @@ export default function OpieKanban(): React.ReactElement {
             </div>
           </div>
         )}
+        </Suspense>
       </main>
 
       {/* Secondary Chat Windows */}

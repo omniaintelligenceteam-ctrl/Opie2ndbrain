@@ -13,6 +13,7 @@ import {
 interface UseConversationsReturn {
   conversations: Conversation[];
   activeConversation: Conversation | null;
+  pinnedConversationIds: string[];
   createConversation: () => Conversation;
   createConversationForSecondary: () => Conversation;
   switchConversation: (id: string) => void;
@@ -22,11 +23,13 @@ interface UseConversationsReturn {
   updateMessagesForConversation: (conversationId: string, updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   updateTitle: (conversationId: string, title: string) => void;
   setSummary: (conversationId: string, summary: string) => void;
+  pinConversation: (id: string) => void;
+  unpinConversation: (id: string) => void;
   isLoading: boolean;
 }
 
 export function useConversations(): UseConversationsReturn {
-  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeConversationId: null });
+  const [store, setStore] = useState<ConversationStore>({ conversations: [], activeConversationId: null, pinnedConversationIds: [] });
   const [isLoading, setIsLoading] = useState(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isLoadedRef = useRef(false);
@@ -45,16 +48,24 @@ export function useConversations(): UseConversationsReturn {
     });
   }, []);
 
-  // Debounced save to Supabase
+  // Save to localStorage immediately, Supabase debounced
   useEffect(() => {
     if (isLoading || !isLoadedRef.current) return;
     
+    // Always save to localStorage immediately (fast, reliable)
+    try {
+      localStorage.setItem('opie-conversations', JSON.stringify(store));
+    } catch (e) {
+      console.warn('[useConversations] localStorage save failed:', e);
+    }
+    
+    // Debounce Supabase saves to reduce API calls
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(() => {
       saveConversations(store);
-    }, 500);
+    }, 1000);
 
     return () => {
       if (saveTimeoutRef.current) {
@@ -63,6 +74,23 @@ export function useConversations(): UseConversationsReturn {
     };
   }, [store, isLoading]);
 
+  // Save before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isLoadedRef.current) {
+        // Sync save to localStorage before unload
+        try {
+          localStorage.setItem('opie-conversations', JSON.stringify(store));
+        } catch (e) {
+          console.warn('[useConversations] beforeunload save failed:', e);
+        }
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [store]);
+
   const activeConversation = store.activeConversationId
     ? store.conversations.find(c => c.id === store.activeConversationId) || null
     : null;
@@ -70,6 +98,7 @@ export function useConversations(): UseConversationsReturn {
   const createConversation = useCallback((): Conversation => {
     const newConv = createEmptyConversation();
     setStore(prev => ({
+      ...prev,
       conversations: [newConv, ...prev.conversations],
       activeConversationId: newConv.id,
     }));
@@ -119,6 +148,7 @@ export function useConversations(): UseConversationsReturn {
     };
 
     setStore(prev => ({
+      ...prev,
       conversations: [forkedConv, ...prev.conversations],
       activeConversationId: forkedConv.id,
     }));
@@ -136,6 +166,7 @@ export function useConversations(): UseConversationsReturn {
       }
 
       return {
+        ...prev,
         conversations: filtered,
         activeConversationId: newActiveId,
       };
@@ -146,7 +177,10 @@ export function useConversations(): UseConversationsReturn {
     updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
   ): void => {
     setStore(prev => {
-      if (!prev.activeConversationId) return prev;
+      if (!prev.activeConversationId) {
+        console.warn('[useConversations] updateMessages called with no active conversation!');
+        return prev;
+      }
 
       // Get current messages and apply updater
       const currentConv = prev.conversations.find(c => c.id === prev.activeConversationId);
@@ -215,9 +249,28 @@ export function useConversations(): UseConversationsReturn {
     }));
   }, []);
 
+  const pinConversation = useCallback((id: string): void => {
+    setStore(prev => {
+      if (prev.pinnedConversationIds.includes(id)) return prev;
+      if (prev.pinnedConversationIds.length >= 5) return prev; // Max 5 pinned
+      return {
+        ...prev,
+        pinnedConversationIds: [...prev.pinnedConversationIds, id],
+      };
+    });
+  }, []);
+
+  const unpinConversation = useCallback((id: string): void => {
+    setStore(prev => ({
+      ...prev,
+      pinnedConversationIds: prev.pinnedConversationIds.filter(pid => pid !== id),
+    }));
+  }, []);
+
   return {
     conversations: store.conversations,
     activeConversation,
+    pinnedConversationIds: store.pinnedConversationIds,
     createConversation,
     createConversationForSecondary,
     switchConversation,
@@ -227,6 +280,8 @@ export function useConversations(): UseConversationsReturn {
     updateMessagesForConversation,
     updateTitle,
     setSummary,
+    pinConversation,
+    unpinConversation,
     isLoading,
   };
 }

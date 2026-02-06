@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { mapSessionsToNodes, AgentNodeState } from '@/lib/agentMapping';
+import { apiFetch } from '@/lib/api';
 
 // ============================================================================
 // Types
@@ -258,9 +259,9 @@ export function useSidebarData(enabled = true): SidebarDataState & { refresh: ()
     
     try {
       const [agentsRes, cronsRes, statusRes] = await Promise.all([
-        fetch('/api/agents').then(r => r.json()).catch(() => ({ sessions: [] })),
-        fetch('/api/crons').then(r => r.json()).catch(() => ({ crons: [] })),
-        fetch('/api/status').then(r => r.json()).catch(() => ({})),
+        apiFetch('/api/agents').then(r => r.json()).catch(() => ({ sessions: [] })),
+        apiFetch('/api/crons').then(r => r.json()).catch(() => ({ crons: [] })),
+        apiFetch('/api/status').then(r => r.json()).catch(() => ({})),
       ]);
       
       const sessions = agentsRes.sessions || [];

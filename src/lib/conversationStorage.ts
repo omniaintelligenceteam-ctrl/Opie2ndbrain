@@ -3,22 +3,33 @@ import { Conversation, ConversationStore } from '@/types/conversation';
 import { supabase } from './supabaseClient';
 
 const STORAGE_KEY = 'opie-conversations';
-const MAX_CONVERSATIONS = 100;
+const MAX_CONVERSATIONS = 20; // Keep 20 most recent + any pinned
 
 // Generate unique conversation ID
 export function generateConversationId(): string {
   return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// Load conversations from Supabase (server-first) with localStorage fallback
+// Load conversations - localStorage first (fast), then sync with Supabase in background
 export async function loadConversations(): Promise<ConversationStore> {
   // Server-side or no window
   if (typeof window === 'undefined') {
-    return { conversations: [], activeConversationId: null };
+    return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
   }
 
+  // Always load from localStorage first (fast, reliable)
+  const localStore = loadFromLocalStorage();
+  
+  // If we have local data, return it immediately
+  // Supabase sync will happen in the background via saves
+  if (localStore.conversations.length > 0) {
+    console.log('[ConversationStorage] Loaded', localStore.conversations.length, 'conversations from localStorage');
+    return localStore;
+  }
+
+  // No local data - try Supabase for existing users
+  if (!supabase) return localStore;
   try {
-    // Try Supabase first
     const sessionId = getSessionId();
     const { data, error } = await supabase
       .from('opie_conversations')
@@ -26,7 +37,10 @@ export async function loadConversations(): Promise<ConversationStore> {
       .eq('session_id', sessionId)
       .order('updated_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.warn('[ConversationStorage] Supabase load error:', error);
+      return localStore;
+    }
 
     if (data && data.length > 0) {
       // Found Supabase data - use it
@@ -38,33 +52,22 @@ export async function loadConversations(): Promise<ConversationStore> {
         updatedAt: row.updated_at,
       })) as Conversation[];
 
-      // Also save to localStorage for offline fallback
+      // Save to localStorage for future fast loads
       const store: ConversationStore = {
         conversations,
         activeConversationId: conversations[0]?.id || null,
+        pinnedConversationIds: [],
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+      console.log('[ConversationStorage] Loaded', conversations.length, 'conversations from Supabase');
       
       return store;
     }
-
-    // No Supabase data - try localStorage fallback (migration)
-    const localStored = localStorage.getItem(STORAGE_KEY);
-    if (localStored) {
-      const parsed = JSON.parse(localStored) as ConversationStore;
-      if (Array.isArray(parsed.conversations)) {
-        // Migrate to Supabase
-        await migrateToSupabase(parsed, sessionId);
-        return parsed;
-      }
-    }
-
-    return { conversations: [], activeConversationId: null };
   } catch (error) {
-    console.warn('[ConversationStorage] Supabase failed, using localStorage:', error);
-    // Fallback to localStorage
-    return loadFromLocalStorage();
+    console.warn('[ConversationStorage] Supabase failed:', error);
   }
+
+  return localStore;
 }
 
 // Helper: Load from localStorage only
@@ -72,18 +75,22 @@ function loadFromLocalStorage(): ConversationStore {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-      return { conversations: [], activeConversationId: null };
+      return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
     }
 
     const parsed = JSON.parse(stored) as ConversationStore;
     if (!Array.isArray(parsed.conversations)) {
-      return { conversations: [], activeConversationId: null };
+      return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
     }
 
-    return parsed;
+    // Ensure pinnedConversationIds exists (migration from old format)
+    return {
+      ...parsed,
+      pinnedConversationIds: parsed.pinnedConversationIds || [],
+    };
   } catch (error) {
     console.error('[ConversationStorage] Failed to load:', error);
-    return { conversations: [], activeConversationId: null };
+    return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
   }
 }
 
@@ -91,21 +98,29 @@ function loadFromLocalStorage(): ConversationStore {
 export async function saveConversations(store: ConversationStore): Promise<void> {
   if (typeof window === 'undefined') return;
 
-  // Always save to localStorage as backup
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-
-  // Prune if over limit
+  const pinnedIds = store.pinnedConversationIds || [];
+  
+  // Prune if over limit: keep all pinned + 20 most recent unpinned
   let conversations = store.conversations;
-  if (conversations.length > MAX_CONVERSATIONS) {
-    conversations = [...conversations]
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, MAX_CONVERSATIONS);
-  }
+  const pinned = conversations.filter(c => pinnedIds.includes(c.id));
+  const unpinned = conversations
+    .filter(c => !pinnedIds.includes(c.id))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, MAX_CONVERSATIONS);
+  
+  conversations = [...pinned, ...unpinned];
+  
+  // Update store with pruned conversations
+  const prunedStore = { ...store, conversations };
+
+  // Always save to localStorage
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(prunedStore));
 
   try {
     const sessionId = getSessionId();
 
     // Upsert each conversation to Supabase
+    if (!supabase) return;
     for (const conv of conversations) {
       const { error } = await supabase
         .from('opie_conversations')
@@ -151,6 +166,7 @@ function getSessionId(): string {
 
 // Migrate localStorage conversations to Supabase
 async function migrateToSupabase(store: ConversationStore, sessionId: string): Promise<void> {
+  if (!supabase) return;
   try {
     for (const conv of store.conversations.slice(0, 10)) {
       await supabase.from('opie_conversations').insert({

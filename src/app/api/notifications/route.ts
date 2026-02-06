@@ -17,9 +17,32 @@ interface Notification {
   agentEmoji?: string;
 }
 
-// In-memory notification store (would be replaced with database in production)
-let notificationStore: Notification[] = [];
-let lastActivityCheck = Date.now();
+// WARNING: In-memory store is unreliable in serverless — each cold start resets
+// it and concurrent instances do not share memory. Replace with a persistent
+// store (Supabase, Redis, etc.) for production use.
+//
+// We keep a global Map keyed by a constant so that at least within a single
+// warm instance the data survives across requests. If you need durable
+// notifications, migrate to the database.
+
+const _global = globalThis as unknown as {
+  __notificationStore?: Notification[];
+  __lastActivityCheck?: number;
+};
+
+function getNotificationStore(): Notification[] {
+  if (!_global.__notificationStore) _global.__notificationStore = [];
+  return _global.__notificationStore;
+}
+function setNotificationStore(store: Notification[]) {
+  _global.__notificationStore = store;
+}
+function getLastActivityCheck(): number {
+  return _global.__lastActivityCheck ?? Date.now();
+}
+function setLastActivityCheck(ts: number) {
+  _global.__lastActivityCheck = ts;
+}
 
 async function checkForNewActivity(): Promise<Notification[]> {
   const newNotifs: Notification[] = [];
@@ -32,7 +55,7 @@ async function checkForNewActivity(): Promise<Notification[]> {
     
     // Check gateway for recent activity
     const params = new URLSearchParams();
-    params.set('since', new Date(lastActivityCheck).toISOString());
+    params.set('since', new Date(getLastActivityCheck()).toISOString());
     
     const res = await fetch(`${GATEWAY_URL}/v1/activity?${params.toString()}`, { headers });
     
@@ -83,7 +106,7 @@ async function checkForNewActivity(): Promise<Notification[]> {
     console.error('Error checking for activity:', error);
   }
   
-  lastActivityCheck = Date.now();
+  setLastActivityCheck(Date.now());
   return newNotifs;
 }
 
@@ -95,20 +118,22 @@ export async function GET(request: Request) {
   
   // Check for new activity-based notifications
   const newNotifs = await checkForNewActivity();
+  let store = getNotificationStore();
   if (newNotifs.length > 0) {
-    notificationStore = [...newNotifs, ...notificationStore].slice(0, 100);
+    store = [...newNotifs, ...store].slice(0, 100);
+    setNotificationStore(store);
   }
   
   // Filter and return
-  let notifications = notificationStore;
+  let notifications = store;
   if (unreadOnly) {
     notifications = notifications.filter(n => !n.read);
   }
   
   return NextResponse.json({
     notifications: notifications.slice(0, limit),
-    unreadCount: notificationStore.filter(n => !n.read).length,
-    total: notificationStore.length,
+    unreadCount: store.filter(n => !n.read).length,
+    total: store.length,
   });
 }
 
@@ -131,7 +156,7 @@ export async function POST(request: Request) {
       agentEmoji: body.agentEmoji,
     };
     
-    notificationStore = [notification, ...notificationStore].slice(0, 100);
+    setNotificationStore([notification, ...getNotificationStore()].slice(0, 100));
     
     return NextResponse.json({ notification });
   } catch (error) {
@@ -146,18 +171,20 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { ids, markAll } = body;
     
+    let store = getNotificationStore();
     if (markAll) {
-      notificationStore = notificationStore.map(n => ({ ...n, read: true }));
+      store = store.map(n => ({ ...n, read: true }));
     } else if (ids && Array.isArray(ids)) {
       const idSet = new Set(ids);
-      notificationStore = notificationStore.map(n => 
+      store = store.map(n => 
         idSet.has(n.id) ? { ...n, read: true } : n
       );
     }
+    setNotificationStore(store);
     
     return NextResponse.json({ 
       success: true,
-      unreadCount: notificationStore.filter(n => !n.read).length,
+      unreadCount: store.filter(n => !n.read).length,
     });
   } catch (error) {
     console.error('Failed to update notifications:', error);
@@ -171,9 +198,9 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id');
   
   if (id) {
-    notificationStore = notificationStore.filter(n => n.id !== id);
+    setNotificationStore(getNotificationStore().filter(n => n.id !== id));
   } else {
-    notificationStore = [];
+    setNotificationStore([]);
   }
   
   return NextResponse.json({ success: true });

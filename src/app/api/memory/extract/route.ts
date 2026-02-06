@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
-const supabaseAdmin = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null;
+const supabaseAdmin = getSupabaseAdmin();
 
 const OLLAMA_URL = process.env.OLLAMA_API_URL || 'https://api.ollama.com/v1';
 const OLLAMA_KEY = process.env.OLLAMA_API_KEY || '';
 
-const EXTRACTION_PROMPT = `You are a memory extraction assistant. Analyze the conversation and extract important information.
+const EXTRACTION_PROMPT = (projectTag?: string) => `You are a memory extraction assistant. Extract important information from this conversation${projectTag ? ` about ${projectTag}` : ''}.
 
 Return a JSON object with these arrays (include only items that are clearly stated or implied):
 
@@ -19,18 +15,20 @@ Return a JSON object with these arrays (include only items that are clearly stat
   "preferences": ["user preferences, likes, dislikes, communication style"],
   "decisions": ["decisions made during the conversation"],
   "action_items": ["tasks or follow-ups mentioned"],
+  "corrections": ["corrections the user made - these are high priority to remember"],
   "key_topics": ["main topics discussed"]
 }
 
 Rules:
 - Only extract what's clearly present in the conversation
 - Keep each item concise (1 sentence max)
+- CORRECTIONS are high priority - when user corrects you, extract the right info
 - Return empty arrays if nothing relevant found
 - Output ONLY valid JSON, no explanation`;
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, conversationId, sessionId = 'default' } = await req.json();
+    const { messages, conversationId, sessionId = 'default', projectTag } = await req.json();
 
     if (!messages || messages.length < 2) {
       return NextResponse.json({ extracted: false, reason: 'Not enough messages' });

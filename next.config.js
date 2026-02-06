@@ -3,17 +3,27 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['gray-matter']
   },
-  // Prevent aggressive caching during development
-  headers: async () => [
-    {
-      source: '/:path*',
-      headers: [
-        {
-          key: 'Cache-Control',
-          value: 'no-store, must-revalidate',
-        },
-      ],
-    },
-  ],
+  async headers() {
+    return [
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store',
+          },
+        ],
+      },
+    ];
+  },
 }
 module.exports = nextConfig

@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useEffect, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 
 // Silence detection timeout (1 second)
-const SILENCE_TIMEOUT_MS = 1000;
+const SILENCE_TIMEOUT_MS = 3000;
 
 export interface VoiceControllerProps {
   micOn: boolean;
@@ -80,7 +81,7 @@ export function useVoiceController(props: VoiceControllerProps): VoiceController
     setIsSpeaking(true);
     
     try {
-      const res = await fetch('/api/tts', {
+      const res = await apiFetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
@@ -157,20 +158,31 @@ export function useVoiceController(props: VoiceControllerProps): VoiceController
     if (typeof window === 'undefined') return;
     
     const audio = new Audio();
-    if (audioRef.current !== audio) {
-      // @ts-expect-error - we need to set the ref directly
-      audioRef.current = audio;
-    }
+    // @ts-expect-error - we need to set the ref directly
+    audioRef.current = audio;
     
+    let endedTimer: ReturnType<typeof setTimeout> | null = null;
+    let errorTimer: ReturnType<typeof setTimeout> | null = null;
+
     audio.onended = () => {
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
+      endedTimer = setTimeout(() => startRecognition(), 300);
     };
     
     audio.onerror = (e) => {
       console.error('[Audio] Playback error:', e);
       setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
+      errorTimer = setTimeout(() => startRecognition(), 300);
+    };
+
+    return () => {
+      // Clean up audio element and pending timers on re-render / unmount
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.onended = null;
+      audio.onerror = null;
+      if (endedTimer) clearTimeout(endedTimer);
+      if (errorTimer) clearTimeout(errorTimer);
     };
   }, [audioRef, setIsSpeaking, startRecognition]);
 

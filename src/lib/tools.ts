@@ -1,7 +1,7 @@
-// Server-side tools for DO IT mode
+// Server-side tools for EXECUTE mode
 // These execute on the server and return results to the AI
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from './supabase';
 
 export interface Tool {
   name: string;
@@ -324,6 +324,39 @@ export const TOOLS: Record<string, Tool> = {
     },
     execute: githubSearch,
   },
+  github_write_file: {
+    name: 'github_write_file',
+    description: 'Create or update a file in a GitHub repository. Commits the change directly to the branch.',
+    parameters: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string', description: 'Repository owner (e.g., "omniaintelligenceteam-ctrl")' },
+        repo: { type: 'string', description: 'Repository name' },
+        path: { type: 'string', description: 'File path to create/update (e.g., "src/components/Hero.tsx")' },
+        content: { type: 'string', description: 'The new file content' },
+        message: { type: 'string', description: 'Commit message describing the change' },
+        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+      },
+      required: ['owner', 'repo', 'path', 'content', 'message'],
+    },
+    execute: githubWriteFile,
+  },
+  github_delete_file: {
+    name: 'github_delete_file',
+    description: 'Delete a file from a GitHub repository.',
+    parameters: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string', description: 'Repository owner' },
+        repo: { type: 'string', description: 'Repository name' },
+        path: { type: 'string', description: 'File path to delete' },
+        message: { type: 'string', description: 'Commit message for the deletion' },
+        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+      },
+      required: ['owner', 'repo', 'path', 'message'],
+    },
+    execute: githubDeleteFile,
+  },
 };
 
 // GitHub search implementation
@@ -370,16 +403,137 @@ async function githubSearch(args: { owner: string; repo?: string; query: string;
   }
 }
 
+// GitHub write file implementation
+async function githubWriteFile(args: { owner: string; repo: string; path: string; content: string; message: string; branch?: string }) {
+  const { owner, repo, path, content, message, branch = 'main' } = args;
+  const githubToken = process.env.GITHUB_TOKEN;
+  
+  if (!githubToken) {
+    return { error: 'GITHUB_TOKEN not configured - cannot write to repositories' };
+  }
+  
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'Authorization': `token ${githubToken}`,
+      'Content-Type': 'application/json',
+    };
+    
+    // First, try to get the file's current SHA (needed for updates)
+    let sha: string | undefined;
+    try {
+      const getResponse = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+        { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `token ${githubToken}` } }
+      );
+      if (getResponse.ok) {
+        const fileData = await getResponse.json();
+        sha = fileData.sha;
+      }
+    } catch {
+      // File doesn't exist, that's fine for create
+    }
+    
+    // Create or update the file
+    const body: any = {
+      message,
+      content: Buffer.from(content).toString('base64'),
+      branch,
+    };
+    if (sha) {
+      body.sha = sha;
+    }
+    
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+      }
+    );
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { error: `GitHub write error: ${response.status} - ${errorData.message || 'Unknown error'}` };
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      commit: data.commit?.sha,
+      url: data.content?.html_url,
+      action: sha ? 'updated' : 'created',
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'GitHub write failed' };
+  }
+}
+
+// GitHub delete file implementation
+async function githubDeleteFile(args: { owner: string; repo: string; path: string; message: string; branch?: string }) {
+  const { owner, repo, path, message, branch = 'main' } = args;
+  const githubToken = process.env.GITHUB_TOKEN;
+  
+  if (!githubToken) {
+    return { error: 'GITHUB_TOKEN not configured - cannot delete from repositories' };
+  }
+  
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'Authorization': `token ${githubToken}`,
+      'Content-Type': 'application/json',
+    };
+    
+    // Get file SHA (required for delete)
+    const getResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `token ${githubToken}` } }
+    );
+    
+    if (!getResponse.ok) {
+      return { error: `File not found: ${path}` };
+    }
+    
+    const fileData = await getResponse.json();
+    
+    // Delete the file
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({
+          message,
+          sha: fileData.sha,
+          branch,
+        }),
+      }
+    );
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return { error: `GitHub delete error: ${response.status} - ${errorData.message || 'Unknown error'}` };
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      commit: data.commit?.sha,
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'GitHub delete failed' };
+  }
+}
+
 // Write response back to web app via Supabase
 async function writeWebResponse(args: { request_id: string; response: string }) {
   const { request_id, response } = args;
   
   try {
-    const supabase = createClient(
-      'https://wsiedmznnwaejwonuraj.supabase.co',
-      process.env.SUPABASE_SERVICE_KEY || '',
-      { auth: { persistSession: false } }
-    );
+    const supabase = getSupabaseAdmin();
+    if (!supabase) throw new Error('Supabase not configured');
     
     const { error } = await supabase
       .from('opie_requests')
@@ -403,7 +557,7 @@ async function writeWebResponse(args: { request_id: string; response: string }) 
 // Add to TOOLS after defining the function
 (TOOLS as any).write_web_response = {
   name: 'write_web_response',
-  description: 'Write the final response to the web app via Supabase. Use this ONLY when completing a DO IT task that came from the web app. Requires request_id from the task.',
+  description: 'Write the final response to the web app via Supabase. Use this ONLY when completing a EXECUTE task that came from the web app. Requires request_id from the task.',
   parameters: {
     type: 'object',
     properties: {
@@ -477,9 +631,11 @@ Let me check that. {"tool": "github_list_repo", "args": {...}} I'll analyze the 
 
 ### TOOL EXAMPLES
 
-GitHub file: {"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app/page.tsx"}}
-GitHub search: {"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing", "language": "typescript"}}
+GitHub read: {"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app/page.tsx"}}
 GitHub list: {"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src"}}
+GitHub search: {"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing", "language": "typescript"}}
+GitHub write: {"tool": "github_write_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/components/NewFile.tsx", "content": "export default function NewFile() { return <div>Hello</div> }", "message": "Add NewFile component"}}
+GitHub delete: {"tool": "github_delete_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/old-file.ts", "message": "Remove old file"}}
 Memory search: {"tool": "memory_search", "args": {"query": "sales leads", "limit": 5}}
 Web search: {"tool": "web_search", "args": {"query": "landscape lighting design", "count": 5}}
 
