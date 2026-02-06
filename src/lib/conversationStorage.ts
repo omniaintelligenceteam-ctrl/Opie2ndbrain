@@ -28,6 +28,7 @@ export async function loadConversations(): Promise<ConversationStore> {
   }
 
   // No local data - try Supabase for existing users
+  if (!supabase) return localStore;
   try {
     const sessionId = getSessionId();
     const { data, error } = await supabase
@@ -164,6 +165,7 @@ function getSessionId(): string {
 
 // Migrate localStorage conversations to Supabase
 async function migrateToSupabase(store: ConversationStore, sessionId: string): Promise<void> {
+  if (!supabase) return;
   try {
     for (const conv of store.conversations.slice(0, 10)) {
       await supabase.from('opie_conversations').insert({
