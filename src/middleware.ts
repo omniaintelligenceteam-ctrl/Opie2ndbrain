@@ -22,9 +22,9 @@ function validateApiKey(apiKey: string | null): boolean {
     return true;
   }
 
-  // No key configured in production = deny all (fail secure)
+  // No key configured = allow all (key must be set to enable auth)
   if (!configuredKey) {
-    return false;
+    return true;
   }
 
   // Validate the provided key
