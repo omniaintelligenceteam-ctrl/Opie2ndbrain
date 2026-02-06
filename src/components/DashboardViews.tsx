@@ -186,9 +186,12 @@ export function DashboardViews(props: DashboardViewsProps): React.ReactElement {
       {activeView === 'organization' && (
         <ErrorBoundary section="Organization">
           <div style={viewContainerStyle}>
-            <OrganizationChart
+            <OrganizationChart 
               isMobile={isMobile}
               isTablet={isTablet}
+              onNodeClick={(node) => {
+                console.log('Organization node clicked:', node);
+              }}
             />
           </div>
         </ErrorBoundary>
