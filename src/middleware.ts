@@ -72,6 +72,12 @@ function extractApiKey(request: NextRequest): string | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // If no DASHBOARD_API_KEY is configured, skip all auth checks
+  const configuredKey = process.env.DASHBOARD_API_KEY;
+  if (!configuredKey) {
+    return NextResponse.next();
+  }
+
   // Allow public routes without auth
   if (isPublicRoute(pathname)) {
     return NextResponse.next();
