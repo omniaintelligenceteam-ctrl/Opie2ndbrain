@@ -916,13 +916,14 @@ function BotAvatar({ agent, isActive, isConnected }: {
   isActive: boolean;
   isConnected: boolean;
 }) {
-  const mainColor = isActive ? agent.color : isConnected ? '#4a6080' : '#3a4460';
-  const eyeColor = isActive ? agent.color : isConnected ? '#6a8ab0' : '#4a5570';
+  // Each bot always tinted with its agent color — active is bright, idle is dimmed
+  const mainColor = isActive ? agent.color : isConnected ? `${agent.color}bb` : `${agent.color}77`;
+  const eyeColor = isActive ? agent.color : isConnected ? `${agent.color}cc` : `${agent.color}88`;
   const bodyBg = isActive
     ? `linear-gradient(180deg, ${agent.color}50, ${agent.color}30)`
     : isConnected
-      ? 'linear-gradient(180deg, #3a4a65, #2e3a50)'
-      : 'linear-gradient(180deg, #2a3448, #222a3a)';
+      ? `linear-gradient(180deg, ${agent.color}35, ${agent.color}20)`
+      : `linear-gradient(180deg, ${agent.color}25, ${agent.color}15)`;
   const opacity = isActive ? 1 : isConnected ? 0.9 : 0.75;
 
   return (
@@ -937,14 +938,14 @@ function BotAvatar({ agent, isActive, isConnected }: {
         {/* Antenna tip — glowing dot */}
         <div style={{
           width: '4px', height: '4px', borderRadius: '50%',
-          background: isActive ? agent.color : '#4a5570',
-          boxShadow: isActive ? `0 0 6px ${agent.color}, 0 0 12px ${agent.color}60` : '0 0 2px #4a5570',
+          background: isActive ? agent.color : `${agent.color}88`,
+          boxShadow: isActive ? `0 0 6px ${agent.color}, 0 0 12px ${agent.color}60` : `0 0 2px ${agent.color}44`,
           animation: isActive ? 'wr-eye-glow 1s ease-in-out infinite' : 'none',
         }} />
         {/* Antenna stem */}
         <div style={{
           width: '2px', height: '5px',
-          background: isActive ? `${agent.color}80` : '#3a4460',
+          background: isActive ? `${agent.color}80` : `${agent.color}40`,
           animation: isActive ? 'wr-antenna-bob 0.8s ease-in-out infinite' : 'none',
           transformOrigin: 'bottom center',
         }} />
@@ -955,7 +956,7 @@ function BotAvatar({ agent, isActive, isConnected }: {
         width: '22px', height: '16px',
         background: `linear-gradient(180deg, ${mainColor}, ${mainColor}bb)`,
         borderRadius: '5px 5px 3px 3px',
-        border: `1.5px solid ${isActive ? agent.color : '#4a5a70'}`,
+        border: `1.5px solid ${isActive ? agent.color : `${agent.color}55`}`,
         position: 'relative',
         boxShadow: isActive ? `0 0 8px ${agent.color}40` : '0 0 3px rgba(0,0,0,0.3)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
@@ -977,7 +978,7 @@ function BotAvatar({ agent, isActive, isConnected }: {
         {/* Visor line across eyes */}
         <div style={{
           position: 'absolute', top: '5px', left: '3px', right: '3px', height: '1px',
-          background: isActive ? `${agent.color}40` : 'rgba(255,255,255,0.06)',
+          background: isActive ? `${agent.color}40` : `${agent.color}18`,
         }} />
       </div>
 
@@ -989,7 +990,7 @@ function BotAvatar({ agent, isActive, isConnected }: {
         width: '20px', height: '16px',
         background: bodyBg,
         borderRadius: '3px 3px 2px 2px',
-        border: `1px solid ${isActive ? `${agent.color}60` : '#3a4460'}`,
+        border: `1px solid ${isActive ? `${agent.color}60` : `${agent.color}35`}`,
         position: 'relative',
         boxShadow: isActive ? `0 0 6px ${agent.color}25` : 'none',
       }}>
@@ -997,14 +998,14 @@ function BotAvatar({ agent, isActive, isConnected }: {
         <div style={{
           position: 'absolute', top: '3px', left: '50%', transform: 'translateX(-50%)',
           width: '8px', height: '4px', borderRadius: '1px',
-          background: isActive ? `${agent.color}40` : 'rgba(255,255,255,0.06)',
-          border: `0.5px solid ${isActive ? `${agent.color}50` : 'rgba(255,255,255,0.08)'}`,
+          background: isActive ? `${agent.color}40` : `${agent.color}18`,
+          border: `0.5px solid ${isActive ? `${agent.color}50` : `${agent.color}25`}`,
         }} />
         {/* Chest light dot */}
         <div style={{
           position: 'absolute', top: '9px', left: '50%', transform: 'translateX(-50%)',
           width: '3px', height: '3px', borderRadius: '50%',
-          background: isActive ? agent.color : '#3a4460',
+          background: isActive ? agent.color : `${agent.color}44`,
           boxShadow: isActive ? `0 0 3px ${agent.color}` : 'none',
         }} />
 
