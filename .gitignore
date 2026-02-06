@@ -1,6 +1,9 @@
 node_modules
 .next
 .vercel
-.env*.local
+.env
+.env.local
+.env.*.local
+!.env.example
 journals/
 knowledge/MEMORY.md

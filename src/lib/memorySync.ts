@@ -1,21 +1,7 @@
 // Bi-directional memory sync between Opie (me) and Opie2ndbrain (web app)
 // Both write to Supabase, both read from Supabase
 
-import { createClient } from '@supabase/supabase-js';
-
-// Hardcoded to working project - wsiedmznnwaejwonuraj
-const supabaseUrl = 'https://wsiedmznnwaejwonuraj.supabase.co';
-// Key will come from env var for security
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
-
-// Lazy init
-let _supabase: ReturnType<typeof createClient> | null = null;
-function getSupabase() {
-  if (!_supabase && supabaseUrl && supabaseKey) {
-    _supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-  }
-  return _supabase;
-}
+import { getSupabaseAdmin } from './supabase';
 
 export interface MemoryEntry {
   id?: string;
@@ -30,7 +16,7 @@ export interface MemoryEntry {
 
 // Write memory from any source
 export async function writeMemory(entry: Omit<MemoryEntry, 'id' | 'timestamp'>): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   if (!supabase) {
     console.error('[MemorySync] Supabase not configured');
     return;
@@ -57,7 +43,7 @@ export async function readMemory(
     source?: string;
   } = {}
 ): Promise<MemoryEntry[]> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   if (!supabase) {
     console.error('[MemorySync] Supabase not configured');
     return [];
@@ -85,7 +71,7 @@ export async function readMemory(
 
 // Search memory semantically (using Supabase text search)
 export async function searchMemory(searchQuery: string, limit = 5): Promise<MemoryEntry[]> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   if (!supabase) {
     console.error('[MemorySync] Supabase not configured');
     return [];

@@ -12,8 +12,10 @@ export const maxDuration = 120;
 // Provider Configuration
 type Provider = 'openclaw' | 'ollama' | 'anthropic';
 
-const OPENCLAW_GATEWAY_URL = 'http://143.198.128.209:3457';
-const OPENCLAW_GATEWAY_TOKEN = 'opie-token-123';
+// Use centralized gateway config — never hardcode secrets or IPs
+import { GATEWAY_URL as _GW_URL, GATEWAY_TOKEN as _GW_TOKEN } from '@/lib/gateway';
+const OPENCLAW_GATEWAY_URL = _GW_URL;
+const OPENCLAW_GATEWAY_TOKEN = _GW_TOKEN;
 const OPENCLAW_AVAILABLE = true; // Bridge is always available
 
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -31,8 +33,11 @@ const MODELS = {
 
 type ModelAlias = keyof typeof MODELS;
 
-let currentModel: ModelAlias = 'kimi';
-let currentProvider: Provider = 'ollama';
+// NOTE: In serverless environments module-level mutable state is unreliable
+// (each invocation may get a fresh instance). These defaults are used when
+// the request body does not supply model/provider.
+const DEFAULT_MODEL: ModelAlias = 'kimi';
+const DEFAULT_PROVIDER: Provider = 'ollama';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
 - 2-3 sentences MAX. Be concise.
@@ -391,11 +396,15 @@ export async function POST(req: NextRequest) {
     image,
   } = body;
 
+  // Use request-scoped variables — module-level mutation is unreliable in serverless
+  let activeProvider: Provider = DEFAULT_PROVIDER;
+  let activeModel: ModelAlias = DEFAULT_MODEL;
+
   if (provider && ['openclaw', 'ollama', 'anthropic'].includes(provider)) {
-    currentProvider = provider as Provider;
+    activeProvider = provider as Provider;
   }
   if (model && model in MODELS) {
-    currentModel = model as ModelAlias;
+    activeModel = model as ModelAlias;
   }
 
   if (!message) {
