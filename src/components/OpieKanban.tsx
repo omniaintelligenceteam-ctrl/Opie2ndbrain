@@ -28,7 +28,7 @@ import StatusOrb from './StatusOrb';
 const AgentsPanel = lazy(() => import('./AgentsPanel'));
 const SkillsPanel = lazy(() => import('./SkillsPanel'));
 const ActiveTasksPanel = lazy(() => import('./ActiveTasksPanel'));
-const OrchestrationStatus = lazy(() => import('./OrchestrationStatus'));
+const AgentCommandCenter = lazy(() => import('./AgentCommandCenter'));
 const CronsPanel = lazy(() => import('./CronsPanel'));
 const ActivityFeed = lazy(() => import('./ActivityFeed'));
 const MemoryPanel = lazy(() => import('./MemoryPanel'));
@@ -1407,11 +1407,11 @@ export default function OpieKanban(): React.ReactElement {
               {/* Right: Orchestration Network - Next to greeting */}
               <div>
                 {isMobile ? (
-                  <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
-                    <OrchestrationStatus compact={true} />
+                  <CollapsibleSection title="Agent Command Center" icon="⚡" badge={realActiveCount} defaultOpen>
+                    <AgentCommandCenter compact={true} />
                   </CollapsibleSection>
                 ) : (
-                  <OrchestrationStatus />
+                  <AgentCommandCenter />
                 )}
               </div>
             </div>
