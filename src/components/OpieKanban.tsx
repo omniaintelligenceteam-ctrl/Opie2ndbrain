@@ -541,7 +541,7 @@ export default function OpieKanban(): React.ReactElement {
   const isLoadingRef = useRef(false);
   
   // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
-  const SILENCE_TIMEOUT_MS = 1000;
+  const SILENCE_TIMEOUT_MS = 3000;
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingTranscriptRef = useRef('');
   const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
@@ -744,11 +744,26 @@ export default function OpieKanban(): React.ReactElement {
     setIsSpeaking(true);
     // DON'T stop recognition - keep it running for barge-in capability
     // This lets user interrupt AI mid-speech
+
+    // Strip code blocks and error-like content before TTS
+    let ttsText = text
+      .replace(/```[\s\S]*?```/g, ' (code block omitted) ')  // Remove fenced code blocks
+      .replace(/`[^`]+`/g, '')  // Remove inline code
+      .replace(/^\s*(?:Error|TypeError|SyntaxError|ReferenceError):.*$/gm, '')  // Remove error lines
+      .replace(/https?:\/\/\S+/g, '')  // Remove URLs
+      .replace(/\n{3,}/g, '\n\n')  // Collapse excessive newlines
+      .trim();
+
+    if (!ttsText) {
+      setIsSpeaking(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: ttsText }),
       });
       
       // Check if response is OK
