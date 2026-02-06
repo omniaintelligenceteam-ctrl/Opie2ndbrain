@@ -10,30 +10,19 @@ interface AgentCommandCenterProps {
   compact?: boolean;
 }
 
-const COLORS = {
-  primary: '#667eea',
-  secondary: '#764ba2',
-  accent: '#06b6d4',
-  success: '#22c55e',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  working: '#f59e0b',
-  connected: '#22c55e',
-  idle: 'rgba(255,255,255,0.12)',
-  glass: 'rgba(255,255,255,0.03)',
-  glassBorder: 'rgba(255,255,255,0.08)',
-};
-
-// Workstation positions in the isometric scene (percentage-based)
-const STATION_POSITIONS = [
-  { x: 12, y: 18 },  // Research
-  { x: 38, y: 10 },  // Code
-  { x: 64, y: 10 },  // Proposal
-  { x: 88, y: 18 },  // Content
-  { x: 12, y: 58 },  // Sales
-  { x: 38, y: 66 },  // Analyst
-  { x: 64, y: 66 },  // QA
-  { x: 88, y: 58 },  // Outreach
+// Workstation layout: 2 rows of 4, positioned around a central holotable
+// Positions are in percentage (left%, top%) within the scene
+const WORKSTATIONS = [
+  // Top row — facing down toward center
+  { x: 10, y: 8,  row: 'top' },   // Research
+  { x: 30, y: 3,  row: 'top' },   // Code
+  { x: 55, y: 3,  row: 'top' },   // Proposal
+  { x: 75, y: 8,  row: 'top' },   // Content
+  // Bottom row — facing up toward center
+  { x: 10, y: 62, row: 'bottom' }, // Sales
+  { x: 30, y: 67, row: 'bottom' }, // Analyst
+  { x: 55, y: 67, row: 'bottom' }, // QA
+  { x: 75, y: 62, row: 'bottom' }, // Outreach
 ];
 
 export default function AgentCommandCenter({
@@ -45,16 +34,20 @@ export default function AgentCommandCenter({
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentNodeState | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [tick, setTick] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const activityLogRef = useRef<Array<{ text: string; time: number; emoji: string }>>([]);
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Animation tick for subtle effects
+  // ESC key to exit fullscreen
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => (t + 1) % 1000), 80);
-    return () => clearInterval(interval);
-  }, []);
+    if (!isFullscreen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isFullscreen]);
 
   const {
     nodes,
@@ -81,7 +74,7 @@ export default function AgentCommandCenter({
         activeSessions: effectiveActiveAgents.includes(agentId) ? 1 : 0,
       };
     }
-    return { id: agentId, name: agentId, emoji: '🤖', status: 'idle', position: { x: 50, y: 50 }, color: '#737373', activeSessions: 0 };
+    return { id: agentId, name: agentId, emoji: '?', status: 'idle', position: { x: 50, y: 50 }, color: '#737373', activeSessions: 0 };
   }, [nodes, effectiveActiveAgents]);
 
   // Track activity log
@@ -113,37 +106,54 @@ export default function AgentCommandCenter({
   if (compact) {
     return (
       <div style={{ padding: '8px 0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
           {AGENT_NODES.map(agent => {
             const state = getNodeState(agent.id);
             const isActive = state.status === 'working';
             const isConnected = state.status === 'connected';
-            const statusColor = isActive ? COLORS.working : isConnected ? COLORS.success : COLORS.idle;
             return (
               <div
                 key={agent.id}
                 onClick={() => handleAgentClick(agent.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '10px 12px', borderRadius: '12px',
-                  background: isActive ? `${agent.color}15` : COLORS.glass,
-                  border: `1px solid ${isActive ? `${agent.color}40` : COLORS.glassBorder}`,
-                  cursor: 'pointer', transition: 'all 0.2s ease',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 10px', borderRadius: '8px',
+                  background: isActive ? '#0c1a0c' : '#0a0a14',
+                  border: `1px solid ${isActive ? `${agent.color}50` : '#1a1a2e'}`,
+                  cursor: 'pointer',
                 }}
               >
-                <span style={{ fontSize: '20px' }}>{agent.emoji}</span>
+                {/* Mini monitor icon */}
+                <div style={{
+                  width: '28px', height: '20px', borderRadius: '3px',
+                  background: isActive ? agent.color : '#1a1a2e',
+                  border: `1.5px solid ${isActive ? agent.color : '#2a2a3e'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '10px', position: 'relative',
+                  boxShadow: isActive ? `0 0 8px ${agent.color}60` : 'none',
+                }}>
+                  <span style={{ filter: isActive ? 'brightness(2)' : 'none' }}>{agent.emoji}</span>
+                  {/* Monitor stand */}
+                  <div style={{
+                    position: 'absolute', bottom: '-4px', left: '50%', transform: 'translateX(-50%)',
+                    width: '8px', height: '3px', background: '#2a2a3e', borderRadius: '0 0 2px 2px',
+                  }} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 600 }}>{agent.name}</div>
-                  <div style={{ color: statusColor, fontSize: '0.65rem', fontWeight: 500 }}>
-                    {isActive ? '● Working' : isConnected ? '○ Ready' : '○ Idle'}
+                  <div style={{ color: isActive ? '#fff' : '#888', fontSize: '0.7rem', fontWeight: 600 }}>{agent.name}</div>
+                  <div style={{
+                    color: isActive ? '#4ade80' : isConnected ? '#22c55e' : '#444',
+                    fontSize: '0.6rem', fontWeight: 500,
+                  }}>
+                    {isActive ? 'WORKING' : isConnected ? 'READY' : 'IDLE'}
                   </div>
                 </div>
                 {isActive && (
                   <div style={{ display: 'flex', gap: '2px' }}>
                     {[0, 1, 2].map(i => (
                       <div key={i} style={{
-                        width: '3px', height: '3px', borderRadius: '50%', background: COLORS.working,
-                        animation: `cc-bounce 1.2s ease-in-out infinite`, animationDelay: `${i * 0.2}s`,
+                        width: '3px', height: '3px', borderRadius: '50%', background: agent.color,
+                        animation: `wr-typedot 1s ease-in-out infinite`, animationDelay: `${i * 0.15}s`,
                       }} />
                     ))}
                   </div>
@@ -152,107 +162,184 @@ export default function AgentCommandCenter({
             );
           })}
         </div>
-        <style>{`@keyframes cc-bounce { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }`}</style>
+        <style>{`@keyframes wr-typedot { 0%,80%,100%{transform:translateY(0);opacity:0.3} 40%{transform:translateY(-3px);opacity:1} }`}</style>
       </div>
     );
   }
 
-  // ─── FULL DESKTOP MODE ─────────────────────────────────────────
+  // ─── FULL DESKTOP MODE — VIRTUAL OFFICE SCENE ──────────────────
   return (
-    <div style={styles.container}>
-      {/* Ambient Background */}
-      <div style={styles.gridFloor} />
-      <div style={styles.ambientGlow} />
+    <div style={{
+      background: '#06060e',
+      borderRadius: isFullscreen ? '0' : '16px',
+      border: isFullscreen ? 'none' : '1px solid #141428',
+      overflow: 'hidden',
+      position: isFullscreen ? 'fixed' : 'relative',
+      ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 } : {}),
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+      transition: 'all 0.3s ease',
+    }}>
+      {/* ── Room ambience ──────────────────────────────────── */}
+      {/* Neon grid floor (perspective) */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
+        perspective: '600px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0,
+      }}>
+        <div style={{
+          width: '200%', height: '200%', position: 'absolute',
+          top: '-20%', left: '-50%',
+          transform: 'rotateX(65deg)',
+          transformOrigin: 'center top',
+          backgroundImage: `
+            linear-gradient(rgba(6,182,212,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(6,182,212,0.07) 1px, transparent 1px)
+          `,
+          backgroundSize: '40px 40px',
+          animation: 'wr-grid-scroll 8s linear infinite',
+        }} />
+      </div>
+
+      {/* Ambient center glow */}
+      <div style={{
+        position: 'absolute', top: '35%', left: '50%', transform: 'translate(-50%, -50%)',
+        width: '300px', height: '200px',
+        background: workingCount > 0
+          ? 'radial-gradient(ellipse, rgba(6,182,212,0.12) 0%, rgba(118,75,162,0.06) 40%, transparent 70%)'
+          : 'radial-gradient(ellipse, rgba(6,182,212,0.05) 0%, transparent 60%)',
+        pointerEvents: 'none', zIndex: 0,
+      }} />
 
       {/* Scanline */}
-      <div style={styles.scanline} />
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
+        background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.3), transparent)',
+        animation: 'wr-scanline 4s linear infinite',
+        pointerEvents: 'none', zIndex: 50,
+      }} />
 
-      {/* ── Header HUD ──────────────────────────────────────── */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.hudIcon}>⚡</div>
+      {/* ── HUD Header ─────────────────────────────────────── */}
+      <div style={{
+        padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderBottom: '1px solid #141428', position: 'relative', zIndex: 10,
+        background: 'linear-gradient(180deg, rgba(6,182,212,0.03) 0%, transparent 100%)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '8px', height: '8px', borderRadius: '2px', background: '#06b6d4',
+            boxShadow: '0 0 8px #06b6d4', animation: 'wr-pulse 2s ease-in-out infinite',
+          }} />
           <div>
-            <h2 style={styles.title}>Agent Command Center</h2>
-            <div style={styles.subtitle}>LIVE OPERATIONS</div>
+            <h2 style={{
+              color: '#e2e8f0', fontSize: '0.9rem', fontWeight: 700, margin: 0,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+            }}>
+              Opie War Room
+            </h2>
+            <div style={{
+              color: '#06b6d4', fontSize: '0.5rem', fontWeight: 600,
+              letterSpacing: '0.2em', opacity: 0.7,
+            }}>
+              LIVE OPERATIONS
+            </div>
           </div>
         </div>
-        <div style={styles.headerRight}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{
-            ...styles.statusPill,
-            background: workingCount > 0 ? `${COLORS.warning}18` : `${COLORS.success}18`,
-            borderColor: workingCount > 0 ? `${COLORS.warning}40` : `${COLORS.success}40`,
+            padding: '4px 10px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600,
+            background: workingCount > 0 ? 'rgba(250,204,21,0.08)' : 'rgba(34,197,94,0.08)',
+            border: `1px solid ${workingCount > 0 ? 'rgba(250,204,21,0.25)' : 'rgba(34,197,94,0.25)'}`,
+            color: workingCount > 0 ? '#facc15' : '#22c55e',
+            display: 'flex', alignItems: 'center', gap: '6px',
           }}>
             <span style={{
-              ...styles.statusDot,
-              background: workingCount > 0 ? COLORS.warning : COLORS.success,
-              boxShadow: `0 0 8px ${workingCount > 0 ? COLORS.warning : COLORS.success}`,
+              width: '5px', height: '5px', borderRadius: '50%',
+              background: 'currentColor', animation: 'wr-blink 1.5s ease-in-out infinite',
             }} />
-            <span style={{
-              ...styles.statusText,
-              color: workingCount > 0 ? COLORS.warning : COLORS.success,
-            }}>
-              {loading ? 'Syncing...' : `${workingCount} Active`}
-            </span>
+            {loading ? 'SYNC...' : `${workingCount} ACTIVE`}
           </div>
           {connectionType === 'sse' && (
-            <div style={{ ...styles.statusPill, background: `${COLORS.success}10`, borderColor: `${COLORS.success}30` }}>
-              <span style={{ color: COLORS.success, fontSize: '0.7rem', fontWeight: 600 }}>⚡ LIVE</span>
+            <div style={{
+              padding: '4px 8px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 700,
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
+              color: '#22c55e', letterSpacing: '0.1em',
+            }}>
+              LIVE
             </div>
           )}
+          {/* Fullscreen toggle */}
+          <button
+            onClick={() => setIsFullscreen(f => !f)}
+            style={{
+              padding: '4px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600,
+              background: isFullscreen ? 'rgba(6,182,212,0.15)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${isFullscreen ? 'rgba(6,182,212,0.3)' : '#1a1a2e'}`,
+              color: isFullscreen ? '#06b6d4' : '#555',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+              transition: 'all 0.2s ease',
+            }}
+            title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
+          >
+            {isFullscreen ? '\u2716' : '\u26F6'}
+          </button>
         </div>
       </div>
 
-      {/* ── Main Scene ──────────────────────────────────────── */}
-      <div style={styles.scene}>
+      {/* ── Main Scene ─────────────────────────────────────── */}
+      <div style={{
+        position: 'relative',
+        height: isFullscreen ? 'calc(100vh - 120px)' : '460px',
+        zIndex: 1, overflow: 'hidden',
+        transition: 'height 0.3s ease',
+      }}>
 
-        {/* SVG layer for connection lines + particles */}
-        <svg style={styles.svgLayer} viewBox="0 0 100 80" preserveAspectRatio="xMidYMid meet">
+        {/* SVG layer — connection lines + particles */}
+        <svg
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3 }}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="xMidYMid meet"
+        >
           <defs>
-            <linearGradient id="cc-active-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={COLORS.primary} stopOpacity="0.6" />
-              <stop offset="50%" stopColor={COLORS.warning} stopOpacity="0.9" />
-              <stop offset="100%" stopColor={COLORS.secondary} stopOpacity="0.6" />
-            </linearGradient>
-            <filter id="cc-glow">
-              <feGaussianBlur stdDeviation="0.8" result="blur" />
+            <filter id="wr-neon">
+              <feGaussianBlur stdDeviation="0.5" result="blur" />
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-
-          {/* Connection lines from each station to center */}
-          {STATION_POSITIONS.map((pos, i) => {
+          {WORKSTATIONS.map((ws, i) => {
             const agent = AGENT_NODES[i];
             if (!agent) return null;
             const state = getNodeState(agent.id);
             const isActive = state.status === 'working';
-            const isHovered = hoveredAgent === agent.id;
-
+            const isConnected = state.status === 'connected';
+            // Line from workstation to center
+            const sx = ws.x + 6;
+            const sy = ws.row === 'top' ? ws.y + 18 : ws.y + 2;
+            const cx = 50;
+            const cy = 47;
             return (
               <g key={agent.id}>
-                {/* Base line */}
                 <line
-                  x1={pos.x} y1={pos.y + 5}
-                  x2={50} y2={42}
-                  stroke={isActive ? `${agent.color}` : isHovered ? `${COLORS.primary}60` : 'rgba(255,255,255,0.04)'}
-                  strokeWidth={isActive ? '0.4' : '0.2'}
-                  strokeDasharray={isActive ? 'none' : '2 4'}
-                  opacity={isActive ? 0.6 : 0.3}
+                  x1={sx} y1={sy} x2={cx} y2={cy}
+                  stroke={isActive ? agent.color : isConnected ? `${agent.color}40` : '#141428'}
+                  strokeWidth={isActive ? '0.3' : '0.15'}
+                  strokeDasharray={isActive ? 'none' : '1 2'}
+                  opacity={isActive ? 0.7 : 0.4}
+                  filter={isActive ? 'url(#wr-neon)' : undefined}
                 />
-                {/* Animated particle for active agents */}
+                {/* Traveling data particles */}
                 {isActive && (
                   <>
-                    <circle r="0.8" fill={agent.color} opacity="0.9" filter="url(#cc-glow)">
+                    <circle r="0.6" fill={agent.color} opacity="0.9" filter="url(#wr-neon)">
                       <animateMotion
-                        dur={`${2.5 + i * 0.2}s`}
+                        dur={`${2 + i * 0.3}s`}
                         repeatCount="indefinite"
-                        path={`M${pos.x},${pos.y + 5} L50,42`}
+                        path={`M${sx},${sy} L${cx},${cy}`}
                       />
                     </circle>
-                    <circle r="0.5" fill="#fff" opacity="0.6">
+                    <circle r="0.4" fill="#fff" opacity="0.5">
                       <animateMotion
-                        dur={`${3.5 + i * 0.3}s`}
+                        dur={`${3 + i * 0.2}s`}
                         repeatCount="indefinite"
-                        path={`M50,42 L${pos.x},${pos.y + 5}`}
+                        path={`M${cx},${cy} L${sx},${sy}`}
                       />
                     </circle>
                   </>
@@ -262,34 +349,111 @@ export default function AgentCommandCenter({
           })}
         </svg>
 
-        {/* ── Central Hub ──────────────────────────────────── */}
-        <div style={styles.hubContainer}>
+        {/* ── Central Holographic Table ────────────────────── */}
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 10,
+        }}>
+          {/* Holographic projection cone */}
+          <div style={{
+            position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+            width: '4px', height: workingCount > 0 ? '50px' : '25px',
+            background: `linear-gradient(to top, ${workingCount > 0 ? 'rgba(6,182,212,0.6)' : 'rgba(6,182,212,0.15)'}, transparent)`,
+            filter: 'blur(3px)',
+            transition: 'all 0.5s ease',
+          }} />
+          <div style={{
+            position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+            width: workingCount > 0 ? '60px' : '30px',
+            height: workingCount > 0 ? '40px' : '20px',
+            background: `radial-gradient(ellipse at bottom, ${workingCount > 0 ? 'rgba(6,182,212,0.2)' : 'rgba(6,182,212,0.05)'}, transparent)`,
+            transition: 'all 0.5s ease',
+            pointerEvents: 'none',
+          }} />
+
           {/* Pulse rings */}
           {workingCount > 0 && (
             <>
-              <div style={{ ...styles.hubRing, animationDelay: '0s' }} />
-              <div style={{ ...styles.hubRing, width: '110px', height: '110px', top: '-15px', left: '-15px', animationDelay: '0.6s' }} />
-              <div style={{ ...styles.hubRing, width: '130px', height: '130px', top: '-25px', left: '-25px', animationDelay: '1.2s' }} />
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                width: '120px', height: '120px',
+                border: '1px solid rgba(6,182,212,0.15)',
+                borderRadius: '50%',
+                animation: 'wr-ring 3s ease-out infinite',
+                pointerEvents: 'none',
+              }} />
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                width: '120px', height: '120px',
+                border: '1px solid rgba(6,182,212,0.1)',
+                borderRadius: '50%',
+                animation: 'wr-ring 3s ease-out infinite 1s',
+                pointerEvents: 'none',
+              }} />
             </>
           )}
+
+          {/* The table itself — hexagonal */}
           <div style={{
-            ...styles.hub,
-            boxShadow: workingCount > 0
-              ? `0 0 30px ${COLORS.primary}80, 0 0 60px ${COLORS.primary}40, 0 0 90px ${COLORS.secondary}25, inset 0 0 20px ${COLORS.primary}40`
-              : `0 0 20px ${COLORS.primary}40, 0 0 40px ${COLORS.primary}20, inset 0 0 15px ${COLORS.primary}20`,
+            width: '90px', height: '90px',
+            clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
+            background: `linear-gradient(135deg, #0d1520 0%, #0a1018 50%, #0d1520 100%)`,
+            border: 'none',
+            position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'column',
           }}>
-            <div style={styles.hubInner}>
-              <span style={styles.hubIcon}>⚡</span>
-              <span style={styles.hubLabel}>OPIE</span>
-            </div>
+            {/* Hex border glow */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
+              boxShadow: workingCount > 0
+                ? '0 0 30px rgba(6,182,212,0.4), 0 0 60px rgba(6,182,212,0.15), inset 0 0 20px rgba(6,182,212,0.1)'
+                : '0 0 15px rgba(6,182,212,0.15), inset 0 0 10px rgba(6,182,212,0.05)',
+              transition: 'box-shadow 0.5s ease',
+              pointerEvents: 'none',
+            }} />
+            <div style={{
+              position: 'absolute', inset: '1px',
+              clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
+              border: `1px solid ${workingCount > 0 ? 'rgba(6,182,212,0.4)' : 'rgba(6,182,212,0.15)'}`,
+              pointerEvents: 'none',
+              transition: 'border-color 0.5s ease',
+            }} />
+
+            {/* OPIE text + count */}
+            <span style={{
+              fontSize: '22px',
+              filter: workingCount > 0 ? 'drop-shadow(0 0 6px rgba(6,182,212,0.8))' : 'none',
+            }}>
+              &#9889;
+            </span>
+            <span style={{
+              color: workingCount > 0 ? '#06b6d4' : '#334155',
+              fontSize: '0.5rem', fontWeight: 800, letterSpacing: '0.2em',
+              marginTop: '2px', transition: 'color 0.3s',
+            }}>
+              OPIE
+            </span>
             {workingCount > 0 && (
-              <div style={styles.hubBadge}>{workingCount}</div>
+              <span style={{
+                position: 'absolute', top: '-6px', right: '-6px',
+                width: '20px', height: '20px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #facc15, #f97316)',
+                color: '#000', fontSize: '0.6rem', fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 10px rgba(250,204,21,0.6)',
+                zIndex: 20,
+              }}>
+                {workingCount}
+              </span>
             )}
           </div>
         </div>
 
         {/* ── Agent Workstations ───────────────────────────── */}
-        {STATION_POSITIONS.map((pos, i) => {
+        {WORKSTATIONS.map((ws, i) => {
           const agent = AGENT_NODES[i];
           if (!agent) return null;
           const state = getNodeState(agent.id);
@@ -297,6 +461,7 @@ export default function AgentCommandCenter({
           const isConnected = state.status === 'connected';
           const isHovered = hoveredAgent === agent.id;
           const isSelected = selectedAgent?.id === agent.id;
+          const facingDown = ws.row === 'top';
 
           return (
             <div
@@ -306,188 +471,221 @@ export default function AgentCommandCenter({
               onMouseLeave={() => setHoveredAgent(null)}
               style={{
                 position: 'absolute',
-                left: `${pos.x}%`,
-                top: `${pos.y}%`,
-                transform: `translate(-50%, -50%) scale(${isHovered ? 1.08 : 1})`,
-                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                left: `${ws.x}%`,
+                top: `${ws.y}%`,
+                width: '88px',
                 cursor: 'pointer',
                 zIndex: isHovered || isSelected ? 15 : 5,
+                transition: 'transform 0.2s ease',
+                transform: isHovered ? 'scale(1.05)' : 'scale(1)',
               }}
             >
+              {/* Light pool on the "floor" under active stations */}
+              {isActive && (
+                <div style={{
+                  position: 'absolute',
+                  top: facingDown ? '85%' : '-25%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '100px', height: '40px',
+                  background: `radial-gradient(ellipse, ${agent.color}25 0%, transparent 70%)`,
+                  pointerEvents: 'none',
+                  filter: 'blur(4px)',
+                }} />
+              )}
+
               {/* Speech bubble for current task */}
               {isActive && state.currentTask && (
                 <div style={{
                   position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  marginBottom: '6px',
-                  background: 'rgba(0,0,0,0.85)',
-                  border: `1px solid ${agent.color}50`,
-                  borderRadius: '8px',
-                  padding: '4px 8px',
-                  maxWidth: '130px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  fontSize: '0.55rem',
-                  color: 'rgba(255,255,255,0.8)',
-                  backdropFilter: 'blur(8px)',
-                  animation: 'cc-fadeIn 0.3s ease',
-                  zIndex: 20,
-                  pointerEvents: 'none',
+                  bottom: '105%',
+                  left: '50%', transform: 'translateX(-50%)',
+                  marginBottom: '4px',
+                  background: 'rgba(0,0,0,0.9)',
+                  border: `1px solid ${agent.color}40`,
+                  borderRadius: '6px',
+                  padding: '3px 7px',
+                  maxWidth: '120px',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.7)',
+                  zIndex: 25, pointerEvents: 'none',
+                  animation: 'wr-fadeIn 0.3s ease',
                 }}>
-                  {state.currentTask.slice(0, 40)}
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '-4px',
-                    left: '50%',
-                    transform: 'translateX(-50%) rotate(45deg)',
-                    width: '7px',
-                    height: '7px',
-                    background: 'rgba(0,0,0,0.85)',
-                    borderRight: `1px solid ${agent.color}50`,
-                    borderBottom: `1px solid ${agent.color}50`,
-                  }} />
+                  {state.currentTask.slice(0, 35)}
                 </div>
               )}
 
-              {/* Station ambient glow */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-15px',
-                  left: '-15px',
-                  right: '-15px',
-                  bottom: '-15px',
-                  borderRadius: '20px',
-                  background: `radial-gradient(circle, ${agent.color}25 0%, transparent 70%)`,
-                  animation: 'cc-glow-pulse 2s ease-in-out infinite',
-                  pointerEvents: 'none',
-                }} />
-              )}
-
-              {/* Workstation card */}
+              {/* ── The Workstation Assembly ─── */}
               <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '10px 14px 8px',
-                borderRadius: '14px',
-                background: isActive
-                  ? `linear-gradient(145deg, ${agent.color}12, rgba(0,0,0,0.6))`
-                  : isSelected
-                    ? `linear-gradient(145deg, ${COLORS.primary}10, rgba(0,0,0,0.5))`
-                    : 'rgba(10,10,20,0.7)',
-                border: `1px solid ${isActive ? `${agent.color}50` : isHovered ? `${COLORS.primary}30` : 'rgba(255,255,255,0.06)'}`,
-                backdropFilter: 'blur(12px)',
-                boxShadow: isActive
-                  ? `0 0 20px ${agent.color}20, 0 4px 20px rgba(0,0,0,0.4)`
-                  : isHovered
-                    ? `0 0 12px ${COLORS.primary}15, 0 8px 24px rgba(0,0,0,0.5)`
-                    : '0 2px 12px rgba(0,0,0,0.3)',
-                minWidth: '72px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '0px',
               }}>
-                {/* Character avatar — emoji on geometric body */}
+
+                {/* Character (sits BEHIND desk if facing down, IN FRONT if facing up) */}
+                {facingDown && <Character agent={agent} isActive={isActive} isConnected={isConnected} />}
+
+                {/* Monitor */}
                 <div style={{
-                  position: 'relative',
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '12px',
+                  width: '48px', height: '32px',
                   background: isActive
-                    ? `linear-gradient(135deg, ${agent.color}30, ${agent.color}10)`
-                    : 'rgba(255,255,255,0.04)',
-                  border: `2px solid ${isActive ? agent.color : isConnected ? `${COLORS.success}60` : 'rgba(255,255,255,0.08)'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                    ? `linear-gradient(180deg, ${agent.color}15 0%, #0a0a14 100%)`
+                    : '#0a0a14',
+                  border: `2px solid ${isActive ? agent.color : isConnected ? '#2a3a4a' : '#1a1a2e'}`,
+                  borderRadius: '3px 3px 0 0',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: isActive
+                    ? `0 0 15px ${agent.color}40, 0 0 30px ${agent.color}15, inset 0 0 8px ${agent.color}20`
+                    : isHovered ? '0 0 6px rgba(6,182,212,0.1)' : 'none',
                   transition: 'all 0.3s ease',
-                  animation: isActive ? 'cc-working 1s ease-in-out infinite' : (state.status === 'idle' ? 'cc-breathe 4s ease-in-out infinite' : 'none'),
+                  animation: isActive ? 'wr-screen-flicker 4s ease-in-out infinite' : 'none',
+                  zIndex: 2,
                 }}>
-                  <span style={{ fontSize: '18px', filter: isActive ? 'drop-shadow(0 0 4px rgba(255,255,255,0.4))' : 'none' }}>
-                    {agent.emoji}
-                  </span>
-
-                  {/* Screen glow indicator */}
+                  {/* Emoji on the screen */}
                   <div style={{
-                    position: 'absolute',
-                    bottom: '-3px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '20px',
-                    height: '3px',
-                    borderRadius: '2px',
-                    background: isActive ? agent.color : isConnected ? COLORS.success : 'rgba(255,255,255,0.1)',
-                    boxShadow: isActive ? `0 0 8px ${agent.color}, 0 2px 4px ${agent.color}60` : 'none',
-                    animation: isActive ? 'cc-screen-flicker 3s ease-in-out infinite' : 'none',
+                    position: 'absolute', top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '14px',
+                    opacity: isActive ? 1 : isConnected ? 0.5 : 0.2,
+                    filter: isActive ? `drop-shadow(0 0 4px ${agent.color})` : 'none',
                     transition: 'all 0.3s ease',
-                  }} />
-                </div>
+                  }}>
+                    {agent.emoji}
+                  </div>
 
-                {/* Agent name */}
-                <span style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  color: isActive ? '#fff' : isConnected ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.45)',
-                  whiteSpace: 'nowrap',
-                  letterSpacing: '-0.01em',
-                }}>
-                  {agent.name}
-                </span>
+                  {/* Scrolling code lines on active monitors */}
+                  {isActive && (
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                      overflow: 'hidden', opacity: 0.25,
+                    }}>
+                      {[0, 1, 2, 3, 4, 5].map(j => (
+                        <div key={j} style={{
+                          height: '2px',
+                          marginTop: `${3 + j * 4}px`,
+                          marginLeft: `${3 + (j % 3) * 4}px`,
+                          width: `${15 + (j * 7) % 20}px`,
+                          background: agent.color,
+                          borderRadius: '1px',
+                          animation: `wr-code-scroll 2s linear infinite`,
+                          animationDelay: `${j * 0.3}s`,
+                          opacity: 0.6,
+                        }} />
+                      ))}
+                    </div>
+                  )}
 
-                {/* Status row */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '0.55rem',
-                  fontWeight: 600,
-                  color: isActive ? COLORS.working : isConnected ? COLORS.success : 'rgba(255,255,255,0.3)',
-                }}>
-                  {isActive ? (
-                    <>
-                      <span style={{ animation: 'cc-blink 1s step-end infinite' }}>●</span>
-                      <span>Active</span>
-                      {/* Typing dots */}
-                      <span style={{ display: 'flex', gap: '1.5px', marginLeft: '2px' }}>
-                        {[0, 1, 2].map(j => (
-                          <span key={j} style={{
-                            width: '2.5px',
-                            height: '2.5px',
-                            borderRadius: '50%',
-                            background: COLORS.working,
-                            display: 'inline-block',
-                            animation: `cc-bounce 1.2s ease-in-out infinite`,
-                            animationDelay: `${j * 0.15}s`,
-                          }} />
-                        ))}
-                      </span>
-                    </>
-                  ) : isConnected ? (
-                    <><span>○</span><span>Ready</span></>
-                  ) : (
-                    <><span>○</span><span>Idle</span></>
+                  {/* Screen glow reflection at top */}
+                  {isActive && (
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, height: '6px',
+                      background: `linear-gradient(180deg, ${agent.color}20, transparent)`,
+                    }} />
                   )}
                 </div>
 
-                {/* Session count */}
+                {/* Monitor stand */}
+                <div style={{
+                  width: '6px', height: '5px',
+                  background: isActive ? '#2a3a4a' : '#1a1a2e',
+                  zIndex: 2,
+                }} />
+
+                {/* Monitor base */}
+                <div style={{
+                  width: '18px', height: '3px',
+                  background: isActive ? '#2a3a4a' : '#1a1a2e',
+                  borderRadius: '0 0 2px 2px',
+                  zIndex: 2,
+                }} />
+
+                {/* Desk surface */}
+                <div style={{
+                  width: '72px', height: '10px',
+                  marginTop: '-1px',
+                  background: isActive
+                    ? `linear-gradient(180deg, #1a2530, #141e28)`
+                    : 'linear-gradient(180deg, #12121e, #0e0e1a)',
+                  borderRadius: '2px',
+                  border: `1px solid ${isActive ? '#2a3a4a' : '#1a1a2e'}`,
+                  boxShadow: isActive
+                    ? `0 4px 12px rgba(0,0,0,0.5), 0 0 8px ${agent.color}10`
+                    : '0 2px 6px rgba(0,0,0,0.3)',
+                  position: 'relative',
+                  zIndex: 1,
+                }}>
+                  {/* Desk edge highlight */}
+                  <div style={{
+                    position: 'absolute', top: 0, left: '10%', right: '10%', height: '1px',
+                    background: isActive ? `${agent.color}30` : 'rgba(255,255,255,0.03)',
+                  }} />
+                </div>
+
+                {/* Desk legs */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '64px' }}>
+                  <div style={{ width: '3px', height: '8px', background: '#12121e', borderRadius: '0 0 1px 1px' }} />
+                  <div style={{ width: '3px', height: '8px', background: '#12121e', borderRadius: '0 0 1px 1px' }} />
+                </div>
+
+                {/* Character (IN FRONT of desk if bottom row) */}
+                {!facingDown && <Character agent={agent} isActive={isActive} isConnected={isConnected} />}
+
+                {/* Name plate */}
+                <div style={{
+                  marginTop: '3px',
+                  fontSize: '0.55rem',
+                  fontWeight: 600,
+                  color: isActive ? agent.color : isConnected ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  textAlign: 'center',
+                  transition: 'color 0.3s ease',
+                  textShadow: isActive ? `0 0 8px ${agent.color}60` : 'none',
+                }}>
+                  {agent.name}
+                </div>
+
+                {/* Status indicator */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  marginTop: '1px',
+                }}>
+                  <div style={{
+                    width: '4px', height: '4px', borderRadius: '50%',
+                    background: isActive ? '#facc15' : isConnected ? '#22c55e' : '#333',
+                    boxShadow: isActive ? '0 0 4px #facc15' : isConnected ? '0 0 4px #22c55e' : 'none',
+                    animation: isActive ? 'wr-blink 1s ease-in-out infinite' : 'none',
+                  }} />
+                  <span style={{
+                    fontSize: '0.45rem', fontWeight: 600,
+                    color: isActive ? '#facc15' : isConnected ? '#22c55e' : '#333',
+                  }}>
+                    {isActive ? 'WORKING' : isConnected ? 'READY' : 'IDLE'}
+                  </span>
+                  {isActive && (
+                    <span style={{ display: 'flex', gap: '1.5px', marginLeft: '2px' }}>
+                      {[0, 1, 2].map(j => (
+                        <span key={j} style={{
+                          width: '2px', height: '2px', borderRadius: '50%',
+                          background: '#facc15', display: 'inline-block',
+                          animation: 'wr-typedot 0.8s ease-in-out infinite',
+                          animationDelay: `${j * 0.12}s`,
+                        }} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+
+                {/* Session count badge */}
                 {state.activeSessions > 1 && (
                   <div style={{
-                    position: 'absolute',
-                    top: '-4px',
-                    right: '-4px',
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '8px',
-                    background: `linear-gradient(135deg, ${agent.color}, ${COLORS.secondary})`,
-                    color: '#fff',
-                    fontSize: '0.55rem',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: `0 2px 6px ${agent.color}60`,
+                    position: 'absolute', top: '-2px', right: '8px',
+                    width: '14px', height: '14px', borderRadius: '7px',
+                    background: `linear-gradient(135deg, ${agent.color}, #764ba2)`,
+                    color: '#fff', fontSize: '0.5rem', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: `0 0 6px ${agent.color}60`,
+                    zIndex: 20,
                   }}>
                     {state.activeSessions}
                   </div>
@@ -500,86 +698,123 @@ export default function AgentCommandCenter({
 
       {/* ── Activity Ticker ─────────────────────────────────── */}
       {activityLogRef.current.length > 0 && (
-        <div style={styles.ticker}>
-          <div style={styles.tickerContent}>
+        <div style={{
+          padding: '7px 14px', borderTop: '1px solid #141428',
+          background: 'rgba(0,0,0,0.4)', overflow: 'hidden', position: 'relative', zIndex: 10,
+        }}>
+          <div style={{
+            display: 'flex', gap: '28px', whiteSpace: 'nowrap',
+            animation: 'wr-ticker 25s linear infinite',
+          }}>
             {activityLogRef.current.slice(0, 4).map((item, i) => (
-              <span key={i} style={styles.tickerItem}>
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', fontWeight: 500,
+              }}>
                 <span>{item.emoji}</span>
-                <span>{item.text.slice(0, 50)}</span>
+                <span>{item.text.slice(0, 45)}</span>
               </span>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Selected Agent Detail Panel ─────────────────────── */}
+      {/* ── Selected Agent Detail Panel ──────────────────── */}
       {selectedAgent && (
-        <div style={styles.detailPanel}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+        <div style={{
+          position: 'absolute', bottom: '50px', left: '50%', transform: 'translateX(-50%)',
+          width: 'calc(100% - 32px)', maxWidth: '320px',
+          background: 'rgba(6,6,14,0.97)', backdropFilter: 'blur(16px)',
+          borderRadius: '10px', border: '1px solid #1a1a2e',
+          padding: '12px', zIndex: 30,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+          animation: 'wr-fadeIn 0.2s ease-out',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            {/* Mini monitor icon */}
             <div style={{
-              width: '42px', height: '42px', borderRadius: '12px',
-              background: `linear-gradient(135deg, ${selectedAgent.color || COLORS.primary}20, ${COLORS.secondary}15)`,
-              border: `1px solid ${selectedAgent.color || COLORS.primary}30`,
+              width: '36px', height: '26px', borderRadius: '3px',
+              background: `${selectedAgent.color || '#06b6d4'}15`,
+              border: `1.5px solid ${selectedAgent.color || '#06b6d4'}40`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: '22px' }}>{selectedAgent.emoji}</span>
+              <span style={{ fontSize: '16px' }}>{selectedAgent.emoji}</span>
             </div>
             <div style={{ flex: 1 }}>
-              <h3 style={{ color: '#fff', fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>{selectedAgent.name} Agent</h3>
+              <h3 style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
+                {selectedAgent.name} Agent
+              </h3>
               <div style={{
-                fontSize: '0.75rem', fontWeight: 600, marginTop: '2px',
-                color: selectedAgent.status === 'working' ? COLORS.warning : selectedAgent.status === 'connected' ? COLORS.success : 'rgba(255,255,255,0.5)',
+                fontSize: '0.65rem', fontWeight: 600, marginTop: '1px',
+                color: selectedAgent.status === 'working' ? '#facc15' : selectedAgent.status === 'connected' ? '#22c55e' : '#444',
               }}>
-                {selectedAgent.status === 'working' ? '⚡ Processing' : selectedAgent.status === 'connected' ? '✓ Connected' : '○ Idle'}
+                {selectedAgent.status === 'working' ? 'WORKING' : selectedAgent.status === 'connected' ? 'CONNECTED' : 'IDLE'}
               </div>
             </div>
-            <button onClick={() => setSelectedAgent(null)} style={styles.closeBtn}>✕</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setSelectedAgent(null); }}
+              style={{
+                width: '24px', height: '24px', borderRadius: '4px',
+                border: '1px solid #1a1a2e', background: 'rgba(255,255,255,0.03)',
+                color: '#555', fontSize: '12px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              x
+            </button>
           </div>
           {selectedAgent.currentTask && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Current Task</div>
-              <div style={{ color: '#fff', fontSize: '0.8rem', fontWeight: 500 }}>{selectedAgent.currentTask}</div>
+            <div style={{
+              background: 'rgba(255,255,255,0.02)', borderRadius: '6px',
+              padding: '8px', marginBottom: '8px', border: '1px solid #141428',
+            }}>
+              <div style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+                Current Task
+              </div>
+              <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontWeight: 500 }}>{selectedAgent.currentTask}</div>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-              <span style={{ display: 'block', color: '#fff', fontSize: '1rem', fontWeight: 700 }}>{selectedAgent.activeSessions}</span>
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase' }}>Sessions</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #141428' }}>
+              <span style={{ display: 'block', color: '#e2e8f0', fontSize: '0.95rem', fontWeight: 700 }}>{selectedAgent.activeSessions}</span>
+              <span style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sessions</span>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-              <span style={{ display: 'block', color: '#fff', fontSize: '1rem', fontWeight: 700 }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #141428' }}>
+              <span style={{ display: 'block', color: '#e2e8f0', fontSize: '0.95rem', fontWeight: 700 }}>
                 {selectedAgent.lastActivity && mounted
                   ? new Date(selectedAgent.lastActivity).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                   : '--:--'}
               </span>
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase' }}>Last Active</span>
+              <span style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Last Active</span>
             </div>
           </div>
         </div>
       )}
 
       {/* ── Footer ──────────────────────────────────────────── */}
-      <div style={styles.footer}>
-        <div style={styles.legend}>
-          <div style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: COLORS.working, boxShadow: `0 0 5px ${COLORS.working}` }} />
-            <span>Working</span>
-          </div>
-          <div style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: COLORS.success }} />
-            <span>Connected</span>
-          </div>
-          <div style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: 'rgba(255,255,255,0.25)' }} />
-            <span>Idle</span>
-          </div>
+      <div style={{
+        padding: '10px 16px', borderTop: '1px solid #141428',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: 'rgba(0,0,0,0.3)', position: 'relative', zIndex: 10,
+      }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {[
+            { label: 'Working', color: '#facc15' },
+            { label: 'Ready', color: '#22c55e' },
+            { label: 'Idle', color: '#333' },
+          ].map(l => (
+            <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: l.color, boxShadow: l.color !== '#333' ? `0 0 4px ${l.color}` : 'none' }} />
+              <span style={{ color: '#555', fontSize: '0.55rem', fontWeight: 500 }}>{l.label}</span>
+            </div>
+          ))}
         </div>
-        <div style={styles.timestamp}>
+        <div style={{ color: '#444', fontSize: '0.55rem', fontWeight: 500 }}>
           {!gatewayConnected && !loading && (
-            <span style={{ color: '#f59e0b', marginRight: '8px' }}>⚠️ Offline</span>
+            <span style={{ color: '#f59e0b', marginRight: '6px' }}>OFFLINE</span>
           )}
           {connectionType === 'sse' && (
-            <span style={{ color: '#22c55e', marginRight: '6px' }}>⚡</span>
+            <span style={{ color: '#22c55e', marginRight: '4px' }}>&#9889;</span>
           )}
           {lastUpdated && mounted ? (
             <>Synced {new Date(lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</>
@@ -590,337 +825,143 @@ export default function AgentCommandCenter({
 
       {/* Error Banner */}
       {error && !gatewayConnected && (
-        <div style={styles.errorBanner}>
-          <span>⚠️</span>
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          padding: '6px 14px', background: 'rgba(239,68,68,0.08)',
+          borderTop: '1px solid rgba(239,68,68,0.2)',
+          color: '#f59e0b', fontSize: '0.6rem', fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center',
+          zIndex: 100,
+        }}>
+          <span>&#9888;</span>
           <span>Gateway unavailable — {source === 'cache' ? 'showing cached data' : 'no data available'}</span>
         </div>
       )}
 
       {/* ── CSS Animations ──────────────────────────────────── */}
       <style>{`
-        @keyframes cc-bounce {
-          0%, 80%, 100% { transform: scale(0.5); opacity: 0.3; }
-          40% { transform: scale(1); opacity: 1; }
+        @keyframes wr-grid-scroll {
+          0% { transform: rotateX(65deg) translateY(0); }
+          100% { transform: rotateX(65deg) translateY(40px); }
         }
-        @keyframes cc-breathe {
-          0%, 100% { transform: scale(1); opacity: 0.7; }
-          50% { transform: scale(1.02); opacity: 0.85; }
-        }
-        @keyframes cc-working {
-          0%, 100% { transform: scale(1); }
-          30% { transform: scale(1.03) translateY(-1px); }
-          60% { transform: scale(0.98); }
-        }
-        @keyframes cc-glow-pulse {
-          0%, 100% { opacity: 0.5; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.05); }
-        }
-        @keyframes cc-screen-flicker {
-          0%, 95%, 100% { opacity: 1; }
-          96% { opacity: 0.4; }
-          97% { opacity: 1; }
-          98% { opacity: 0.6; }
-        }
-        @keyframes cc-blink {
-          0%, 49% { opacity: 1; }
-          50%, 100% { opacity: 0.3; }
-        }
-        @keyframes cc-fadeIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(4px); }
-          to { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
-        @keyframes cc-scanline {
+        @keyframes wr-scanline {
           0% { top: -2px; }
           100% { top: 100%; }
         }
-        @keyframes cc-ring-pulse {
-          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
-          100% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
+        @keyframes wr-pulse {
+          0%, 100% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.2); }
         }
-        @keyframes cc-ticker-scroll {
+        @keyframes wr-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+        @keyframes wr-ring {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.4; }
+          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+        @keyframes wr-screen-flicker {
+          0%, 92%, 100% { opacity: 1; }
+          93% { opacity: 0.7; }
+          94% { opacity: 1; }
+          95% { opacity: 0.5; }
+          96% { opacity: 1; }
+        }
+        @keyframes wr-typing {
+          0%, 100% { transform: translateY(0); }
+          25% { transform: translateY(-2px); }
+          50% { transform: translateY(0); }
+          75% { transform: translateY(-1px); }
+        }
+        @keyframes wr-idle-sway {
+          0%, 100% { transform: translateX(0); }
+          50% { transform: translateX(1px); }
+        }
+        @keyframes wr-typedot {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+          40% { transform: translateY(-3px); opacity: 1; }
+        }
+        @keyframes wr-code-scroll {
+          0% { opacity: 0; transform: translateX(-5px); }
+          20% { opacity: 0.6; }
+          80% { opacity: 0.6; }
+          100% { opacity: 0; transform: translateX(5px); }
+        }
+        @keyframes wr-fadeIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes wr-ticker {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        @keyframes wr-hand-type {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          15% { transform: translateY(-1.5px) rotate(-3deg); }
+          30% { transform: translateY(0) rotate(0deg); }
+          45% { transform: translateY(-1px) rotate(2deg); }
+          60% { transform: translateY(0) rotate(0deg); }
+          75% { transform: translateY(-1.5px) rotate(-2deg); }
+          90% { transform: translateY(0) rotate(1deg); }
         }
       `}</style>
     </div>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    background: 'linear-gradient(180deg, #0a0a12 0%, #0f0f1a 50%, #0a0a12 100%)',
-    borderRadius: '20px',
-    border: `1px solid ${COLORS.glassBorder}`,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  gridFloor: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundImage: `
-      linear-gradient(rgba(102,126,234,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(102,126,234,0.03) 1px, transparent 1px)
-    `,
-    backgroundSize: '32px 32px',
-    pointerEvents: 'none',
-    zIndex: 0,
-  },
-  ambientGlow: {
-    position: 'absolute',
-    top: '40%', left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '400px', height: '300px',
-    background: `radial-gradient(ellipse, ${COLORS.primary}12 0%, ${COLORS.secondary}08 40%, transparent 70%)`,
-    pointerEvents: 'none',
-    zIndex: 0,
-  },
-  scanline: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: '1px',
-    background: `linear-gradient(90deg, transparent, ${COLORS.primary}40, transparent)`,
-    animation: 'cc-scanline 5s linear infinite',
-    pointerEvents: 'none',
-    zIndex: 1,
-  },
+// ─── Character Component — CSS geometric figure ─────────────────
+function Character({ agent, isActive, isConnected }: {
+  agent: typeof AGENT_NODES[0];
+  isActive: boolean;
+  isConnected: boolean;
+}) {
+  const bodyColor = isActive ? agent.color : isConnected ? '#2a3a4a' : '#1a1a2e';
+  const headColor = isActive ? agent.color : isConnected ? '#3a4a5a' : '#222';
+  const opacity = isActive ? 1 : isConnected ? 0.7 : 0.4;
 
-  // Header
-  header: {
-    padding: '16px 20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: `1px solid ${COLORS.glassBorder}`,
-    position: 'relative',
-    zIndex: 10,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 100%)',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  hudIcon: {
-    fontSize: '20px',
-    width: '36px', height: '36px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    borderRadius: '10px',
-    background: `linear-gradient(135deg, ${COLORS.primary}20, ${COLORS.secondary}15)`,
-    border: `1px solid ${COLORS.primary}30`,
-  },
-  title: {
-    color: '#fff',
-    fontSize: '1rem',
-    fontWeight: 700,
-    margin: 0,
-    letterSpacing: '-0.02em',
-  },
-  subtitle: {
-    color: `${COLORS.accent}`,
-    fontSize: '0.55rem',
-    fontWeight: 700,
-    letterSpacing: '0.15em',
-    marginTop: '1px',
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  statusPill: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    borderRadius: '16px',
-    border: '1px solid',
-  },
-  statusDot: {
-    width: '7px', height: '7px',
-    borderRadius: '50%',
-    animation: 'cc-blink 2s ease-in-out infinite',
-  },
-  statusText: {
-    fontSize: '0.75rem',
-    fontWeight: 600,
-  },
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      gap: '0px', opacity, transition: 'opacity 0.3s ease',
+      animation: isActive ? 'wr-typing 0.6s ease-in-out infinite' : 'wr-idle-sway 4s ease-in-out infinite',
+      marginBottom: '2px', marginTop: '2px',
+    }}>
+      {/* Head */}
+      <div style={{
+        width: '12px', height: '12px', borderRadius: '50%',
+        background: `radial-gradient(circle at 40% 35%, ${headColor}, ${headColor}cc)`,
+        border: `1px solid ${isActive ? agent.color : '#1a1a2e'}`,
+        boxShadow: isActive ? `0 0 6px ${agent.color}50` : 'none',
+      }} />
 
-  // Scene
-  scene: {
-    position: 'relative',
-    height: '360px',
-    padding: '16px',
-    zIndex: 1,
-  },
-  svgLayer: {
-    position: 'absolute',
-    top: '5%', left: '5%',
-    width: '90%', height: '90%',
-    pointerEvents: 'none',
-    zIndex: 2,
-  },
+      {/* Neck */}
+      <div style={{ width: '4px', height: '2px', background: bodyColor }} />
 
-  // Central hub
-  hubContainer: {
-    position: 'absolute',
-    top: '48%', left: '50%',
-    transform: 'translate(-50%, -50%)',
-    zIndex: 10,
-  },
-  hubRing: {
-    position: 'absolute',
-    width: '90px', height: '90px',
-    top: '-5px', left: '-5px',
-    borderRadius: '50%',
-    border: `1px solid ${COLORS.primary}30`,
-    animation: 'cc-ring-pulse 2.5s ease-out infinite',
-    pointerEvents: 'none',
-  },
-  hub: {
-    width: '80px', height: '80px',
-    borderRadius: '50%',
-    background: `
-      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 50%),
-      linear-gradient(135deg, #15152a 0%, #0d0d1a 50%, #1a1a30 100%)
-    `,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    border: `1px solid ${COLORS.primary}40`,
-    transition: 'box-shadow 0.5s ease',
-  },
-  hubInner: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '1px',
-  },
-  hubIcon: {
-    fontSize: '24px',
-    filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.5))',
-  },
-  hubLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '0.5rem',
-    fontWeight: 800,
-    letterSpacing: '0.15em',
-  },
-  hubBadge: {
-    position: 'absolute' as const,
-    top: '-6px', right: '-6px',
-    width: '22px', height: '22px',
-    borderRadius: '11px',
-    background: `linear-gradient(135deg, ${COLORS.warning}, ${COLORS.danger})`,
-    color: '#000',
-    fontSize: '0.65rem',
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: `0 0 12px ${COLORS.warning}`,
-    animation: 'cc-blink 1.5s ease-in-out infinite',
-  },
-
-  // Activity ticker
-  ticker: {
-    padding: '8px 16px',
-    borderTop: `1px solid ${COLORS.glassBorder}`,
-    background: 'rgba(0,0,0,0.3)',
-    overflow: 'hidden',
-    position: 'relative' as const,
-    zIndex: 10,
-  },
-  tickerContent: {
-    display: 'flex',
-    gap: '24px',
-    animation: 'cc-ticker-scroll 30s linear infinite',
-    whiteSpace: 'nowrap' as const,
-  },
-  tickerItem: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '0.65rem',
-    fontWeight: 500,
-  },
-
-  // Detail panel
-  detailPanel: {
-    position: 'absolute' as const,
-    bottom: '60px', left: '50%',
-    transform: 'translateX(-50%)',
-    width: 'calc(100% - 40px)',
-    maxWidth: '340px',
-    background: 'rgba(10, 10, 18, 0.95)',
-    backdropFilter: 'blur(20px)',
-    borderRadius: '14px',
-    border: `1px solid ${COLORS.glassBorder}`,
-    padding: '14px',
-    zIndex: 25,
-    boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-    animation: 'cc-fadeIn 0.2s ease-out',
-  },
-  closeBtn: {
-    width: '26px', height: '26px',
-    borderRadius: '8px',
-    border: 'none',
-    background: 'rgba(255,255,255,0.05)',
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '13px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Footer
-  footer: {
-    padding: '12px 18px',
-    borderTop: `1px solid ${COLORS.glassBorder}`,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: 'rgba(0,0,0,0.2)',
-    position: 'relative' as const,
-    zIndex: 10,
-  },
-  legend: {
-    display: 'flex',
-    gap: '14px',
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: '0.65rem',
-    fontWeight: 500,
-  },
-  legendDot: {
-    width: '7px', height: '7px',
-    borderRadius: '50%',
-  },
-  timestamp: {
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: '0.6rem',
-    fontWeight: 500,
-  },
-  errorBanner: {
-    position: 'absolute' as const,
-    bottom: 0, left: 0, right: 0,
-    padding: '8px 16px',
-    background: `linear-gradient(90deg, ${COLORS.danger}15, ${COLORS.warning}15)`,
-    borderTop: `1px solid ${COLORS.danger}30`,
-    color: COLORS.warning,
-    fontSize: '0.7rem',
-    fontWeight: 500,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    justifyContent: 'center',
-    zIndex: 100,
-  },
-};
+      {/* Torso / body */}
+      <div style={{
+        width: '14px', height: '12px',
+        background: `linear-gradient(180deg, ${bodyColor}, ${bodyColor}88)`,
+        borderRadius: '3px 3px 1px 1px',
+        position: 'relative',
+      }}>
+        {/* Arms / hands — only visible when typing */}
+        {isActive && (
+          <>
+            <div style={{
+              position: 'absolute', top: '8px', left: '-4px',
+              width: '4px', height: '4px', borderRadius: '50%',
+              background: headColor,
+              animation: 'wr-hand-type 0.4s ease-in-out infinite',
+            }} />
+            <div style={{
+              position: 'absolute', top: '8px', right: '-4px',
+              width: '4px', height: '4px', borderRadius: '50%',
+              background: headColor,
+              animation: 'wr-hand-type 0.4s ease-in-out infinite 0.2s',
+            }} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
