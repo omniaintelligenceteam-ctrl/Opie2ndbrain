@@ -3,9 +3,13 @@ import type { NextRequest } from 'next/server';
 
 // Public routes that never require authentication
 const PUBLIC_ROUTES = [
-  '/',           // Landing / dashboard page
-  '/opie',       // Main Opie UI
-  '/api/status', // Health-check (no secrets exposed)
+  '/',              // Landing / dashboard page
+  '/opie',          // Main Opie UI
+  '/api/status',    // Health-check (no secrets exposed)
+  '/api/chat',      // Chat API
+  '/api/chat/:path*', // All chat sub-routes (poll, etc.)
+  '/api/tts',       // Text-to-speech
+  '/api/openclaw/:path*', // OpenClaw integration
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
@@ -35,7 +39,7 @@ function validateApiKey(apiKey: string | null): boolean {
  * Check if a path is public (doesn't need auth)
  */
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some(route => pathname === route || pathname.startsWith(route + '/'));
+  return PUBLIC_ROUTES.some(route => matchesPattern(pathname, route));
 }
 
 /**
@@ -95,3 +99,12 @@ export const config = {
     '/api/:path*',
   ],
 };
+
+// Helper to check if path matches pattern (supports wildcards)
+function matchesPattern(pathname: string, pattern: string): boolean {
+  if (pattern.includes(':path*')) {
+    const base = pattern.replace('/:path*', '');
+    return pathname === base || pathname.startsWith(base + '/');
+  }
+  return pathname === pattern || pathname.startsWith(pattern + '/');
+}
