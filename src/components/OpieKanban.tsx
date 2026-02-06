@@ -597,7 +597,7 @@ export default function OpieKanban(): React.ReactElement {
   useEffect(() => {
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
+      // Abort controller cleanup handled in finally block
     };
   }, []);
 
@@ -883,9 +883,9 @@ export default function OpieKanban(): React.ReactElement {
     }, 300);
 
     // Create abort controller for this request with 120s timeout
-    abortControllerRef.current = new AbortController();
+    const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
-      abortControllerRef.current?.abort();
+      abortController.abort();
     }, 120_000); // 120 second timeout
 
     try {
@@ -902,7 +902,7 @@ export default function OpieKanban(): React.ReactElement {
           interactionMode, // Pass current interaction mode
           memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in EXECUTE mode
         }),
-        signal: abortControllerRef.current.signal,
+        signal: abortController.signal,
       });
 
       clearTimeout(timeoutId);
@@ -1076,7 +1076,7 @@ export default function OpieKanban(): React.ReactElement {
       // If user interrupted while thinking, don't show error - just mark as cancelled
       if (err?.name === 'AbortError') {
         // Check if it was a timeout vs user cancel
-        const isTimeout = err?.message?.includes('timeout') || !abortControllerRef.current;
+        const isTimeout = err?.message?.includes('timeout') || err?.name === 'AbortError';
         setMessages(prev => prev.map(m =>
           m.id === userMessage.id ? {
             ...m,
