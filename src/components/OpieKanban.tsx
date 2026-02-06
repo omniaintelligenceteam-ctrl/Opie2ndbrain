@@ -1,45 +1,48 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense, memo } from 'react';
-import AgentsPanel from './AgentsPanel';
-import SkillsPanel from './SkillsPanel';
-import ActiveTasksPanel, { Task } from './ActiveTasksPanel';
-import OrchestrationStatus from './OrchestrationStatus';
-import CronsPanel from './CronsPanel';
-import ActivityFeed from './ActivityFeed';
-import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import { useKeyboardShortcuts, ViewId } from '../hooks/useKeyboardShortcuts';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
 import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
-import MemoryPanel from './MemoryPanel';
-import WorkspaceBrowser from './WorkspaceBrowser';
-// Removed: CalendarWidget, EmailWidget
-// Removed: QuickActionsPanel
-// AnalyticsDashboard removed - was showing placeholder data
-import MobileNavigation, { MobileHeader } from './MobileNavigation';
-import MobileChat from './MobileChat';
-import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
 import { useConversations } from '@/hooks/useConversations';
 import { Conversation } from '@/types/conversation';
-// Real-time dashboard components
-import SmartDashboardHome from './SmartDashboardHome';
-import OpieStatusWidget from './OpieStatusWidget';
-import { NotificationBell, NotificationProvider } from './NotificationCenter';
-import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
-import SidebarWidgets from './SidebarWidgets';
 import { useActiveAgents } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
-import AgentLeaderboard from './AgentLeaderboard';
-import ContextWindowVisualizer from './ContextWindowVisualizer';
-import AgentPersonalityPanel from './AgentPersonalityPanel';
-import ParticleBackground from './ParticleBackground';
-import ImmersiveVoiceMode from './ImmersiveVoiceMode';
-import StatusOrb from './StatusOrb';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
+
+// ─── Always-visible / critical-path components (loaded eagerly) ──────────────
+import CommandPalette, { ShortcutsHelp } from './CommandPalette';
+import MobileNavigation, { MobileHeader } from './MobileNavigation';
+import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
+import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
+import { NotificationBell, NotificationProvider } from './NotificationCenter';
+import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
+import StatusOrb from './StatusOrb';
+
+// ─── Lazy-loaded panels (only imported when their view is active) ────────────
+const AgentsPanel = lazy(() => import('./AgentsPanel'));
+const SkillsPanel = lazy(() => import('./SkillsPanel'));
+const ActiveTasksPanel = lazy(() => import('./ActiveTasksPanel'));
+const OrchestrationStatus = lazy(() => import('./OrchestrationStatus'));
+const CronsPanel = lazy(() => import('./CronsPanel'));
+const ActivityFeed = lazy(() => import('./ActivityFeed'));
+const MemoryPanel = lazy(() => import('./MemoryPanel'));
+const WorkspaceBrowser = lazy(() => import('./WorkspaceBrowser'));
+const MobileChat = lazy(() => import('./MobileChat'));
+const SmartDashboardHome = lazy(() => import('./SmartDashboardHome'));
+const OpieStatusWidget = lazy(() => import('./OpieStatusWidget'));
+const SidebarWidgets = lazy(() => import('./SidebarWidgets'));
+const AgentLeaderboard = lazy(() => import('./AgentLeaderboard'));
+const ContextWindowVisualizer = lazy(() => import('./ContextWindowVisualizer'));
+const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
+const ParticleBackground = lazy(() => import('./ParticleBackground'));
+const ImmersiveVoiceMode = lazy(() => import('./ImmersiveVoiceMode'));
+
+// Re-export Task type for backward compat (lazy can't export types directly)
+import type { Task } from './ActiveTasksPanel';
 
 
 // Persistence helpers
@@ -1438,15 +1441,17 @@ export default function OpieKanban(): React.ReactElement {
           padding: sidebarExpanded ? '16px' : '12px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
         }}>
-          <OpieStatusWidget 
-            size={sidebarExpanded ? "medium" : "small"}
-            showDetails={sidebarExpanded}
-            onClick={() => handleViewChange('settings')}
-          />
+          <Suspense fallback={null}>
+            <OpieStatusWidget 
+              size={sidebarExpanded ? "medium" : "small"}
+              showDetails={sidebarExpanded}
+              onClick={() => handleViewChange('settings')}
+            />
+          </Suspense>
         </div>
         
         {/* Sidebar Widgets - Calendar, Email, System Health */}
-        {!isMobile && <SidebarWidgets isExpanded={sidebarExpanded} />}
+        {!isMobile && <Suspense fallback={null}><SidebarWidgets isExpanded={sidebarExpanded} /></Suspense>}
         
         {/* Collapse/Expand Toggle */}
         {!isMobile && (
@@ -1570,24 +1575,28 @@ export default function OpieKanban(): React.ReactElement {
     <NotificationProvider>
       <div style={styles.container}>
         {/* Premium particle background */}
-        <ParticleBackground
-          particleCount={50}
-          intensity="low"
-          mouseAttraction={!isMobile}
-        />
+        <Suspense fallback={null}>
+          <ParticleBackground
+            particleCount={50}
+            intensity="low"
+            mouseAttraction={!isMobile}
+          />
+        </Suspense>
 
         {/* Immersive voice mode overlay */}
-        <ImmersiveVoiceMode
-          isActive={activeView === 'voice' && micOn && !isMobile}
-          isSpeaking={isSpeaking}
-          isListening={micOn && !isLoading && !isSpeaking}
-          isLoading={isLoading}
-          transcript={transcript}
-          lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
-          onClose={() => setMicOn(false)}
-          onMicToggle={() => setMicOn(!micOn)}
-          micOn={micOn}
-        />
+        <Suspense fallback={null}>
+          <ImmersiveVoiceMode
+            isActive={activeView === 'voice' && micOn && !isMobile}
+            isSpeaking={isSpeaking}
+            isListening={micOn && !isLoading && !isSpeaking}
+            isLoading={isLoading}
+            transcript={transcript}
+            lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
+            onClose={() => setMicOn(false)}
+            onMicToggle={() => setMicOn(!micOn)}
+            micOn={micOn}
+          />
+        </Suspense>
 
         {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
         {isMobile && <MobileOverlay />}
@@ -1600,6 +1609,7 @@ export default function OpieKanban(): React.ReactElement {
         paddingTop: isMobile && activeView !== 'voice' ? '0' : 0,
         minHeight: isMobile ? '100dvh' : '100vh',
       }}>
+        <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>Loading…</div>}>
         {/* Dashboard View - Smart Real-Time Dashboard */}
         {activeView === 'dashboard' && (
           <div style={{
@@ -2098,6 +2108,7 @@ export default function OpieKanban(): React.ReactElement {
             </div>
           </div>
         )}
+        </Suspense>
       </main>
 
       {/* Secondary Chat Windows */}

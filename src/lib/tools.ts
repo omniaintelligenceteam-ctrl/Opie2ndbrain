@@ -1,7 +1,7 @@
 // Server-side tools for EXECUTE mode
 // These execute on the server and return results to the AI
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 export interface Tool {
   name: string;
@@ -532,11 +532,8 @@ async function writeWebResponse(args: { request_id: string; response: string }) 
   const { request_id, response } = args;
   
   try {
-    const supabase = createClient(
-      'https://wsiedmznnwaejwonuraj.supabase.co',
-      process.env.SUPABASE_SERVICE_KEY || '',
-      { auth: { persistSession: false } }
-    );
+    const supabase = getSupabaseAdmin();
+    if (!supabase) throw new Error('Supabase not configured');
     
     const { error } = await supabase
       .from('opie_requests')

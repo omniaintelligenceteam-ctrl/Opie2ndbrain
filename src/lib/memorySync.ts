@@ -1,20 +1,11 @@
 // Bi-directional memory sync between Opie (me) and Opie2ndbrain (web app)
 // Both write to Supabase, both read from Supabase
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
-// Hardcoded to working project - wsiedmznnwaejwonuraj
-const supabaseUrl = 'https://wsiedmznnwaejwonuraj.supabase.co';
-// Key will come from env var for security
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
-
-// Lazy init
-let _supabase: ReturnType<typeof createClient> | null = null;
+// Use consolidated singleton
 function getSupabase() {
-  if (!_supabase && supabaseUrl && supabaseKey) {
-    _supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-  }
-  return _supabase;
+  return getSupabaseAdmin();
 }
 
 export interface MemoryEntry {
