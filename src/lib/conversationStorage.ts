@@ -120,6 +120,7 @@ export async function saveConversations(store: ConversationStore): Promise<void>
     const sessionId = getSessionId();
 
     // Upsert each conversation to Supabase
+    if (!supabase) return;
     for (const conv of conversations) {
       const { error } = await supabase
         .from('opie_conversations')
