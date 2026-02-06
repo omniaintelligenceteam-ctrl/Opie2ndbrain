@@ -9,7 +9,7 @@ interface OrgNodeProps {
   compact?: boolean;
 }
 
-export default function OrgNodeComponent({ node, onNodeClick, compact = false }: OrgNodeProps): React.ReactElement {
+function OrgNodeComponent({ node, onNodeClick, compact = false }: OrgNodeProps): React.ReactElement {
   const handleClick = () => {
     onNodeClick?.(node);
   };
@@ -197,3 +197,5 @@ export default function OrgNodeComponent({ node, onNodeClick, compact = false }:
     </div>
   );
 }
+
+export default React.memo(OrgNodeComponent);

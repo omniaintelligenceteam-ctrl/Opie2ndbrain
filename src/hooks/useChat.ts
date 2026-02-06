@@ -106,7 +106,9 @@ async function pollForAsyncResponse(
 }
 
 // ============================================================================
-// Voice Engine
+// Voice Engine (DEPRECATED — only used by OpieKanban.refactored.tsx backup)
+// The active voice system uses src/hooks/useVoiceEngine.ts with a finite state machine.
+// DO NOT use this in new code.
 // ============================================================================
 
 interface VoiceEngineOptions {

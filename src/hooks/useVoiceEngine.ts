@@ -93,6 +93,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   const ctxRef = useRef(ctx);
   const onSendRef = useRef(onSend);
   const mountedRef = useRef(true);
+  const accumulatedFinalRef = useRef('');
 
   // Keep refs in sync
   ctxRef.current = ctx;
@@ -109,31 +110,34 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     for (const effect of effects) {
       switch (effect.type) {
         case 'START_RECOGNITION': {
-          if (!recognitionRef.current || restartingRef.current) break;
+          if (!recognitionRef.current) break;
+          const rec = recognitionRef.current;
+          // Cancel any pending onend restart
           restartingRef.current = true;
+          // Reset accumulated transcript for fresh session
+          accumulatedFinalRef.current = '';
           // Stop first to ensure clean state
-          try { recognitionRef.current.stop(); } catch { /* ok */ }
+          try { rec.stop(); } catch { /* ok */ }
           setTimeout(() => {
             if (!mountedRef.current) return;
+            // Verify we should still be listening
+            if (!ctxRef.current.micOn || ctxRef.current.state !== 'listening') {
+              restartingRef.current = false;
+              return;
+            }
             restartingRef.current = false;
-            const rec = recognitionRef.current;
-            if (!rec) return;
-            // Guard: abort if already started
-            if ((rec as any).__running) return;
             try {
               rec.start();
-              (rec as any).__running = true;
             } catch (e: any) {
               if (e?.name === 'InvalidStateError') {
                 // Already running — not an error
-                (rec as any).__running = true;
                 return;
               }
               console.warn('[VoiceEngine] Recognition start failed:', e);
               // Retry once
               setTimeout(() => {
                 if (!mountedRef.current || !ctxRef.current.micOn) return;
-                try { rec.start(); (rec as any).__running = true; } catch { /* give up */ }
+                try { rec.start(); } catch { /* give up */ }
               }, 500);
             }
           }, RECOGNITION_RESTART_DELAY);
@@ -141,11 +145,14 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         }
 
         case 'STOP_RECOGNITION': {
-          restartingRef.current = false;
+          // Prevent onend from restarting
+          restartingRef.current = true;
+          accumulatedFinalRef.current = '';
           if (recognitionRef.current) {
-            (recognitionRef.current as any).__running = false;
             try { recognitionRef.current.stop(); } catch { /* ok */ }
           }
+          // Clear after delay so onend fires and is blocked
+          setTimeout(() => { restartingRef.current = false; }, RECOGNITION_RESTART_DELAY + 50);
           break;
         }
 
@@ -353,42 +360,50 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       if (!mountedRef.current) return;
 
-      // Collect finals and interims
-      let finalText = '';
+      // Only process NEW/changed results from resultIndex onward
+      // (Web Speech API keeps all previous results in e.results with continuous mode)
+      let newFinalText = '';
       let interimText = '';
 
-      for (let i = 0; i < e.results.length; i++) {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
         const result = e.results[i];
         if (result.isFinal) {
-          finalText += result[0].transcript + ' ';
+          newFinalText += result[0].transcript + ' ';
         } else {
           interimText += result[0].transcript;
         }
       }
 
-      const combined = (finalText + interimText).trim();
-      const isFinal = !!finalText.trim() && !interimText;
+      // Accumulate only NEW final text (don't re-add old finals)
+      if (newFinalText.trim()) {
+        accumulatedFinalRef.current = (accumulatedFinalRef.current + ' ' + newFinalText).trim();
+      }
 
-      if (combined) {
+      // Display: all accumulated finals + current interim
+      const displayText = (accumulatedFinalRef.current + ' ' + interimText).trim();
+      const isFinal = !!newFinalText.trim() && !interimText;
+
+      if (displayText) {
         dispatch({
           type: 'SPEECH_RESULT',
-          transcript: combined,
+          transcript: displayText,
           isFinal,
         });
       }
     };
 
     recognition.onend = () => {
-      (recognition as any).__running = false;
       if (!mountedRef.current) return;
-      // Auto-restart if mic should still be on and we're in listening state
+      // Auto-restart if mic should still be on, we're in listening state,
+      // and no START_RECOGNITION effect is already managing the restart
       if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && !restartingRef.current) {
         restartingRef.current = true;
         setTimeout(() => {
           if (!mountedRef.current) return;
           restartingRef.current = false;
-          if ((recognition as any).__running) return;
-          try { recognition.start(); (recognition as any).__running = true; } catch { /* ok */ }
+          // Re-check state before restarting
+          if (!ctxRef.current.micOn || ctxRef.current.state !== 'listening') return;
+          try { recognition.start(); } catch { /* ok */ }
         }, RECOGNITION_RESTART_DELAY);
       }
     };
@@ -398,14 +413,13 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
       // 'no-speech' and 'aborted' are expected — just restart
       if (e.error === 'no-speech' || e.error === 'aborted') {
-        (recognition as any).__running = false;
-        if (ctxRef.current.micOn && !restartingRef.current) {
+        if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && !restartingRef.current) {
           restartingRef.current = true;
           setTimeout(() => {
             if (!mountedRef.current) return;
             restartingRef.current = false;
-            if ((recognition as any).__running) return;
-            try { recognition.start(); (recognition as any).__running = true; } catch { /* ok */ }
+            if (!ctxRef.current.micOn || ctxRef.current.state !== 'listening') return;
+            try { recognition.start(); } catch { /* ok */ }
           }, 300);
         }
         return;

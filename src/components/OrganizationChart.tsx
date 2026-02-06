@@ -38,9 +38,9 @@ export default function OrganizationChart({
       if (matchingAgent) {
         return {
           ...orgNode,
-          status: matchingAgent.status === 'working' ? 'busy' : 
-                  matchingAgent.status === 'connected' ? 'active' : 
-                  'idle',
+          status: (matchingAgent.status === 'working' ? 'busy' :
+                  matchingAgent.status === 'connected' ? 'active' :
+                  'idle') as OrgNode['status'],
           activeSessions: matchingAgent.activeSessions,
         };
       }

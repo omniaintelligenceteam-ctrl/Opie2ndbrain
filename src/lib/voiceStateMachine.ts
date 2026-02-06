@@ -141,12 +141,10 @@ export function transition(ctx: VoiceContext, event: VoiceEvent): VoiceTransitio
           };
 
         case 'SPEECH_RESULT': {
-          const newPending = event.isFinal
-            ? (ctx.pendingText + ' ' + event.transcript).trim()
-            : ctx.pendingText;
-          const displayText = event.isFinal
-            ? newPending
-            : (ctx.pendingText + ' ' + event.transcript).trim();
+          // transcript already contains all accumulated text (final + interim)
+          // from the onresult handler — use it directly, don't append to pendingText
+          const displayText = event.transcript;
+          const newPending = event.isFinal ? displayText : ctx.pendingText;
 
           effects.push({ type: 'CLEAR_SILENCE_TIMER' });
           effects.push({ type: 'START_SILENCE_TIMER', text: newPending || displayText });

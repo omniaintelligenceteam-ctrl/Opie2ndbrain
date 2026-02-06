@@ -22,6 +22,7 @@ import MobileChat from './MobileChat';
 import ChatPanel from './ChatPanel';
 import KanbanBoard from './KanbanBoard';
 import SettingsView from './SettingsView';
+import OrganizationChart from './OrganizationChart';
 
 export interface DashboardViewsProps {
   activeView: ViewId;
@@ -177,6 +178,18 @@ export function DashboardViews(props: DashboardViewsProps): React.ReactElement {
               </p>
             </div>
             <AgentsPanel onDeploy={onDeployAgent} activeAgents={activeAgents} />
+          </div>
+        </ErrorBoundary>
+      )}
+
+      {/* Organization View */}
+      {activeView === 'organization' && (
+        <ErrorBoundary section="Organization">
+          <div style={viewContainerStyle}>
+            <OrganizationChart
+              isMobile={isMobile}
+              isTablet={isTablet}
+            />
           </div>
         </ErrorBoundary>
       )}

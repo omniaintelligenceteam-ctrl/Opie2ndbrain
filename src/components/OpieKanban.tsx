@@ -591,7 +591,7 @@ export default function OpieKanban(): React.ReactElement {
     }
   };
 
-  const handleSend = async (text?: string, image?: string) => {
+  const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
     
@@ -748,7 +748,7 @@ export default function OpieKanban(): React.ReactElement {
         ));
 
         // Voice engine handles TTS — notify it of the response
-        if (reply && reply !== 'No response received' && micOn) {
+        if (reply && reply !== 'No response received') {
           notifyResponse(reply);
         }
 
@@ -813,10 +813,12 @@ export default function OpieKanban(): React.ReactElement {
         ));
 
         // Voice engine handles TTS — notify it of the response
-        if (reply && !data.error && micOn) {
+        if (reply && !data.error) {
           notifyResponse(reply);
         }
       }
+
+      return reply || undefined;
     } catch (err: any) {
       clearTimeout(timeoutId);
 
@@ -869,8 +871,7 @@ export default function OpieKanban(): React.ReactElement {
 
   // Connect handleSend to the voice engine via ref (avoids circular dependency)
   handleSendRef.current = async (text: string): Promise<string | void> => {
-    await handleSend(text);
-    // Return is handled via notifyResponse in handleSend
+    return handleSend(text);
   };
 
   // Handle send for secondary/pinned chat windows
