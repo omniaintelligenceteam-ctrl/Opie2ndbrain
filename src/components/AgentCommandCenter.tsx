@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAgentSessions } from '@/hooks/useAgentSessions';
 import { AgentNodeState, AGENT_NODES } from '@/lib/agentMapping';
 
@@ -11,7 +11,6 @@ interface AgentCommandCenterProps {
 }
 
 // Workstation layout: 2 rows of 4, positioned around a central holotable
-// Positions are in percentage (left%, top%) within the scene
 const WORKSTATIONS = [
   // Top row — facing down toward center
   { x: 10, y: 8,  row: 'top' },   // Research
@@ -118,31 +117,30 @@ export default function AgentCommandCenter({
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   padding: '8px 10px', borderRadius: '8px',
-                  background: isActive ? '#0c1a0c' : '#0a0a14',
-                  border: `1px solid ${isActive ? `${agent.color}50` : '#1a1a2e'}`,
+                  background: isActive ? '#152015' : '#161b2e',
+                  border: `1px solid ${isActive ? `${agent.color}50` : '#2d3a5c'}`,
                   cursor: 'pointer',
                 }}
               >
                 {/* Mini monitor icon */}
                 <div style={{
                   width: '28px', height: '20px', borderRadius: '3px',
-                  background: isActive ? agent.color : '#1a1a2e',
-                  border: `1.5px solid ${isActive ? agent.color : '#2a2a3e'}`,
+                  background: isActive ? agent.color : '#2a2a4a',
+                  border: `1.5px solid ${isActive ? agent.color : '#3a3a5a'}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '10px', position: 'relative',
                   boxShadow: isActive ? `0 0 8px ${agent.color}60` : 'none',
                 }}>
                   <span style={{ filter: isActive ? 'brightness(2)' : 'none' }}>{agent.emoji}</span>
-                  {/* Monitor stand */}
                   <div style={{
                     position: 'absolute', bottom: '-4px', left: '50%', transform: 'translateX(-50%)',
-                    width: '8px', height: '3px', background: '#2a2a3e', borderRadius: '0 0 2px 2px',
+                    width: '8px', height: '3px', background: '#3a3a5a', borderRadius: '0 0 2px 2px',
                   }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: isActive ? '#fff' : '#888', fontSize: '0.7rem', fontWeight: 600 }}>{agent.name}</div>
+                  <div style={{ color: isActive ? '#fff' : '#b0b8cc', fontSize: '0.7rem', fontWeight: 600 }}>{agent.name}</div>
                   <div style={{
-                    color: isActive ? '#4ade80' : isConnected ? '#22c55e' : '#444',
+                    color: isActive ? '#4ade80' : isConnected ? '#22c55e' : '#667',
                     fontSize: '0.6rem', fontWeight: 500,
                   }}>
                     {isActive ? 'WORKING' : isConnected ? 'READY' : 'IDLE'}
@@ -170,9 +168,9 @@ export default function AgentCommandCenter({
   // ─── FULL DESKTOP MODE — VIRTUAL OFFICE SCENE ──────────────────
   return (
     <div style={{
-      background: '#06060e',
+      background: '#111827',
       borderRadius: isFullscreen ? '0' : '16px',
-      border: isFullscreen ? 'none' : '1px solid #141428',
+      border: isFullscreen ? 'none' : '1px solid #2d3a5c',
       overflow: 'hidden',
       position: isFullscreen ? 'fixed' : 'relative',
       ...(isFullscreen ? { top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 } : {}),
@@ -191,8 +189,8 @@ export default function AgentCommandCenter({
           transform: 'rotateX(65deg)',
           transformOrigin: 'center top',
           backgroundImage: `
-            linear-gradient(rgba(6,182,212,0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(6,182,212,0.07) 1px, transparent 1px)
+            linear-gradient(rgba(6,182,212,0.18) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(6,182,212,0.18) 1px, transparent 1px)
           `,
           backgroundSize: '40px 40px',
           animation: 'wr-grid-scroll 8s linear infinite',
@@ -202,17 +200,17 @@ export default function AgentCommandCenter({
       {/* Ambient center glow */}
       <div style={{
         position: 'absolute', top: '35%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: '300px', height: '200px',
+        width: '350px', height: '250px',
         background: workingCount > 0
-          ? 'radial-gradient(ellipse, rgba(6,182,212,0.12) 0%, rgba(118,75,162,0.06) 40%, transparent 70%)'
-          : 'radial-gradient(ellipse, rgba(6,182,212,0.05) 0%, transparent 60%)',
+          ? 'radial-gradient(ellipse, rgba(6,182,212,0.25) 0%, rgba(118,75,162,0.12) 40%, transparent 70%)'
+          : 'radial-gradient(ellipse, rgba(6,182,212,0.12) 0%, rgba(118,75,162,0.05) 50%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
       }} />
 
       {/* Scanline */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-        background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.3), transparent)',
+        background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.4), transparent)',
         animation: 'wr-scanline 4s linear infinite',
         pointerEvents: 'none', zIndex: 50,
       }} />
@@ -220,8 +218,8 @@ export default function AgentCommandCenter({
       {/* ── HUD Header ─────────────────────────────────────── */}
       <div style={{
         padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderBottom: '1px solid #141428', position: 'relative', zIndex: 10,
-        background: 'linear-gradient(180deg, rgba(6,182,212,0.03) 0%, transparent 100%)',
+        borderBottom: '1px solid #2d3a5c', position: 'relative', zIndex: 10,
+        background: 'linear-gradient(180deg, rgba(6,182,212,0.06) 0%, transparent 100%)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
@@ -230,14 +228,14 @@ export default function AgentCommandCenter({
           }} />
           <div>
             <h2 style={{
-              color: '#e2e8f0', fontSize: '0.9rem', fontWeight: 700, margin: 0,
+              color: '#f1f5f9', fontSize: '0.9rem', fontWeight: 700, margin: 0,
               letterSpacing: '0.05em', textTransform: 'uppercase',
             }}>
               Opie War Room
             </h2>
             <div style={{
-              color: '#06b6d4', fontSize: '0.5rem', fontWeight: 600,
-              letterSpacing: '0.2em', opacity: 0.7,
+              color: '#22d3ee', fontSize: '0.5rem', fontWeight: 600,
+              letterSpacing: '0.2em', opacity: 0.9,
             }}>
               LIVE OPERATIONS
             </div>
@@ -246,8 +244,8 @@ export default function AgentCommandCenter({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{
             padding: '4px 10px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600,
-            background: workingCount > 0 ? 'rgba(250,204,21,0.08)' : 'rgba(34,197,94,0.08)',
-            border: `1px solid ${workingCount > 0 ? 'rgba(250,204,21,0.25)' : 'rgba(34,197,94,0.25)'}`,
+            background: workingCount > 0 ? 'rgba(250,204,21,0.12)' : 'rgba(34,197,94,0.12)',
+            border: `1px solid ${workingCount > 0 ? 'rgba(250,204,21,0.35)' : 'rgba(34,197,94,0.35)'}`,
             color: workingCount > 0 ? '#facc15' : '#22c55e',
             display: 'flex', alignItems: 'center', gap: '6px',
           }}>
@@ -260,7 +258,7 @@ export default function AgentCommandCenter({
           {connectionType === 'sse' && (
             <div style={{
               padding: '4px 8px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 700,
-              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
+              background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
               color: '#22c55e', letterSpacing: '0.1em',
             }}>
               LIVE
@@ -271,9 +269,9 @@ export default function AgentCommandCenter({
             onClick={() => setIsFullscreen(f => !f)}
             style={{
               padding: '4px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600,
-              background: isFullscreen ? 'rgba(6,182,212,0.15)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${isFullscreen ? 'rgba(6,182,212,0.3)' : '#1a1a2e'}`,
-              color: isFullscreen ? '#06b6d4' : '#555',
+              background: isFullscreen ? 'rgba(6,182,212,0.2)' : 'rgba(255,255,255,0.06)',
+              border: `1px solid ${isFullscreen ? 'rgba(6,182,212,0.4)' : '#2d3a5c'}`,
+              color: isFullscreen ? '#06b6d4' : '#8899aa',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
               transition: 'all 0.2s ease',
             }}
@@ -310,7 +308,6 @@ export default function AgentCommandCenter({
             const state = getNodeState(agent.id);
             const isActive = state.status === 'working';
             const isConnected = state.status === 'connected';
-            // Line from workstation to center
             const sx = ws.x + 6;
             const sy = ws.row === 'top' ? ws.y + 18 : ws.y + 2;
             const cx = 50;
@@ -319,23 +316,22 @@ export default function AgentCommandCenter({
               <g key={agent.id}>
                 <line
                   x1={sx} y1={sy} x2={cx} y2={cy}
-                  stroke={isActive ? agent.color : isConnected ? `${agent.color}40` : '#141428'}
+                  stroke={isActive ? agent.color : isConnected ? `${agent.color}60` : '#2d3a5c'}
                   strokeWidth={isActive ? '0.3' : '0.15'}
                   strokeDasharray={isActive ? 'none' : '1 2'}
-                  opacity={isActive ? 0.7 : 0.4}
+                  opacity={isActive ? 0.8 : 0.5}
                   filter={isActive ? 'url(#wr-neon)' : undefined}
                 />
-                {/* Traveling data particles */}
                 {isActive && (
                   <>
-                    <circle r="0.6" fill={agent.color} opacity="0.9" filter="url(#wr-neon)">
+                    <circle r="0.7" fill={agent.color} opacity="0.9" filter="url(#wr-neon)">
                       <animateMotion
                         dur={`${2 + i * 0.3}s`}
                         repeatCount="indefinite"
                         path={`M${sx},${sy} L${cx},${cy}`}
                       />
                     </circle>
-                    <circle r="0.4" fill="#fff" opacity="0.5">
+                    <circle r="0.5" fill="#fff" opacity="0.6">
                       <animateMotion
                         dur={`${3 + i * 0.2}s`}
                         repeatCount="indefinite"
@@ -358,16 +354,16 @@ export default function AgentCommandCenter({
           {/* Holographic projection cone */}
           <div style={{
             position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-            width: '4px', height: workingCount > 0 ? '50px' : '25px',
-            background: `linear-gradient(to top, ${workingCount > 0 ? 'rgba(6,182,212,0.6)' : 'rgba(6,182,212,0.15)'}, transparent)`,
-            filter: 'blur(3px)',
+            width: '6px', height: workingCount > 0 ? '55px' : '30px',
+            background: `linear-gradient(to top, ${workingCount > 0 ? 'rgba(6,182,212,0.7)' : 'rgba(6,182,212,0.25)'}, transparent)`,
+            filter: 'blur(4px)',
             transition: 'all 0.5s ease',
           }} />
           <div style={{
             position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-            width: workingCount > 0 ? '60px' : '30px',
-            height: workingCount > 0 ? '40px' : '20px',
-            background: `radial-gradient(ellipse at bottom, ${workingCount > 0 ? 'rgba(6,182,212,0.2)' : 'rgba(6,182,212,0.05)'}, transparent)`,
+            width: workingCount > 0 ? '70px' : '40px',
+            height: workingCount > 0 ? '45px' : '25px',
+            background: `radial-gradient(ellipse at bottom, ${workingCount > 0 ? 'rgba(6,182,212,0.3)' : 'rgba(6,182,212,0.1)'}, transparent)`,
             transition: 'all 0.5s ease',
             pointerEvents: 'none',
           }} />
@@ -378,7 +374,7 @@ export default function AgentCommandCenter({
               <div style={{
                 position: 'absolute', top: '50%', left: '50%',
                 width: '120px', height: '120px',
-                border: '1px solid rgba(6,182,212,0.15)',
+                border: '1px solid rgba(6,182,212,0.25)',
                 borderRadius: '50%',
                 animation: 'wr-ring 3s ease-out infinite',
                 pointerEvents: 'none',
@@ -386,7 +382,7 @@ export default function AgentCommandCenter({
               <div style={{
                 position: 'absolute', top: '50%', left: '50%',
                 width: '120px', height: '120px',
-                border: '1px solid rgba(6,182,212,0.1)',
+                border: '1px solid rgba(6,182,212,0.15)',
                 borderRadius: '50%',
                 animation: 'wr-ring 3s ease-out infinite 1s',
                 pointerEvents: 'none',
@@ -398,39 +394,37 @@ export default function AgentCommandCenter({
           <div style={{
             width: '90px', height: '90px',
             clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
-            background: `linear-gradient(135deg, #0d1520 0%, #0a1018 50%, #0d1520 100%)`,
+            background: `linear-gradient(135deg, #1a2540 0%, #152030 50%, #1a2540 100%)`,
             border: 'none',
             position: 'relative',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexDirection: 'column',
           }}>
-            {/* Hex border glow */}
             <div style={{
               position: 'absolute', inset: 0,
               clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
               boxShadow: workingCount > 0
-                ? '0 0 30px rgba(6,182,212,0.4), 0 0 60px rgba(6,182,212,0.15), inset 0 0 20px rgba(6,182,212,0.1)'
-                : '0 0 15px rgba(6,182,212,0.15), inset 0 0 10px rgba(6,182,212,0.05)',
+                ? '0 0 35px rgba(6,182,212,0.5), 0 0 70px rgba(6,182,212,0.2), inset 0 0 25px rgba(6,182,212,0.15)'
+                : '0 0 20px rgba(6,182,212,0.25), inset 0 0 15px rgba(6,182,212,0.08)',
               transition: 'box-shadow 0.5s ease',
               pointerEvents: 'none',
             }} />
             <div style={{
               position: 'absolute', inset: '1px',
               clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
-              border: `1px solid ${workingCount > 0 ? 'rgba(6,182,212,0.4)' : 'rgba(6,182,212,0.15)'}`,
+              border: `1px solid ${workingCount > 0 ? 'rgba(6,182,212,0.5)' : 'rgba(6,182,212,0.25)'}`,
               pointerEvents: 'none',
               transition: 'border-color 0.5s ease',
             }} />
 
-            {/* OPIE text + count */}
             <span style={{
               fontSize: '22px',
-              filter: workingCount > 0 ? 'drop-shadow(0 0 6px rgba(6,182,212,0.8))' : 'none',
+              filter: workingCount > 0 ? 'drop-shadow(0 0 8px rgba(6,182,212,0.9))' : 'drop-shadow(0 0 3px rgba(6,182,212,0.3))',
             }}>
               &#9889;
             </span>
             <span style={{
-              color: workingCount > 0 ? '#06b6d4' : '#334155',
+              color: workingCount > 0 ? '#22d3ee' : '#4a6080',
               fontSize: '0.5rem', fontWeight: 800, letterSpacing: '0.2em',
               marginTop: '2px', transition: 'color 0.3s',
             }}>
@@ -443,7 +437,7 @@ export default function AgentCommandCenter({
                 background: 'linear-gradient(135deg, #facc15, #f97316)',
                 color: '#000', fontSize: '0.6rem', fontWeight: 800,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 10px rgba(250,204,21,0.6)',
+                boxShadow: '0 0 12px rgba(250,204,21,0.7)',
                 zIndex: 20,
               }}>
                 {workingCount}
@@ -487,10 +481,10 @@ export default function AgentCommandCenter({
                   top: facingDown ? '85%' : '-25%',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  width: '100px', height: '40px',
-                  background: `radial-gradient(ellipse, ${agent.color}25 0%, transparent 70%)`,
+                  width: '110px', height: '50px',
+                  background: `radial-gradient(ellipse, ${agent.color}35 0%, transparent 70%)`,
                   pointerEvents: 'none',
-                  filter: 'blur(4px)',
+                  filter: 'blur(6px)',
                 }} />
               )}
 
@@ -501,13 +495,13 @@ export default function AgentCommandCenter({
                   bottom: '105%',
                   left: '50%', transform: 'translateX(-50%)',
                   marginBottom: '4px',
-                  background: 'rgba(0,0,0,0.9)',
-                  border: `1px solid ${agent.color}40`,
+                  background: 'rgba(15,20,35,0.95)',
+                  border: `1px solid ${agent.color}50`,
                   borderRadius: '6px',
                   padding: '3px 7px',
                   maxWidth: '120px',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.7)',
+                  fontSize: '0.5rem', color: 'rgba(255,255,255,0.85)',
                   zIndex: 25, pointerEvents: 'none',
                   animation: 'wr-fadeIn 0.3s ease',
                 }}>
@@ -521,22 +515,22 @@ export default function AgentCommandCenter({
                 gap: '0px',
               }}>
 
-                {/* Character (sits BEHIND desk if facing down, IN FRONT if facing up) */}
-                {facingDown && <Character agent={agent} isActive={isActive} isConnected={isConnected} />}
+                {/* Bot avatar (sits BEHIND desk if top row) */}
+                {facingDown && <BotAvatar agent={agent} isActive={isActive} isConnected={isConnected} />}
 
                 {/* Monitor */}
                 <div style={{
                   width: '48px', height: '32px',
                   background: isActive
-                    ? `linear-gradient(180deg, ${agent.color}15 0%, #0a0a14 100%)`
-                    : '#0a0a14',
-                  border: `2px solid ${isActive ? agent.color : isConnected ? '#2a3a4a' : '#1a1a2e'}`,
+                    ? `linear-gradient(180deg, ${agent.color}25 0%, #1a1a30 100%)`
+                    : '#1a1a30',
+                  border: `2px solid ${isActive ? agent.color : isConnected ? '#3a5070' : '#2a2a4a'}`,
                   borderRadius: '3px 3px 0 0',
                   position: 'relative',
                   overflow: 'hidden',
                   boxShadow: isActive
-                    ? `0 0 15px ${agent.color}40, 0 0 30px ${agent.color}15, inset 0 0 8px ${agent.color}20`
-                    : isHovered ? '0 0 6px rgba(6,182,212,0.1)' : 'none',
+                    ? `0 0 18px ${agent.color}50, 0 0 35px ${agent.color}20, inset 0 0 10px ${agent.color}25`
+                    : isHovered ? `0 0 8px rgba(6,182,212,0.15)` : `0 0 4px rgba(0,0,0,0.3)`,
                   transition: 'all 0.3s ease',
                   animation: isActive ? 'wr-screen-flicker 4s ease-in-out infinite' : 'none',
                   zIndex: 2,
@@ -546,8 +540,8 @@ export default function AgentCommandCenter({
                     position: 'absolute', top: '50%', left: '50%',
                     transform: 'translate(-50%, -50%)',
                     fontSize: '14px',
-                    opacity: isActive ? 1 : isConnected ? 0.5 : 0.2,
-                    filter: isActive ? `drop-shadow(0 0 4px ${agent.color})` : 'none',
+                    opacity: isActive ? 1 : isConnected ? 0.7 : 0.4,
+                    filter: isActive ? `drop-shadow(0 0 5px ${agent.color})` : 'none',
                     transition: 'all 0.3s ease',
                   }}>
                     {agent.emoji}
@@ -557,7 +551,7 @@ export default function AgentCommandCenter({
                   {isActive && (
                     <div style={{
                       position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                      overflow: 'hidden', opacity: 0.25,
+                      overflow: 'hidden', opacity: 0.3,
                     }}>
                       {[0, 1, 2, 3, 4, 5].map(j => (
                         <div key={j} style={{
@@ -569,7 +563,7 @@ export default function AgentCommandCenter({
                           borderRadius: '1px',
                           animation: `wr-code-scroll 2s linear infinite`,
                           animationDelay: `${j * 0.3}s`,
-                          opacity: 0.6,
+                          opacity: 0.7,
                         }} />
                       ))}
                     </div>
@@ -579,7 +573,7 @@ export default function AgentCommandCenter({
                   {isActive && (
                     <div style={{
                       position: 'absolute', top: 0, left: 0, right: 0, height: '6px',
-                      background: `linear-gradient(180deg, ${agent.color}20, transparent)`,
+                      background: `linear-gradient(180deg, ${agent.color}30, transparent)`,
                     }} />
                   )}
                 </div>
@@ -587,14 +581,14 @@ export default function AgentCommandCenter({
                 {/* Monitor stand */}
                 <div style={{
                   width: '6px', height: '5px',
-                  background: isActive ? '#2a3a4a' : '#1a1a2e',
+                  background: isActive ? '#3a5070' : '#2a2a4a',
                   zIndex: 2,
                 }} />
 
                 {/* Monitor base */}
                 <div style={{
                   width: '18px', height: '3px',
-                  background: isActive ? '#2a3a4a' : '#1a1a2e',
+                  background: isActive ? '#3a5070' : '#2a2a4a',
                   borderRadius: '0 0 2px 2px',
                   zIndex: 2,
                 }} />
@@ -604,43 +598,42 @@ export default function AgentCommandCenter({
                   width: '72px', height: '10px',
                   marginTop: '-1px',
                   background: isActive
-                    ? `linear-gradient(180deg, #1a2530, #141e28)`
-                    : 'linear-gradient(180deg, #12121e, #0e0e1a)',
+                    ? `linear-gradient(180deg, #253545, #1e2e3e)`
+                    : 'linear-gradient(180deg, #1e2235, #181c2e)',
                   borderRadius: '2px',
-                  border: `1px solid ${isActive ? '#2a3a4a' : '#1a1a2e'}`,
+                  border: `1px solid ${isActive ? '#3a5070' : '#2a2a4a'}`,
                   boxShadow: isActive
-                    ? `0 4px 12px rgba(0,0,0,0.5), 0 0 8px ${agent.color}10`
-                    : '0 2px 6px rgba(0,0,0,0.3)',
+                    ? `0 4px 14px rgba(0,0,0,0.4), 0 0 10px ${agent.color}15`
+                    : '0 2px 8px rgba(0,0,0,0.25)',
                   position: 'relative',
                   zIndex: 1,
                 }}>
-                  {/* Desk edge highlight */}
                   <div style={{
                     position: 'absolute', top: 0, left: '10%', right: '10%', height: '1px',
-                    background: isActive ? `${agent.color}30` : 'rgba(255,255,255,0.03)',
+                    background: isActive ? `${agent.color}40` : 'rgba(255,255,255,0.06)',
                   }} />
                 </div>
 
                 {/* Desk legs */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '64px' }}>
-                  <div style={{ width: '3px', height: '8px', background: '#12121e', borderRadius: '0 0 1px 1px' }} />
-                  <div style={{ width: '3px', height: '8px', background: '#12121e', borderRadius: '0 0 1px 1px' }} />
+                  <div style={{ width: '3px', height: '8px', background: '#1e2235', borderRadius: '0 0 1px 1px' }} />
+                  <div style={{ width: '3px', height: '8px', background: '#1e2235', borderRadius: '0 0 1px 1px' }} />
                 </div>
 
-                {/* Character (IN FRONT of desk if bottom row) */}
-                {!facingDown && <Character agent={agent} isActive={isActive} isConnected={isConnected} />}
+                {/* Bot avatar (IN FRONT of desk if bottom row) */}
+                {!facingDown && <BotAvatar agent={agent} isActive={isActive} isConnected={isConnected} />}
 
                 {/* Name plate */}
                 <div style={{
                   marginTop: '3px',
                   fontSize: '0.55rem',
                   fontWeight: 600,
-                  color: isActive ? agent.color : isConnected ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)',
+                  color: isActive ? agent.color : isConnected ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.4)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',
                   textAlign: 'center',
                   transition: 'color 0.3s ease',
-                  textShadow: isActive ? `0 0 8px ${agent.color}60` : 'none',
+                  textShadow: isActive ? `0 0 10px ${agent.color}70` : 'none',
                 }}>
                   {agent.name}
                 </div>
@@ -652,13 +645,13 @@ export default function AgentCommandCenter({
                 }}>
                   <div style={{
                     width: '4px', height: '4px', borderRadius: '50%',
-                    background: isActive ? '#facc15' : isConnected ? '#22c55e' : '#333',
-                    boxShadow: isActive ? '0 0 4px #facc15' : isConnected ? '0 0 4px #22c55e' : 'none',
+                    background: isActive ? '#facc15' : isConnected ? '#22c55e' : '#556',
+                    boxShadow: isActive ? '0 0 5px #facc15' : isConnected ? '0 0 5px #22c55e' : 'none',
                     animation: isActive ? 'wr-blink 1s ease-in-out infinite' : 'none',
                   }} />
                   <span style={{
                     fontSize: '0.45rem', fontWeight: 600,
-                    color: isActive ? '#facc15' : isConnected ? '#22c55e' : '#333',
+                    color: isActive ? '#facc15' : isConnected ? '#22c55e' : '#556',
                   }}>
                     {isActive ? 'WORKING' : isConnected ? 'READY' : 'IDLE'}
                   </span>
@@ -699,8 +692,8 @@ export default function AgentCommandCenter({
       {/* ── Activity Ticker ─────────────────────────────────── */}
       {activityLogRef.current.length > 0 && (
         <div style={{
-          padding: '7px 14px', borderTop: '1px solid #141428',
-          background: 'rgba(0,0,0,0.4)', overflow: 'hidden', position: 'relative', zIndex: 10,
+          padding: '7px 14px', borderTop: '1px solid #2d3a5c',
+          background: 'rgba(0,0,0,0.25)', overflow: 'hidden', position: 'relative', zIndex: 10,
         }}>
           <div style={{
             display: 'flex', gap: '28px', whiteSpace: 'nowrap',
@@ -709,7 +702,7 @@ export default function AgentCommandCenter({
             {activityLogRef.current.slice(0, 4).map((item, i) => (
               <span key={i} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
-                color: 'rgba(255,255,255,0.4)', fontSize: '0.6rem', fontWeight: 500,
+                color: 'rgba(255,255,255,0.6)', fontSize: '0.6rem', fontWeight: 500,
               }}>
                 <span>{item.emoji}</span>
                 <span>{item.text.slice(0, 45)}</span>
@@ -724,29 +717,28 @@ export default function AgentCommandCenter({
         <div style={{
           position: 'absolute', bottom: '50px', left: '50%', transform: 'translateX(-50%)',
           width: 'calc(100% - 32px)', maxWidth: '320px',
-          background: 'rgba(6,6,14,0.97)', backdropFilter: 'blur(16px)',
-          borderRadius: '10px', border: '1px solid #1a1a2e',
+          background: 'rgba(17,24,39,0.97)', backdropFilter: 'blur(16px)',
+          borderRadius: '10px', border: '1px solid #2d3a5c',
           padding: '12px', zIndex: 30,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
           animation: 'wr-fadeIn 0.2s ease-out',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-            {/* Mini monitor icon */}
             <div style={{
               width: '36px', height: '26px', borderRadius: '3px',
-              background: `${selectedAgent.color || '#06b6d4'}15`,
-              border: `1.5px solid ${selectedAgent.color || '#06b6d4'}40`,
+              background: `${selectedAgent.color || '#06b6d4'}20`,
+              border: `1.5px solid ${selectedAgent.color || '#06b6d4'}50`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <span style={{ fontSize: '16px' }}>{selectedAgent.emoji}</span>
             </div>
             <div style={{ flex: 1 }}>
-              <h3 style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
+              <h3 style={{ color: '#f1f5f9', fontSize: '0.85rem', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
                 {selectedAgent.name} Agent
               </h3>
               <div style={{
                 fontSize: '0.65rem', fontWeight: 600, marginTop: '1px',
-                color: selectedAgent.status === 'working' ? '#facc15' : selectedAgent.status === 'connected' ? '#22c55e' : '#444',
+                color: selectedAgent.status === 'working' ? '#facc15' : selectedAgent.status === 'connected' ? '#22c55e' : '#778',
               }}>
                 {selectedAgent.status === 'working' ? 'WORKING' : selectedAgent.status === 'connected' ? 'CONNECTED' : 'IDLE'}
               </div>
@@ -755,8 +747,8 @@ export default function AgentCommandCenter({
               onClick={(e) => { e.stopPropagation(); setSelectedAgent(null); }}
               style={{
                 width: '24px', height: '24px', borderRadius: '4px',
-                border: '1px solid #1a1a2e', background: 'rgba(255,255,255,0.03)',
-                color: '#555', fontSize: '12px', cursor: 'pointer',
+                border: '1px solid #2d3a5c', background: 'rgba(255,255,255,0.05)',
+                color: '#889', fontSize: '12px', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
@@ -765,27 +757,27 @@ export default function AgentCommandCenter({
           </div>
           {selectedAgent.currentTask && (
             <div style={{
-              background: 'rgba(255,255,255,0.02)', borderRadius: '6px',
-              padding: '8px', marginBottom: '8px', border: '1px solid #141428',
+              background: 'rgba(255,255,255,0.04)', borderRadius: '6px',
+              padding: '8px', marginBottom: '8px', border: '1px solid #2d3a5c',
             }}>
-              <div style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+              <div style={{ color: '#889', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
                 Current Task
               </div>
-              <div style={{ color: '#e2e8f0', fontSize: '0.75rem', fontWeight: 500 }}>{selectedAgent.currentTask}</div>
+              <div style={{ color: '#f1f5f9', fontSize: '0.75rem', fontWeight: 500 }}>{selectedAgent.currentTask}</div>
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #141428' }}>
-              <span style={{ display: 'block', color: '#e2e8f0', fontSize: '0.95rem', fontWeight: 700 }}>{selectedAgent.activeSessions}</span>
-              <span style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sessions</span>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #2d3a5c' }}>
+              <span style={{ display: 'block', color: '#f1f5f9', fontSize: '0.95rem', fontWeight: 700 }}>{selectedAgent.activeSessions}</span>
+              <span style={{ color: '#889', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sessions</span>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #141428' }}>
-              <span style={{ display: 'block', color: '#e2e8f0', fontSize: '0.95rem', fontWeight: 700 }}>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid #2d3a5c' }}>
+              <span style={{ display: 'block', color: '#f1f5f9', fontSize: '0.95rem', fontWeight: 700 }}>
                 {selectedAgent.lastActivity && mounted
                   ? new Date(selectedAgent.lastActivity).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                   : '--:--'}
               </span>
-              <span style={{ color: '#555', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Last Active</span>
+              <span style={{ color: '#889', fontSize: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Last Active</span>
             </div>
           </div>
         </div>
@@ -793,23 +785,23 @@ export default function AgentCommandCenter({
 
       {/* ── Footer ──────────────────────────────────────────── */}
       <div style={{
-        padding: '10px 16px', borderTop: '1px solid #141428',
+        padding: '10px 16px', borderTop: '1px solid #2d3a5c',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        background: 'rgba(0,0,0,0.3)', position: 'relative', zIndex: 10,
+        background: 'rgba(0,0,0,0.2)', position: 'relative', zIndex: 10,
       }}>
         <div style={{ display: 'flex', gap: '12px' }}>
           {[
             { label: 'Working', color: '#facc15' },
             { label: 'Ready', color: '#22c55e' },
-            { label: 'Idle', color: '#333' },
+            { label: 'Idle', color: '#556' },
           ].map(l => (
             <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: l.color, boxShadow: l.color !== '#333' ? `0 0 4px ${l.color}` : 'none' }} />
-              <span style={{ color: '#555', fontSize: '0.55rem', fontWeight: 500 }}>{l.label}</span>
+              <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: l.color, boxShadow: l.color !== '#556' ? `0 0 4px ${l.color}` : 'none' }} />
+              <span style={{ color: '#889', fontSize: '0.55rem', fontWeight: 500 }}>{l.label}</span>
             </div>
           ))}
         </div>
-        <div style={{ color: '#444', fontSize: '0.55rem', fontWeight: 500 }}>
+        <div style={{ color: '#778', fontSize: '0.55rem', fontWeight: 500 }}>
           {!gatewayConnected && !loading && (
             <span style={{ color: '#f59e0b', marginRight: '6px' }}>OFFLINE</span>
           )}
@@ -827,8 +819,8 @@ export default function AgentCommandCenter({
       {error && !gatewayConnected && (
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          padding: '6px 14px', background: 'rgba(239,68,68,0.08)',
-          borderTop: '1px solid rgba(239,68,68,0.2)',
+          padding: '6px 14px', background: 'rgba(239,68,68,0.12)',
+          borderTop: '1px solid rgba(239,68,68,0.3)',
           color: '#f59e0b', fontSize: '0.6rem', fontWeight: 500,
           display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center',
           zIndex: 100,
@@ -867,15 +859,33 @@ export default function AgentCommandCenter({
           95% { opacity: 0.5; }
           96% { opacity: 1; }
         }
-        @keyframes wr-typing {
+        @keyframes wr-bot-type {
           0%, 100% { transform: translateY(0); }
-          25% { transform: translateY(-2px); }
+          25% { transform: translateY(-1.5px); }
           50% { transform: translateY(0); }
           75% { transform: translateY(-1px); }
         }
-        @keyframes wr-idle-sway {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(1px); }
+        @keyframes wr-bot-breathe {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.02) translateY(-0.5px); }
+        }
+        @keyframes wr-antenna-bob {
+          0%, 100% { transform: scaleY(1); }
+          50% { transform: scaleY(0.85); }
+        }
+        @keyframes wr-eye-glow {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
+        @keyframes wr-arm-type-l {
+          0%, 100% { transform: rotate(0deg) translateY(0); }
+          25% { transform: rotate(-8deg) translateY(-2px); }
+          75% { transform: rotate(3deg) translateY(-1px); }
+        }
+        @keyframes wr-arm-type-r {
+          0%, 100% { transform: rotate(0deg) translateY(0); }
+          40% { transform: rotate(6deg) translateY(-2px); }
+          80% { transform: rotate(-4deg) translateY(-1px); }
         }
         @keyframes wr-typedot {
           0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
@@ -895,72 +905,137 @@ export default function AgentCommandCenter({
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
-        @keyframes wr-hand-type {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          15% { transform: translateY(-1.5px) rotate(-3deg); }
-          30% { transform: translateY(0) rotate(0deg); }
-          45% { transform: translateY(-1px) rotate(2deg); }
-          60% { transform: translateY(0) rotate(0deg); }
-          75% { transform: translateY(-1.5px) rotate(-2deg); }
-          90% { transform: translateY(0) rotate(1deg); }
-        }
       `}</style>
     </div>
   );
 }
 
-// ─── Character Component — CSS geometric figure ─────────────────
-function Character({ agent, isActive, isConnected }: {
+// ─── Bot Avatar Component — recognizable little robot ────────────
+function BotAvatar({ agent, isActive, isConnected }: {
   agent: typeof AGENT_NODES[0];
   isActive: boolean;
   isConnected: boolean;
 }) {
-  const bodyColor = isActive ? agent.color : isConnected ? '#2a3a4a' : '#1a1a2e';
-  const headColor = isActive ? agent.color : isConnected ? '#3a4a5a' : '#222';
-  const opacity = isActive ? 1 : isConnected ? 0.7 : 0.4;
+  const mainColor = isActive ? agent.color : isConnected ? '#4a6080' : '#3a4460';
+  const eyeColor = isActive ? agent.color : isConnected ? '#6a8ab0' : '#4a5570';
+  const bodyBg = isActive
+    ? `linear-gradient(180deg, ${agent.color}50, ${agent.color}30)`
+    : isConnected
+      ? 'linear-gradient(180deg, #3a4a65, #2e3a50)'
+      : 'linear-gradient(180deg, #2a3448, #222a3a)';
+  const opacity = isActive ? 1 : isConnected ? 0.9 : 0.75;
 
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       gap: '0px', opacity, transition: 'opacity 0.3s ease',
-      animation: isActive ? 'wr-typing 0.6s ease-in-out infinite' : 'wr-idle-sway 4s ease-in-out infinite',
+      animation: isActive ? 'wr-bot-type 0.5s ease-in-out infinite' : 'wr-bot-breathe 3s ease-in-out infinite',
       marginBottom: '2px', marginTop: '2px',
     }}>
-      {/* Head */}
-      <div style={{
-        width: '12px', height: '12px', borderRadius: '50%',
-        background: `radial-gradient(circle at 40% 35%, ${headColor}, ${headColor}cc)`,
-        border: `1px solid ${isActive ? agent.color : '#1a1a2e'}`,
-        boxShadow: isActive ? `0 0 6px ${agent.color}50` : 'none',
-      }} />
+      {/* Antenna */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Antenna tip — glowing dot */}
+        <div style={{
+          width: '4px', height: '4px', borderRadius: '50%',
+          background: isActive ? agent.color : '#4a5570',
+          boxShadow: isActive ? `0 0 6px ${agent.color}, 0 0 12px ${agent.color}60` : '0 0 2px #4a5570',
+          animation: isActive ? 'wr-eye-glow 1s ease-in-out infinite' : 'none',
+        }} />
+        {/* Antenna stem */}
+        <div style={{
+          width: '2px', height: '5px',
+          background: isActive ? `${agent.color}80` : '#3a4460',
+          animation: isActive ? 'wr-antenna-bob 0.8s ease-in-out infinite' : 'none',
+          transformOrigin: 'bottom center',
+        }} />
+      </div>
 
-      {/* Neck */}
-      <div style={{ width: '4px', height: '2px', background: bodyColor }} />
-
-      {/* Torso / body */}
+      {/* Head — rounded rectangle with eyes */}
       <div style={{
-        width: '14px', height: '12px',
-        background: `linear-gradient(180deg, ${bodyColor}, ${bodyColor}88)`,
-        borderRadius: '3px 3px 1px 1px',
+        width: '22px', height: '16px',
+        background: `linear-gradient(180deg, ${mainColor}, ${mainColor}bb)`,
+        borderRadius: '5px 5px 3px 3px',
+        border: `1.5px solid ${isActive ? agent.color : '#4a5a70'}`,
         position: 'relative',
+        boxShadow: isActive ? `0 0 8px ${agent.color}40` : '0 0 3px rgba(0,0,0,0.3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
       }}>
-        {/* Arms / hands — only visible when typing */}
-        {isActive && (
-          <>
-            <div style={{
-              position: 'absolute', top: '8px', left: '-4px',
-              width: '4px', height: '4px', borderRadius: '50%',
-              background: headColor,
-              animation: 'wr-hand-type 0.4s ease-in-out infinite',
-            }} />
-            <div style={{
-              position: 'absolute', top: '8px', right: '-4px',
-              width: '4px', height: '4px', borderRadius: '50%',
-              background: headColor,
-              animation: 'wr-hand-type 0.4s ease-in-out infinite 0.2s',
-            }} />
-          </>
-        )}
+        {/* Left eye */}
+        <div style={{
+          width: '4px', height: '4px', borderRadius: '50%',
+          background: eyeColor,
+          boxShadow: isActive ? `0 0 4px ${agent.color}, 0 0 8px ${agent.color}50` : `0 0 2px ${eyeColor}`,
+          animation: isActive ? 'wr-eye-glow 1.5s ease-in-out infinite' : 'none',
+        }} />
+        {/* Right eye */}
+        <div style={{
+          width: '4px', height: '4px', borderRadius: '50%',
+          background: eyeColor,
+          boxShadow: isActive ? `0 0 4px ${agent.color}, 0 0 8px ${agent.color}50` : `0 0 2px ${eyeColor}`,
+          animation: isActive ? 'wr-eye-glow 1.5s ease-in-out infinite 0.3s' : 'none',
+        }} />
+        {/* Visor line across eyes */}
+        <div style={{
+          position: 'absolute', top: '5px', left: '3px', right: '3px', height: '1px',
+          background: isActive ? `${agent.color}40` : 'rgba(255,255,255,0.06)',
+        }} />
+      </div>
+
+      {/* Neck connector */}
+      <div style={{ width: '6px', height: '2px', background: mainColor }} />
+
+      {/* Body — with chest panel and arms */}
+      <div style={{
+        width: '20px', height: '16px',
+        background: bodyBg,
+        borderRadius: '3px 3px 2px 2px',
+        border: `1px solid ${isActive ? `${agent.color}60` : '#3a4460'}`,
+        position: 'relative',
+        boxShadow: isActive ? `0 0 6px ${agent.color}25` : 'none',
+      }}>
+        {/* Chest panel */}
+        <div style={{
+          position: 'absolute', top: '3px', left: '50%', transform: 'translateX(-50%)',
+          width: '8px', height: '4px', borderRadius: '1px',
+          background: isActive ? `${agent.color}40` : 'rgba(255,255,255,0.06)',
+          border: `0.5px solid ${isActive ? `${agent.color}50` : 'rgba(255,255,255,0.08)'}`,
+        }} />
+        {/* Chest light dot */}
+        <div style={{
+          position: 'absolute', top: '9px', left: '50%', transform: 'translateX(-50%)',
+          width: '3px', height: '3px', borderRadius: '50%',
+          background: isActive ? agent.color : '#3a4460',
+          boxShadow: isActive ? `0 0 3px ${agent.color}` : 'none',
+        }} />
+
+        {/* Left arm */}
+        <div style={{
+          position: 'absolute', top: '2px', left: '-5px',
+          width: '4px', height: '10px', borderRadius: '2px',
+          background: `${mainColor}cc`,
+          transformOrigin: 'top center',
+          animation: isActive ? 'wr-arm-type-l 0.4s ease-in-out infinite' : 'none',
+        }} />
+        {/* Right arm */}
+        <div style={{
+          position: 'absolute', top: '2px', right: '-5px',
+          width: '4px', height: '10px', borderRadius: '2px',
+          background: `${mainColor}cc`,
+          transformOrigin: 'top center',
+          animation: isActive ? 'wr-arm-type-r 0.4s ease-in-out infinite' : 'none',
+        }} />
+      </div>
+
+      {/* Feet */}
+      <div style={{ display: 'flex', gap: '4px', marginTop: '1px' }}>
+        <div style={{
+          width: '6px', height: '3px', borderRadius: '1px 1px 2px 2px',
+          background: mainColor,
+        }} />
+        <div style={{
+          width: '6px', height: '3px', borderRadius: '1px 1px 2px 2px',
+          background: mainColor,
+        }} />
       </div>
     </div>
   );

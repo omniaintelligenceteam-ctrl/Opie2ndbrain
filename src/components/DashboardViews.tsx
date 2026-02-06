@@ -189,6 +189,9 @@ export function DashboardViews(props: DashboardViewsProps): React.ReactElement {
             <OrganizationChart
               isMobile={isMobile}
               isTablet={isTablet}
+              onNodeClick={(node) => {
+                console.log('Organization node clicked:', node);
+              }}
             />
           </div>
         </ErrorBoundary>
