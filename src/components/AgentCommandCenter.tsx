@@ -8,6 +8,7 @@ interface AgentCommandCenterProps {
   pollInterval?: number;
   onAgentClick?: (agentId: string, nodeState: AgentNodeState) => void;
   compact?: boolean;
+  isThinking?: boolean; // true when Opie is processing a user message
 }
 
 // Workstation layout: 2 rows of 4, positioned around a central holotable
@@ -29,6 +30,7 @@ export default function AgentCommandCenter({
   pollInterval = 2000,
   onAgentClick,
   compact = false,
+  isThinking = false,
 }: AgentCommandCenterProps) {
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentNodeState | null>(null);
@@ -94,6 +96,8 @@ export default function AgentCommandCenter({
   }, [nodes]);
 
   const workingCount = effectiveActiveAgents.length;
+  const opieState: 'idle' | 'thinking' | 'working' = isThinking ? 'thinking' : workingCount > 0 ? 'working' : 'idle';
+  const opieActive = opieState !== 'idle';
 
   const handleAgentClick = (agentId: string) => {
     const nodeState = getNodeState(agentId);
@@ -201,9 +205,11 @@ export default function AgentCommandCenter({
       <div style={{
         position: 'absolute', top: '35%', left: '50%', transform: 'translate(-50%, -50%)',
         width: '350px', height: '250px',
-        background: workingCount > 0
-          ? 'radial-gradient(ellipse, rgba(6,182,212,0.25) 0%, rgba(118,75,162,0.12) 40%, transparent 70%)'
-          : 'radial-gradient(ellipse, rgba(6,182,212,0.12) 0%, rgba(118,75,162,0.05) 50%, transparent 70%)',
+        background: opieState === 'thinking'
+          ? 'radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(118,75,162,0.15) 40%, transparent 70%)'
+          : workingCount > 0
+            ? 'radial-gradient(ellipse, rgba(6,182,212,0.25) 0%, rgba(118,75,162,0.12) 40%, transparent 70%)'
+            : 'radial-gradient(ellipse, rgba(6,182,212,0.12) 0%, rgba(118,75,162,0.05) 50%, transparent 70%)',
         pointerEvents: 'none', zIndex: 0,
       }} />
 
@@ -345,102 +351,271 @@ export default function AgentCommandCenter({
           })}
         </svg>
 
-        {/* ── Central Holographic Table ────────────────────── */}
+        {/* ── Central Opie Boss Avatar ─────────────────────── */}
         <div style={{
           position: 'absolute', top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 10,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
         }}>
-          {/* Holographic projection cone */}
-          <div style={{
-            position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-            width: '6px', height: workingCount > 0 ? '55px' : '30px',
-            background: `linear-gradient(to top, ${workingCount > 0 ? 'rgba(6,182,212,0.7)' : 'rgba(6,182,212,0.25)'}, transparent)`,
-            filter: 'blur(4px)',
-            transition: 'all 0.5s ease',
-          }} />
-          <div style={{
-            position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-            width: workingCount > 0 ? '70px' : '40px',
-            height: workingCount > 0 ? '45px' : '25px',
-            background: `radial-gradient(ellipse at bottom, ${workingCount > 0 ? 'rgba(6,182,212,0.3)' : 'rgba(6,182,212,0.1)'}, transparent)`,
-            transition: 'all 0.5s ease',
-            pointerEvents: 'none',
-          }} />
+          {/* Thought bubbles — visible when thinking */}
+          {opieState === 'thinking' && (
+            <div style={{ position: 'absolute', top: '-40px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '6px', pointerEvents: 'none' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{
+                  width: `${6 + i * 2}px`, height: `${6 + i * 2}px`,
+                  borderRadius: '50%',
+                  background: 'rgba(168,85,247,0.6)',
+                  boxShadow: '0 0 8px rgba(168,85,247,0.5)',
+                  animation: `wr-thought-bubble 1.5s ease-in-out infinite`,
+                  animationDelay: `${i * 0.25}s`,
+                }} />
+              ))}
+            </div>
+          )}
 
-          {/* Pulse rings */}
-          {workingCount > 0 && (
+          {/* Pulse rings — active when thinking or working */}
+          {opieActive && (
             <>
               <div style={{
                 position: 'absolute', top: '50%', left: '50%',
-                width: '120px', height: '120px',
-                border: '1px solid rgba(6,182,212,0.25)',
+                width: '140px', height: '140px',
+                border: `1px solid ${opieState === 'thinking' ? 'rgba(168,85,247,0.3)' : 'rgba(6,182,212,0.25)'}`,
                 borderRadius: '50%',
-                animation: 'wr-ring 3s ease-out infinite',
+                animation: `wr-ring ${opieState === 'thinking' ? '2s' : '3s'} ease-out infinite`,
                 pointerEvents: 'none',
               }} />
               <div style={{
                 position: 'absolute', top: '50%', left: '50%',
-                width: '120px', height: '120px',
-                border: '1px solid rgba(6,182,212,0.15)',
+                width: '140px', height: '140px',
+                border: `1px solid ${opieState === 'thinking' ? 'rgba(168,85,247,0.15)' : 'rgba(6,182,212,0.15)'}`,
                 borderRadius: '50%',
-                animation: 'wr-ring 3s ease-out infinite 1s',
+                animation: `wr-ring ${opieState === 'thinking' ? '2s' : '3s'} ease-out infinite 1s`,
                 pointerEvents: 'none',
               }} />
             </>
           )}
 
-          {/* The table itself — hexagonal */}
+          {/* Platform / glow disc under Opie */}
           <div style={{
-            width: '90px', height: '90px',
-            clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
-            background: `linear-gradient(135deg, #1a2540 0%, #152030 50%, #1a2540 100%)`,
-            border: 'none',
+            position: 'absolute', bottom: '-12px', left: '50%', transform: 'translateX(-50%)',
+            width: '80px', height: '20px',
+            background: opieState === 'thinking'
+              ? 'radial-gradient(ellipse, rgba(168,85,247,0.35), transparent 70%)'
+              : opieState === 'working'
+                ? 'radial-gradient(ellipse, rgba(6,182,212,0.35), transparent 70%)'
+                : 'radial-gradient(ellipse, rgba(6,182,212,0.12), transparent 70%)',
+            filter: 'blur(3px)', pointerEvents: 'none', transition: 'all 0.4s ease',
+          }} />
+
+          {/* The Opie Bot — large boss avatar */}
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0px',
+            animation: opieState === 'thinking' ? 'wr-opie-think 1.2s ease-in-out infinite'
+              : opieState === 'working' ? 'wr-bot-type 0.5s ease-in-out infinite'
+              : 'wr-bot-breathe 3s ease-in-out infinite',
             position: 'relative',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column',
           }}>
+            {/* Dual antennas — boss distinction */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+              {/* Left antenna */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                  width: '5px', height: '5px', borderRadius: '50%',
+                  background: opieState === 'thinking' ? '#a855f7' : opieState === 'working' ? '#06b6d4' : '#06b6d488',
+                  boxShadow: opieState === 'thinking' ? '0 0 8px #a855f7, 0 0 16px #a855f780' : opieActive ? '0 0 8px #06b6d4, 0 0 14px #06b6d460' : '0 0 3px #06b6d444',
+                  animation: opieState === 'thinking' ? 'wr-eye-glow 0.5s ease-in-out infinite' : opieActive ? 'wr-eye-glow 1s ease-in-out infinite' : 'none',
+                }} />
+                <div style={{
+                  width: '2px', height: '8px',
+                  background: opieState === 'thinking' ? '#a855f780' : opieActive ? '#06b6d480' : '#06b6d440',
+                  animation: opieActive ? 'wr-antenna-bob 0.8s ease-in-out infinite' : 'none',
+                  transformOrigin: 'bottom center',
+                }} />
+              </div>
+              {/* Right antenna */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                  width: '5px', height: '5px', borderRadius: '50%',
+                  background: opieState === 'thinking' ? '#a855f7' : opieState === 'working' ? '#06b6d4' : '#06b6d488',
+                  boxShadow: opieState === 'thinking' ? '0 0 8px #a855f7, 0 0 16px #a855f780' : opieActive ? '0 0 8px #06b6d4, 0 0 14px #06b6d460' : '0 0 3px #06b6d444',
+                  animation: opieState === 'thinking' ? 'wr-eye-glow 0.5s ease-in-out infinite 0.25s' : opieActive ? 'wr-eye-glow 1s ease-in-out infinite 0.5s' : 'none',
+                }} />
+                <div style={{
+                  width: '2px', height: '8px',
+                  background: opieState === 'thinking' ? '#a855f780' : opieActive ? '#06b6d480' : '#06b6d440',
+                  animation: opieActive ? 'wr-antenna-bob 0.8s ease-in-out infinite 0.4s' : 'none',
+                  transformOrigin: 'bottom center',
+                }} />
+              </div>
+            </div>
+
+            {/* Head — large rounded rectangle with eyes */}
             <div style={{
-              position: 'absolute', inset: 0,
-              clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
-              boxShadow: workingCount > 0
-                ? '0 0 35px rgba(6,182,212,0.5), 0 0 70px rgba(6,182,212,0.2), inset 0 0 25px rgba(6,182,212,0.15)'
-                : '0 0 20px rgba(6,182,212,0.25), inset 0 0 15px rgba(6,182,212,0.08)',
-              transition: 'box-shadow 0.5s ease',
-              pointerEvents: 'none',
-            }} />
+              width: '42px', height: '28px',
+              background: opieState === 'thinking'
+                ? 'linear-gradient(180deg, #a855f7cc, #7c3aedaa)'
+                : opieActive
+                  ? 'linear-gradient(180deg, #06b6d4cc, #0891b2aa)'
+                  : 'linear-gradient(180deg, #06b6d477, #0891b255)',
+              borderRadius: '8px 8px 5px 5px',
+              border: `2px solid ${opieState === 'thinking' ? '#a855f7' : opieActive ? '#06b6d4' : '#06b6d455'}`,
+              position: 'relative',
+              boxShadow: opieState === 'thinking' ? '0 0 16px #a855f750, 0 0 30px #a855f725'
+                : opieActive ? '0 0 14px #06b6d450, 0 0 28px #06b6d420' : '0 0 6px rgba(0,0,0,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              transition: 'all 0.4s ease',
+            }}>
+              {/* Left eye */}
+              <div style={{
+                width: '7px', height: '7px', borderRadius: '50%',
+                background: opieState === 'thinking' ? '#e9d5ff' : opieActive ? '#cffafe' : '#06b6d488',
+                boxShadow: opieState === 'thinking' ? '0 0 8px #a855f7, 0 0 14px #a855f770'
+                  : opieActive ? '0 0 6px #06b6d4, 0 0 12px #06b6d460' : '0 0 2px #06b6d444',
+                animation: opieState === 'thinking' ? 'wr-eye-glow 0.6s ease-in-out infinite' : 'none',
+              }} />
+              {/* Right eye */}
+              <div style={{
+                width: '7px', height: '7px', borderRadius: '50%',
+                background: opieState === 'thinking' ? '#e9d5ff' : opieActive ? '#cffafe' : '#06b6d488',
+                boxShadow: opieState === 'thinking' ? '0 0 8px #a855f7, 0 0 14px #a855f770'
+                  : opieActive ? '0 0 6px #06b6d4, 0 0 12px #06b6d460' : '0 0 2px #06b6d444',
+                animation: opieState === 'thinking' ? 'wr-eye-glow 0.6s ease-in-out infinite 0.3s' : 'none',
+              }} />
+              {/* Visor bar */}
+              <div style={{
+                position: 'absolute', top: '10px', left: '5px', right: '5px', height: '2px',
+                background: opieState === 'thinking' ? '#a855f740' : opieActive ? '#06b6d440' : '#06b6d418',
+                borderRadius: '1px',
+              }} />
+            </div>
+
+            {/* Neck */}
             <div style={{
-              position: 'absolute', inset: '1px',
-              clipPath: 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%)',
-              border: `1px solid ${workingCount > 0 ? 'rgba(6,182,212,0.5)' : 'rgba(6,182,212,0.25)'}`,
-              pointerEvents: 'none',
-              transition: 'border-color 0.5s ease',
+              width: '10px', height: '3px',
+              background: opieState === 'thinking' ? '#a855f7aa' : opieActive ? '#06b6d4aa' : '#06b6d455',
             }} />
 
-            <span style={{
-              fontSize: '22px',
-              filter: workingCount > 0 ? 'drop-shadow(0 0 8px rgba(6,182,212,0.9))' : 'drop-shadow(0 0 3px rgba(6,182,212,0.3))',
+            {/* Body — with OPIE text, chest panel, arms */}
+            <div style={{
+              width: '38px', height: '30px',
+              background: opieState === 'thinking'
+                ? 'linear-gradient(180deg, #a855f740, #7c3aed25)'
+                : opieActive
+                  ? 'linear-gradient(180deg, #06b6d440, #0891b225)'
+                  : 'linear-gradient(180deg, #06b6d420, #0891b210)',
+              borderRadius: '5px 5px 3px 3px',
+              border: `1.5px solid ${opieState === 'thinking' ? '#a855f760' : opieActive ? '#06b6d460' : '#06b6d430'}`,
+              position: 'relative',
+              boxShadow: opieActive ? `0 0 10px ${opieState === 'thinking' ? '#a855f720' : '#06b6d420'}` : 'none',
+              transition: 'all 0.4s ease',
             }}>
-              &#9889;
-            </span>
-            <span style={{
-              color: workingCount > 0 ? '#22d3ee' : '#4a6080',
-              fontSize: '0.5rem', fontWeight: 800, letterSpacing: '0.2em',
-              marginTop: '2px', transition: 'color 0.3s',
-            }}>
-              OPIE
-            </span>
+              {/* Chest panel with OPIE text */}
+              <div style={{
+                position: 'absolute', top: '4px', left: '50%', transform: 'translateX(-50%)',
+                width: '22px', height: '10px', borderRadius: '2px',
+                background: opieState === 'thinking' ? '#a855f730' : opieActive ? '#06b6d430' : '#06b6d415',
+                border: `0.5px solid ${opieState === 'thinking' ? '#a855f750' : opieActive ? '#06b6d450' : '#06b6d425'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{
+                  fontSize: '5px', fontWeight: 900, letterSpacing: '0.15em',
+                  color: opieState === 'thinking' ? '#e9d5ff' : opieActive ? '#cffafe' : '#06b6d488',
+                  textShadow: opieActive ? `0 0 4px ${opieState === 'thinking' ? '#a855f7' : '#06b6d4'}` : 'none',
+                }}>
+                  OPIE
+                </span>
+              </div>
+
+              {/* Chest light */}
+              <div style={{
+                position: 'absolute', top: '18px', left: '50%', transform: 'translateX(-50%)',
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: opieState === 'thinking' ? '#a855f7' : opieActive ? '#06b6d4' : '#06b6d444',
+                boxShadow: opieState === 'thinking' ? '0 0 6px #a855f7, 0 0 12px #a855f750'
+                  : opieActive ? '0 0 5px #06b6d4, 0 0 10px #06b6d450' : 'none',
+                animation: opieActive ? 'wr-eye-glow 1.5s ease-in-out infinite' : 'none',
+              }} />
+
+              {/* Left arm */}
+              <div style={{
+                position: 'absolute', top: '4px', left: '-7px',
+                width: '6px', height: '16px', borderRadius: '3px',
+                background: opieState === 'thinking' ? '#a855f7aa' : opieActive ? '#06b6d4aa' : '#06b6d444',
+                transformOrigin: 'top center',
+                animation: opieState === 'working' ? 'wr-arm-type-l 0.4s ease-in-out infinite' : 'none',
+              }} />
+              {/* Right arm */}
+              <div style={{
+                position: 'absolute', top: '4px', right: '-7px',
+                width: '6px', height: '16px', borderRadius: '3px',
+                background: opieState === 'thinking' ? '#a855f7aa' : opieActive ? '#06b6d4aa' : '#06b6d444',
+                transformOrigin: 'top center',
+                animation: opieState === 'working' ? 'wr-arm-type-r 0.4s ease-in-out infinite' : 'none',
+              }} />
+            </div>
+
+            {/* Feet */}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '1px' }}>
+              <div style={{
+                width: '10px', height: '5px', borderRadius: '2px 2px 3px 3px',
+                background: opieState === 'thinking' ? '#a855f7aa' : opieActive ? '#06b6d4aa' : '#06b6d455',
+              }} />
+              <div style={{
+                width: '10px', height: '5px', borderRadius: '2px 2px 3px 3px',
+                background: opieState === 'thinking' ? '#a855f7aa' : opieActive ? '#06b6d4aa' : '#06b6d455',
+              }} />
+            </div>
+
+            {/* Agent count badge */}
             {workingCount > 0 && (
-              <span style={{
-                position: 'absolute', top: '-6px', right: '-6px',
-                width: '20px', height: '20px', borderRadius: '10px',
+              <div style={{
+                position: 'absolute', top: '-4px', right: '-10px',
+                width: '22px', height: '22px', borderRadius: '11px',
                 background: 'linear-gradient(135deg, #facc15, #f97316)',
-                color: '#000', fontSize: '0.6rem', fontWeight: 800,
+                color: '#000', fontSize: '0.65rem', fontWeight: 800,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: '0 0 12px rgba(250,204,21,0.7)',
                 zIndex: 20,
               }}>
                 {workingCount}
+              </div>
+            )}
+          </div>
+
+          {/* Status label below Opie */}
+          <div style={{
+            marginTop: '6px',
+            fontSize: '0.55rem', fontWeight: 700,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            color: opieState === 'thinking' ? '#c084fc' : opieState === 'working' ? '#22d3ee' : '#06b6d488',
+            textShadow: opieActive ? `0 0 8px ${opieState === 'thinking' ? '#a855f770' : '#06b6d470'}` : 'none',
+            transition: 'all 0.3s ease',
+            display: 'flex', alignItems: 'center', gap: '4px',
+          }}>
+            {opieState === 'thinking' && (
+              <span style={{ display: 'flex', gap: '2px' }}>
+                {[0, 1, 2].map(j => (
+                  <span key={j} style={{
+                    width: '3px', height: '3px', borderRadius: '50%',
+                    background: '#c084fc', display: 'inline-block',
+                    animation: 'wr-typedot 0.8s ease-in-out infinite',
+                    animationDelay: `${j * 0.15}s`,
+                  }} />
+                ))}
+              </span>
+            )}
+            {opieState === 'thinking' ? 'THINKING' : opieState === 'working' ? 'WORKING' : 'IDLE'}
+            {opieState === 'working' && (
+              <span style={{ display: 'flex', gap: '2px' }}>
+                {[0, 1, 2].map(j => (
+                  <span key={j} style={{
+                    width: '3px', height: '3px', borderRadius: '50%',
+                    background: '#22d3ee', display: 'inline-block',
+                    animation: 'wr-typedot 0.8s ease-in-out infinite',
+                    animationDelay: `${j * 0.15}s`,
+                  }} />
+                ))}
               </span>
             )}
           </div>
@@ -904,6 +1079,17 @@ export default function AgentCommandCenter({
         @keyframes wr-ticker {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        @keyframes wr-opie-think {
+          0%, 100% { transform: translateY(0); filter: brightness(1); }
+          30% { transform: translateY(-2px); filter: brightness(1.15); }
+          60% { transform: translateY(0px); filter: brightness(0.95); }
+          80% { transform: translateY(-1px); filter: brightness(1.1); }
+        }
+        @keyframes wr-thought-bubble {
+          0% { transform: translateY(0) scale(0.7); opacity: 0.3; }
+          50% { transform: translateY(-12px) scale(1); opacity: 0.9; }
+          100% { transform: translateY(-22px) scale(0.5); opacity: 0; }
         }
       `}</style>
     </div>

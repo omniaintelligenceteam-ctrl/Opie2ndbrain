@@ -1408,10 +1408,10 @@ export default function OpieKanban(): React.ReactElement {
               <div>
                 {isMobile ? (
                   <CollapsibleSection title="Agent Command Center" icon="⚡" badge={realActiveCount} defaultOpen>
-                    <AgentCommandCenter compact={true} />
+                    <AgentCommandCenter compact={true} isThinking={isLoading} />
                   </CollapsibleSection>
                 ) : (
-                  <AgentCommandCenter />
+                  <AgentCommandCenter isThinking={isLoading} />
                 )}
               </div>
             </div>
