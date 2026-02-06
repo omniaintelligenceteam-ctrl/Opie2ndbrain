@@ -35,17 +35,19 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
         minHeight: logoSize + 24,
       }}
     >
-      <img
-        src="/opie-logo-neon.png"
-        alt="Opie"
+      <video
+        src="/opie-logo-video.mp4"
         width={logoSize}
         height={logoSize}
-        loading="eager"
-        decoding="sync"
+        autoPlay
+        loop
+        muted
+        playsInline
         style={{
           width: logoSize,
           height: logoSize,
           objectFit: 'contain',
+          borderRadius: '12px',
         }}
       />
     </div>
