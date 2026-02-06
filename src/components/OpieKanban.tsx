@@ -38,6 +38,7 @@ const SmartDashboardHome = lazy(() => import('./SmartDashboardHome'));
 const OpieStatusWidget = lazy(() => import('./OpieStatusWidget'));
 const SidebarWidgets = lazy(() => import('./SidebarWidgets'));
 const AgentLeaderboard = lazy(() => import('./AgentLeaderboard'));
+const OrganizationChart = lazy(() => import('./OrganizationChart'));
 const ContextWindowVisualizer = lazy(() => import('./ContextWindowVisualizer'));
 const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
 const ParticleBackground = lazy(() => import('./ParticleBackground'));
@@ -93,6 +94,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
+  { id: 'organization', label: 'Organization', icon: '🏛️' },
   { id: 'skills', label: 'Skills', icon: '🛠️' },
   { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
@@ -1515,6 +1517,21 @@ export default function OpieKanban(): React.ReactElement {
               </p>
             </div>
             <AgentsPanel onDeploy={handleDeployAgent} activeAgents={activeAgents} />
+          </div>
+        )}
+
+        {/* Organization View */}
+        {activeView === 'organization' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <OrganizationChart
+              isMobile={isMobile}
+              isTablet={isTablet}
+            />
           </div>
         )}
 
