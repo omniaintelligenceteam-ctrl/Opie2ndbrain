@@ -1286,7 +1286,7 @@ export default function OpieKanban(): React.ReactElement {
 
     // Actually spawn the agent via API
     try {
-      const response = await fetch('/api/agents/spawn', {
+      const response = await apiFetch('/api/agents/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

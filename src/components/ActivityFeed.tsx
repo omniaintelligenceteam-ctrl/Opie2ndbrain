@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface ActivityItem {
   id: string;
@@ -83,7 +84,7 @@ export default function ActivityFeed({
 
   const fetchActivity = useCallback(async () => {
     try {
-      const res = await fetch('/api/activity');
+      const res = await apiFetch('/api/activity');
       if (!res.ok) throw new Error('Failed to fetch activity');
       
       const data = await res.json();
