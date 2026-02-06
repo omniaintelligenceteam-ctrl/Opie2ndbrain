@@ -116,14 +116,24 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
           setTimeout(() => {
             if (!mountedRef.current) return;
             restartingRef.current = false;
+            const rec = recognitionRef.current;
+            if (!rec) return;
+            // Guard: abort if already started
+            if ((rec as any).__running) return;
             try {
-              recognitionRef.current?.start();
-            } catch (e) {
+              rec.start();
+              (rec as any).__running = true;
+            } catch (e: any) {
+              if (e?.name === 'InvalidStateError') {
+                // Already running — not an error
+                (rec as any).__running = true;
+                return;
+              }
               console.warn('[VoiceEngine] Recognition start failed:', e);
               // Retry once
               setTimeout(() => {
                 if (!mountedRef.current || !ctxRef.current.micOn) return;
-                try { recognitionRef.current?.start(); } catch { /* give up */ }
+                try { rec.start(); (rec as any).__running = true; } catch { /* give up */ }
               }, 500);
             }
           }, RECOGNITION_RESTART_DELAY);
@@ -132,7 +142,10 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
         case 'STOP_RECOGNITION': {
           restartingRef.current = false;
-          try { recognitionRef.current?.stop(); } catch { /* ok */ }
+          if (recognitionRef.current) {
+            (recognitionRef.current as any).__running = false;
+            try { recognitionRef.current.stop(); } catch { /* ok */ }
+          }
           break;
         }
 
@@ -366,6 +379,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     };
 
     recognition.onend = () => {
+      (recognition as any).__running = false;
       if (!mountedRef.current) return;
       // Auto-restart if mic should still be on and we're in listening state
       if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && !restartingRef.current) {
@@ -373,7 +387,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         setTimeout(() => {
           if (!mountedRef.current) return;
           restartingRef.current = false;
-          try { recognition.start(); } catch { /* ok */ }
+          if ((recognition as any).__running) return;
+          try { recognition.start(); (recognition as any).__running = true; } catch { /* ok */ }
         }, RECOGNITION_RESTART_DELAY);
       }
     };
@@ -383,12 +398,14 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
       // 'no-speech' and 'aborted' are expected — just restart
       if (e.error === 'no-speech' || e.error === 'aborted') {
+        (recognition as any).__running = false;
         if (ctxRef.current.micOn && !restartingRef.current) {
           restartingRef.current = true;
           setTimeout(() => {
             if (!mountedRef.current) return;
             restartingRef.current = false;
-            try { recognition.start(); } catch { /* ok */ }
+            if ((recognition as any).__running) return;
+            try { recognition.start(); (recognition as any).__running = true; } catch { /* ok */ }
           }, 300);
         }
         return;
