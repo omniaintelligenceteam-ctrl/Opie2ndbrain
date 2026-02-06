@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false,
+  // userScalable: false, // Removed: allow users to zoom on mobile
   themeColor: '#667eea',
 }
 
