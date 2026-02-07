@@ -273,6 +273,42 @@ function parseToolCall(text: string): { tool: string; args: Record<string, any> 
   return null;
 }
 
+// Check if a tool call requires approval (destructive operations)
+function requiresApproval(toolCall: { tool: string; args: Record<string, any> }): boolean {
+  const destructiveTools = [
+    'file_write',
+    'file_edit', 
+    'spawn_agent',
+    'browser_navigate',
+    'github_write_file',
+    'github_delete_file'
+  ];
+  
+  // Check for destructive tools
+  if (destructiveTools.includes(toolCall.tool)) {
+    return true;
+  }
+  
+  // Check for dangerous exec commands
+  if (toolCall.tool === 'exec') {
+    const command = toolCall.args.command || '';
+    const dangerousCommands = [
+      'rm', 'rmdir', 'del', 'delete', 'dd', 'format', 'mkfs',
+      'curl.*bash', 'wget.*bash', 'curl.*sh', 'wget.*sh',
+      'sudo', 'su', 'chmod +x', 'chown', 'mount', 'umount',
+      'kill', 'killall', 'pkill', 'shutdown', 'reboot', 'halt',
+      'crontab', 'systemctl', 'service', 'init.d',
+      '>', '>>', 'tee.*>', 'mv.*\.', 'cp.*\.', 'tar.*--delete'
+    ];
+    
+    return dangerousCommands.some(pattern => 
+      new RegExp(pattern, 'i').test(command.trim())
+    );
+  }
+  
+  return false;
+}
+
 // Generate an execution plan by asking AI what it would do
 async function generateExecutionPlan(
   messages: Array<{ role: string; content: string }>,
@@ -311,10 +347,16 @@ Based on the user's request, create a simple plan in this EXACT JSON format:
 
 IMPORTANT RULES:
 - plannedActions should contain ONLY ONE item: a simple 1-2 sentence summary of what you'll do, ending with "Execute?"
-- Example: "I'll search your memory for GitHub information and check your recent commits. Execute?"
+- Example: "I'll create a new React component and update the main page. Execute?"
+- Example: "I'll spawn a sub-agent to analyze the codebase and fix the bug. Execute?"
+- Example: "I'll open GitHub in the browser and take a screenshot. Execute?"
 - Do NOT list detailed steps - keep it conversational and brief for voice interaction
 - toolCalls should still be complete and accurate for actual execution
 - Your ENTIRE response must be valid JSON
+
+AVAILABLE TOOLS (with approval requirements):
+🔒 APPROVAL REQUIRED: file_write, file_edit, spawn_agent, browser_navigate, exec (dangerous), github_write_file, github_delete_file
+✅ SAFE: file_read, file_list, memory_search, web_search, shell_exec (safe), browser_screenshot, browser_snapshot, github_read_file, github_list_repo
 
 User's request: "${messages[messages.length - 1]?.content || ''}"
 

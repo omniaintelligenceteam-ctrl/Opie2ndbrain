@@ -148,6 +148,7 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const toolCall = plan.toolCalls[i];
+        
         if (r.success) {
           yield sseData('✅ **' + toolCall.tool + '**: ' + toolCall.description + '\n');
         } else {
