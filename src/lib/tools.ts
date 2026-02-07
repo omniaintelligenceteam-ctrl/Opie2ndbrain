@@ -217,6 +217,130 @@ async function githubListRepo(args: { owner: string; repo: string; path?: string
 }
 
 export const TOOLS: Record<string, Tool> = {
+  file_write: {
+    name: 'file_write',
+    description: 'Create a new file in the workspace with specified content. REQUIRES APPROVAL for destructive operations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Relative path for new file (e.g., "src/components/NewFile.tsx")' },
+        content: { type: 'string', description: 'Content to write to the file' },
+      },
+      required: ['path', 'content'],
+    },
+    execute: fileWrite,
+  },
+  file_edit: {
+    name: 'file_edit',
+    description: 'Edit an existing file using find/replace, insert, append, prepend, or delete operations. REQUIRES APPROVAL for destructive operations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Relative path to file to edit' },
+        operation: { type: 'string', enum: ['replace', 'insert', 'append', 'prepend', 'delete_lines'], description: 'Type of edit operation' },
+        search: { type: 'string', description: 'Text to find (for replace operation)' },
+        replace: { type: 'string', description: 'Text to replace with (for replace operation)' },
+        content: { type: 'string', description: 'Content to insert/append/prepend' },
+        line_number: { type: 'number', description: 'Line number for insert operation (1-based)' },
+        start_line: { type: 'number', description: 'Start line for delete_lines operation (1-based)' },
+        end_line: { type: 'number', description: 'End line for delete_lines operation (1-based, optional)' },
+      },
+      required: ['path', 'operation'],
+    },
+    execute: fileEdit,
+  },
+  spawn_agent: {
+    name: 'spawn_agent',
+    description: 'Spawn a background sub-agent to handle a specific task. REQUIRES APPROVAL for agent creation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: 'Task description for the sub-agent to execute' },
+        agent_name: { type: 'string', description: 'Name for the agent (default: "subagent")', default: 'subagent' },
+        model: { type: 'string', description: 'Model to use (default: claude-sonnet)', default: 'anthropic/claude-sonnet-4-20250514' },
+        timeout: { type: 'number', description: 'Timeout in seconds (default: 300)', default: 300 },
+      },
+      required: ['task'],
+    },
+    execute: spawnAgent,
+  },
+  exec: {
+    name: 'exec',
+    description: 'Execute shell commands. Safe commands run immediately, dangerous commands REQUIRE APPROVAL.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to execute' },
+        cwd: { type: 'string', description: 'Working directory (default: workspace)', default: '/root/.openclaw/workspace' },
+      },
+      required: ['command'],
+    },
+    execute: execCommand,
+  },
+  browser_navigate: {
+    name: 'browser_navigate',
+    description: 'Navigate browser to a URL. REQUIRES APPROVAL for web browsing.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL to navigate to' },
+        timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)', default: 30000 },
+      },
+      required: ['url'],
+    },
+    execute: browserNavigate,
+  },
+  browser_screenshot: {
+    name: 'browser_screenshot',
+    description: 'Take a screenshot of the current browser page.',
+    parameters: {
+      type: 'object',
+      properties: {
+        full_page: { type: 'boolean', description: 'Capture full page (default: false)', default: false },
+        format: { type: 'string', enum: ['png', 'jpeg'], description: 'Image format (default: png)', default: 'png' },
+      },
+    },
+    execute: browserScreenshot,
+  },
+  browser_snapshot: {
+    name: 'browser_snapshot',
+    description: 'Get structured content/DOM snapshot of the current browser page.',
+    parameters: {
+      type: 'object',
+      properties: {
+        refs: { type: 'string', enum: ['role', 'aria'], description: 'Reference type (default: role)', default: 'role' },
+        depth: { type: 'number', description: 'Content depth (default: 3)', default: 3 },
+      },
+    },
+    execute: browserSnapshot,
+  },
+  browser_click: {
+    name: 'browser_click',
+    description: 'Click an element on the current browser page.',
+    parameters: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector to click' },
+        ref: { type: 'string', description: 'Element reference from snapshot' },
+        text: { type: 'string', description: 'Text content to find and click' },
+      },
+    },
+    execute: browserClick,
+  },
+  browser_type: {
+    name: 'browser_type',
+    description: 'Type text into an input field on the current browser page.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Text to type' },
+        selector: { type: 'string', description: 'CSS selector of input field' },
+        ref: { type: 'string', description: 'Element reference from snapshot' },
+      },
+      required: ['text'],
+    },
+    execute: browserType,
+  },
   web_search: {
     name: 'web_search',
     description: 'Search the web for current information. Returns title, URL, and description for each result.',
@@ -268,7 +392,7 @@ export const TOOLS: Record<string, Tool> = {
   },
   shell_exec: {
     name: 'shell_exec',
-    description: 'Execute a safe shell command (ls, cat, grep, find, head, tail, wc, git status, git log). For exploring the system.',
+    description: 'Legacy safe shell command executor (use "exec" tool instead). Limited to safe commands only.',
     parameters: {
       type: 'object',
       properties: {
@@ -527,6 +651,363 @@ async function githubDeleteFile(args: { owner: string; repo: string; path: strin
   }
 }
 
+// Write file to workspace
+async function fileWrite(args: { path: string; content: string }) {
+  const { path, content } = args;
+  try {
+    // Security: only allow writing to workspace, no traversal
+    if (path.includes('..') || path.startsWith('/') || path.includes('\\')) {
+      return { error: 'Invalid path - must be relative to workspace without traversal' };
+    }
+    
+    const fs = require('fs').promises;
+    const nodePath = require('path');
+    const fullPath = nodePath.join('/root/.openclaw/workspace', path);
+    
+    // Create directory if it doesn't exist
+    const dir = nodePath.dirname(fullPath);
+    await fs.mkdir(dir, { recursive: true });
+    
+    await fs.writeFile(fullPath, content, 'utf-8');
+    return { success: true, path, size: content.length };
+  } catch (error) {
+    return { error: `Failed to write file: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Edit file in workspace (find/replace, insert, delete operations)
+async function fileEdit(args: { 
+  path: string; 
+  operation: 'replace' | 'insert' | 'append' | 'prepend' | 'delete_lines';
+  search?: string;
+  replace?: string;
+  content?: string;
+  line_number?: number;
+  start_line?: number;
+  end_line?: number;
+}) {
+  const { path, operation, search, replace, content, line_number, start_line, end_line } = args;
+  
+  try {
+    // Security: only allow editing files in workspace
+    if (path.includes('..') || path.startsWith('/') || path.includes('\\')) {
+      return { error: 'Invalid path - must be relative to workspace' };
+    }
+    
+    const fs = require('fs').promises;
+    const nodePath = require('path');
+    const fullPath = nodePath.join('/root/.openclaw/workspace', path);
+    
+    // Read current file
+    let currentContent;
+    try {
+      currentContent = await fs.readFile(fullPath, 'utf-8');
+    } catch (error) {
+      return { error: `Failed to read file: ${error instanceof Error ? error.message : 'File not found'}` };
+    }
+    
+    let newContent;
+    const lines = currentContent.split('\n');
+    
+    switch (operation) {
+      case 'replace':
+        if (!search || replace === undefined) {
+          return { error: 'Replace operation requires search and replace parameters' };
+        }
+        newContent = currentContent.replace(new RegExp(search, 'g'), replace);
+        break;
+        
+      case 'insert':
+        if (line_number === undefined || content === undefined) {
+          return { error: 'Insert operation requires line_number and content parameters' };
+        }
+        lines.splice(line_number - 1, 0, content);
+        newContent = lines.join('\n');
+        break;
+        
+      case 'append':
+        if (content === undefined) {
+          return { error: 'Append operation requires content parameter' };
+        }
+        newContent = currentContent + '\n' + content;
+        break;
+        
+      case 'prepend':
+        if (content === undefined) {
+          return { error: 'Prepend operation requires content parameter' };
+        }
+        newContent = content + '\n' + currentContent;
+        break;
+        
+      case 'delete_lines':
+        if (start_line === undefined) {
+          return { error: 'Delete lines operation requires start_line parameter' };
+        }
+        const endLine = end_line || start_line;
+        lines.splice(start_line - 1, endLine - start_line + 1);
+        newContent = lines.join('\n');
+        break;
+        
+      default:
+        return { error: 'Invalid operation. Must be: replace, insert, append, prepend, or delete_lines' };
+    }
+    
+    await fs.writeFile(fullPath, newContent, 'utf-8');
+    return { success: true, operation, path, new_size: newContent.length };
+    
+  } catch (error) {
+    return { error: `Failed to edit file: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Spawn sub-agent via OpenClaw
+async function spawnAgent(args: { task: string; agent_name?: string; model?: string; timeout?: number }) {
+  const { task, agent_name = 'subagent', model = 'anthropic/claude-sonnet-4-20250514', timeout = 300 } = args;
+  
+  try {
+    // Import gateway functions
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const result = await invokeGatewayTool('sessions_spawn', {
+      task,
+      label: `agent:main:${agent_name}:${Date.now().toString(36)}`,
+      model,
+      timeoutSeconds: timeout,
+      cleanup: 'keep',
+    });
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to spawn agent' };
+    }
+    
+    return {
+      success: true,
+      agent_name,
+      session_key: result.result?.sessionKey,
+      task,
+      model,
+      timeout,
+      status: 'spawned'
+    };
+    
+  } catch (error) {
+    return { error: `Failed to spawn agent: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Full shell execution with approval gate for dangerous commands
+async function execCommand(args: { command: string; cwd?: string }) {
+  const { command, cwd = '/root/.openclaw/workspace' } = args;
+  
+  // List of dangerous commands that should require explicit approval
+  const dangerousCommands = [
+    'rm', 'rmdir', 'del', 'delete', 'dd', 'format', 'mkfs',
+    'curl.*bash', 'wget.*bash', 'curl.*sh', 'wget.*sh',
+    'sudo', 'su', 'chmod +x', 'chown', 'mount', 'umount',
+    'kill', 'killall', 'pkill', 'shutdown', 'reboot', 'halt',
+    'crontab', 'systemctl', 'service', 'init.d',
+    '>', '>>', 'tee.*>', 'mv.*\.', 'cp.*\.', 'tar.*--delete'
+  ];
+  
+  const isDangerous = dangerousCommands.some(pattern => 
+    new RegExp(pattern, 'i').test(command.trim())
+  );
+  
+  if (isDangerous) {
+    return { 
+      error: 'APPROVAL_REQUIRED', 
+      message: `This command requires approval: "${command}". It may be destructive.`,
+      command,
+      requires_approval: true
+    };
+  }
+  
+  try {
+    const { execSync } = require('child_process');
+    const result = execSync(command, { 
+      cwd, 
+      encoding: 'utf-8',
+      timeout: 30000, // 30 second timeout
+      maxBuffer: 1024 * 1024, // 1MB buffer
+    });
+    return { output: result.slice(0, 10000) }; // Limit output to 10KB
+  } catch (error: any) {
+    return { 
+      error: `Command failed: ${error.message}`, 
+      output: error.stdout || '',
+      exit_code: error.status
+    };
+  }
+}
+
+// Browser navigation
+async function browserNavigate(args: { url: string; timeout?: number }) {
+  const { url, timeout = 30000 } = args;
+  
+  try {
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const result = await invokeGatewayTool('browser', {
+      action: 'open',
+      targetUrl: url,
+      timeoutMs: timeout,
+      profile: 'openclaw',
+    });
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to navigate browser' };
+    }
+    
+    return {
+      success: true,
+      url,
+      status: 'navigated'
+    };
+    
+  } catch (error) {
+    return { error: `Browser navigation failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Browser screenshot
+async function browserScreenshot(args: { full_page?: boolean; format?: 'png' | 'jpeg' }) {
+  const { full_page = false, format = 'png' } = args;
+  
+  try {
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const result = await invokeGatewayTool('browser', {
+      action: 'screenshot',
+      fullPage: full_page,
+      type: format,
+      profile: 'openclaw',
+    });
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to take screenshot' };
+    }
+    
+    return {
+      success: true,
+      format,
+      full_page,
+      image_data: result.result
+    };
+    
+  } catch (error) {
+    return { error: `Screenshot failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Browser content snapshot
+async function browserSnapshot(args: { refs?: 'role' | 'aria'; depth?: number }) {
+  const { refs = 'role', depth = 3 } = args;
+  
+  try {
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const result = await invokeGatewayTool('browser', {
+      action: 'snapshot',
+      refs,
+      depth,
+      profile: 'openclaw',
+    });
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to get page snapshot' };
+    }
+    
+    return {
+      success: true,
+      content: result.result,
+      refs,
+      depth
+    };
+    
+  } catch (error) {
+    return { error: `Page snapshot failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Browser click element
+async function browserClick(args: { selector?: string; ref?: string; text?: string }) {
+  const { selector, ref, text } = args;
+  
+  if (!selector && !ref && !text) {
+    return { error: 'Must provide selector, ref, or text to click' };
+  }
+  
+  try {
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const clickArgs: any = {
+      action: 'act',
+      request: {
+        kind: 'click'
+      },
+      profile: 'openclaw',
+    };
+    
+    if (selector) clickArgs.selector = selector;
+    if (ref) clickArgs.request.ref = ref;
+    if (text) clickArgs.request.text = text;
+    
+    const result = await invokeGatewayTool('browser', clickArgs);
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to click element' };
+    }
+    
+    return {
+      success: true,
+      clicked: selector || ref || text
+    };
+    
+  } catch (error) {
+    return { error: `Click failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+// Browser type text
+async function browserType(args: { text: string; selector?: string; ref?: string }) {
+  const { text, selector, ref } = args;
+  
+  if (!selector && !ref) {
+    return { error: 'Must provide selector or ref to type into' };
+  }
+  
+  try {
+    const { invokeGatewayTool } = require('./gateway');
+    
+    const typeArgs: any = {
+      action: 'act',
+      request: {
+        kind: 'type',
+        text
+      },
+      profile: 'openclaw',
+    };
+    
+    if (selector) typeArgs.selector = selector;
+    if (ref) typeArgs.request.ref = ref;
+    
+    const result = await invokeGatewayTool('browser', typeArgs);
+    
+    if (!result.ok) {
+      return { error: result.error?.message || 'Failed to type text' };
+    }
+    
+    return {
+      success: true,
+      typed: text,
+      target: selector || ref
+    };
+    
+  } catch (error) {
+    return { error: `Type failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
 // Write response back to web app via Supabase
 async function writeWebResponse(args: { request_id: string; response: string }) {
   const { request_id, response } = args;
@@ -615,34 +1096,52 @@ CRITICAL: When calling a tool, your ENTIRE response must be ONLY the JSON object
 - The system will execute the tool and give you the result
 - THEN you provide your analysis in a follow-up response
 
+### APPROVAL GATE SYSTEM
+🔒 Some tools require user approval for destructive operations:
+- **file_write/file_edit**: Creating or modifying files
+- **spawn_agent**: Creating background agents
+- **browser_navigate**: Opening web pages
+- **exec**: Dangerous shell commands (rm, sudo, curl|bash, etc.)
+
+When these tools are called, the system will present an execution plan and ask for approval.
+Safe operations (read-only, list files, safe shell commands) execute immediately.
+
 ### AVAILABLE TOOLS
 ${toolsList}
 
 ### EXAMPLES
 
-CORRECT tool call (entire response is just JSON):
-{"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain"}}
+File Operations:
+{"tool": "file_write", "args": {"path": "src/components/NewFile.tsx", "content": "export default function NewFile() { return <div>Hello</div>; }"}}
+{"tool": "file_edit", "args": {"path": "src/app/page.tsx", "operation": "replace", "search": "old text", "replace": "new text"}}
+{"tool": "file_read", "args": {"path": "src/lib/tools.ts"}}
 
-CORRECT final response (after receiving tool result):
-Based on the repository contents, I can see the src folder contains components, hooks, and lib directories...
+Agent Operations:
+{"tool": "spawn_agent", "args": {"task": "Fix the bug in the login component", "agent_name": "BugFixer", "model": "anthropic/claude-sonnet-4-20250514"}}
 
-WRONG (mixing tool call with text - DO NOT DO THIS):
-Let me check that. {"tool": "github_list_repo", "args": {...}} I'll analyze the results.
+Shell Operations:
+{"tool": "exec", "args": {"command": "npm install", "cwd": "/root/.openclaw/workspace"}}
+{"tool": "shell_exec", "args": {"command": "ls -la src/"}}
 
-### TOOL EXAMPLES
+Browser Operations:
+{"tool": "browser_navigate", "args": {"url": "https://github.com"}}
+{"tool": "browser_screenshot", "args": {"full_page": true}}
+{"tool": "browser_click", "args": {"text": "Sign in"}}
+{"tool": "browser_type", "args": {"text": "user@example.com", "selector": "input[type=email]"}}
 
-GitHub read: {"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app/page.tsx"}}
-GitHub list: {"tool": "github_list_repo", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src"}}
-GitHub search: {"tool": "github_search", "args": {"owner": "omniaintelligenceteam-ctrl", "query": "pricing", "language": "typescript"}}
-GitHub write: {"tool": "github_write_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/components/NewFile.tsx", "content": "export default function NewFile() { return <div>Hello</div> }", "message": "Add NewFile component"}}
-GitHub delete: {"tool": "github_delete_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/old-file.ts", "message": "Remove old file"}}
-Memory search: {"tool": "memory_search", "args": {"query": "sales leads", "limit": 5}}
-Web search: {"tool": "web_search", "args": {"query": "landscape lighting design", "count": 5}}
+GitHub Operations:
+{"tool": "github_read_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/app/page.tsx"}}
+{"tool": "github_write_file", "args": {"owner": "omniaintelligenceteam-ctrl", "repo": "Opie2ndbrain", "path": "src/components/NewFile.tsx", "content": "export default function NewFile() { return <div>Hello</div> }", "message": "Add NewFile component"}}
+
+Memory & Web:
+{"tool": "memory_search", "args": {"query": "sales leads", "limit": 5}}
+{"tool": "web_search", "args": {"query": "landscape lighting design", "count": 5}}
 
 ### RULES
 1. To use a tool: output ONLY the JSON object, nothing else
 2. After receiving results: provide your analysis (no more tool calls unless absolutely needed)
 3. Never ask "did you get it?" or "should I search?" - tool execution is automatic
 4. If you need multiple tools, call them one at a time and wait for results
+5. Destructive operations will trigger approval - this is expected and normal
 `;
 }

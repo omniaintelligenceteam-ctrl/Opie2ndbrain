@@ -138,27 +138,34 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     
     // Summary of all successful results
     if (successCount > 0) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `**Summary of Results:**\n\n` } }] })}\n\n`;
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: '**Summary of Results:**\\n\\n' } }] })}\n\n`;
       
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const toolCall = plan.toolCalls[i];
+        
         if (r.success) {
-          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ **${toolCall.tool}**: ${toolCall.description}\n` } }] })}\n\n`;
+          const content = '✅ **' + toolCall.tool + '**: ' + toolCall.description + '\\n';
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: content } }] })}\n\n`;
         } else {
-          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ **${toolCall.tool}**: ${r.error}\n` } }] })}\n\n`;
+          const content = '❌ **' + toolCall.tool + '**: ' + r.error + '\\n';
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: content } }] })}\n\n`;
+        }
         }
       }
       
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n` } }] })}\n\n`;
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: '\\n' } }] })}\n\n`;
     }
     
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Successfully executed ${successCount}/${totalCount} actions.\n\n` } }] })}\n\n`;
+    const summaryContent = 'Successfully executed ' + successCount + '/' + totalCount + ' actions.\\n\\n';
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: summaryContent } }] })}\n\n`;
     
     if (successCount === totalCount) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🎉 All actions completed successfully! The task has been executed as planned.\n\n**Done!**` } }] })}\n\n`;
+      const successContent = '🎉 All actions completed successfully! The task has been executed as planned.\\n\\n**Done!**';
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: successContent } }] })}\n\n`;
     } else {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Some actions encountered errors, but others completed successfully. Review the results above.\n\n**Done!**` } }] })}\n\n`;
+      const errorContent = '⚠️ Some actions encountered errors, but others completed successfully. Review the results above.\\n\\n**Done!**';
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: errorContent } }] })}\n\n`;
     }
     
     // Update plan status
@@ -168,7 +175,9 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     
   } catch (error) {
     console.error('[Approve] Execution error:', error);
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ **Execution Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\n**Done!**` } }] })}\n\n`;
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorContent = '\\n❌ **Execution Failed**\\n\\nError: ' + errorMsg + '\\n\\n**Done!**';
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: errorContent } }] })}\n\n`;
     
     ExecutionPlanStore.updateStatus(plan.id, 'error', { error: error instanceof Error ? error.message : 'Unknown error' });
     

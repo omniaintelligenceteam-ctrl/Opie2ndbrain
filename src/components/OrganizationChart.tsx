@@ -6,6 +6,74 @@ import { ORG_DATA, OrgNode, OrgNodeWithChildren, buildOrgTree, getStatusIndicato
 import OrgNodeComponent from './OrgNode';
 import { useAgentSessions } from '../hooks/useAgentSessions';
 
+// Hook for spawned agents
+function useSpawnedAgents(refreshInterval: number = 5000) {
+  const [agents, setAgents] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/tools/spawn?action=list');
+        if (response.ok) {
+          const data = await response.json();
+          setAgents(data.agents || []);
+          setError(null);
+        } else {
+          setError('Failed to fetch agents');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgents();
+    const interval = setInterval(fetchAgents, refreshInterval);
+    return () => clearInterval(interval);
+  }, [refreshInterval]);
+
+  return { agents, loading, error };
+}
+
+// Hook for browser sessions
+function useBrowserSessions(refreshInterval: number = 5000) {
+  const [sessions, setSessions] = React.useState([]);
+  const [status, setStatus] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/tools/browser?action=status');
+        if (response.ok) {
+          const data = await response.json();
+          setSessions(data.local_sessions || []);
+          setStatus(data.gateway_status);
+          setError(data.gateway_error);
+        } else {
+          setError('Failed to fetch browser status');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSessions();
+    const interval = setInterval(fetchSessions, refreshInterval);
+    return () => clearInterval(interval);
+  }, [refreshInterval]);
+
+  return { sessions, status, loading, error };
+}
+
 interface OrganizationChartProps {
   isMobile?: boolean;
   isTablet?: boolean;
@@ -25,6 +93,19 @@ export default function OrganizationChart({
     loading,
     error,
   } = useAgentSessions(5000, true);
+
+  const {
+    agents: spawnedAgents,
+    loading: agentsLoading,
+    error: agentsError,
+  } = useSpawnedAgents(5000);
+
+  const {
+    sessions: browserSessions,
+    status: browserStatus,
+    loading: browserLoading,
+    error: browserError,
+  } = useBrowserSessions(5000);
 
   // Merge with real-time data via agentIds mapping
   const orgData = useMemo(() => {
@@ -194,6 +275,130 @@ export default function OrganizationChart({
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Extended Capabilities Panel */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '16px', 
+        marginBottom: '32px', 
+        justifyContent: 'center',
+        flexWrap: 'wrap' 
+      }}>
+        {/* Spawned Agents Panel */}
+        <div style={{
+          background: 'rgba(139, 69, 255, 0.1)',
+          border: '1px solid rgba(139, 69, 255, 0.3)',
+          borderRadius: '12px',
+          padding: '16px',
+          minWidth: '200px',
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            marginBottom: '12px' 
+          }}>
+            <div style={{ fontSize: '20px' }}>🤖</div>
+            <div>
+              <div style={{ color: '#8B45FF', fontSize: '14px', fontWeight: 600 }}>
+                Sub-Agents
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
+                {spawnedAgents.length} spawned
+              </div>
+            </div>
+          </div>
+          
+          {spawnedAgents.length > 0 ? (
+            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+              {spawnedAgents.slice(0, 3).map((agent: any) => (
+                <div key={agent.id} style={{ 
+                  marginBottom: '8px', 
+                  padding: '6px 8px',
+                  background: 'rgba(139, 69, 255, 0.1)',
+                  borderRadius: '6px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ color: '#fff', fontWeight: 500 }}>{agent.name}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    {agent.status} • {agent.task.slice(0, 30)}...
+                  </div>
+                </div>
+              ))}
+              {spawnedAgents.length > 3 && (
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
+                  +{spawnedAgents.length - 3} more
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
+              No active sub-agents
+            </div>
+          )}
+        </div>
+
+        {/* Browser Sessions Panel */}
+        <div style={{
+          background: 'rgba(34, 197, 94, 0.1)',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          borderRadius: '12px',
+          padding: '16px',
+          minWidth: '200px',
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            marginBottom: '12px' 
+          }}>
+            <div style={{ fontSize: '20px' }}>🌐</div>
+            <div>
+              <div style={{ color: '#22C55E', fontSize: '14px', fontWeight: 600 }}>
+                Browser
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
+                {browserSessions.filter((s: any) => s.status === 'ready').length} active
+              </div>
+            </div>
+          </div>
+          
+          {browserSessions.length > 0 ? (
+            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+              {browserSessions.slice(0, 3).map((session: any) => (
+                <div key={session.id} style={{ 
+                  marginBottom: '8px', 
+                  padding: '6px 8px',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  borderRadius: '6px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ color: '#fff', fontWeight: 500 }}>
+                    {session.status === 'ready' ? '🟢' : session.status === 'navigating' ? '🟡' : '🔴'} 
+                    {session.title || 'Browser Tab'}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    {session.url ? new URL(session.url).hostname : 'No URL'}
+                  </div>
+                </div>
+              ))}
+              {browserSessions.length > 3 && (
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
+                  +{browserSessions.length - 3} more
+                </div>
+              )}
+            </div>
+          ) : browserStatus ? (
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
+              Browser ready
+            </div>
+          ) : (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
+              No browser sessions
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Organization Tree */}
