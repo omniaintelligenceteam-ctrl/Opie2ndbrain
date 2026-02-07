@@ -140,15 +140,15 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     if (successCount > 0) {
       yield `data: ${JSON.stringify({ choices: [{ delta: { content: `**Summary of Results:**\n\n` } }] })}\n\n`;
       
-      results.forEach((r, i) => {
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const toolCall = plan.toolCalls[i];
         if (r.success) {
-          const toolCall = plan.toolCalls[i];
           yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ **${toolCall.tool}**: ${toolCall.description}\n` } }] })}\n\n`;
         } else {
-          const toolCall = plan.toolCalls[i];
           yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ **${toolCall.tool}**: ${r.error}\n` } }] })}\n\n`;
         }
-      });
+      }
       
       yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n` } }] })}\n\n`;
     }
