@@ -98,6 +98,8 @@ function sseData(content: string): string {
 // Execute a plan's tool calls with streaming feedback
 async function* executePlan(plan: any): AsyncGenerator<string> {
   try {
+    console.log('[executePlan] Starting execution for plan:', plan.id, 'with', plan.toolCalls?.length || 0, 'tool calls');
+    
     // Mark as executing
     ExecutionPlanStore.updateStatus(plan.id, 'executing');
 
@@ -108,11 +110,18 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     // Execute each tool call
     for (let i = 0; i < plan.toolCalls.length; i++) {
       const toolCall = plan.toolCalls[i];
+      console.log('[executePlan] Executing tool', i + 1, ':', toolCall.tool);
 
       yield sseData('**' + (i + 1) + '.** ' + toolCall.description + '\n');
       yield sseData('🔧 Executing `' + toolCall.tool + '`...\n');
 
-      const result = await executeTool(toolCall);
+      let result;
+      try {
+        result = await executeTool(toolCall);
+      } catch (toolError) {
+        console.error('[executePlan] Tool execution error:', toolError);
+        result = { success: false, error: toolError instanceof Error ? toolError.message : 'Tool crashed' };
+      }
 
       if (result.success) {
         yield sseData('✅ Success\n\n');
@@ -231,10 +240,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Invalid action' }, { status: 400 });
     
   } catch (error) {
-    console.error('[Approve] API error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('[Approve] API error:', errorMsg);
+    console.error('[Approve] Stack:', errorStack);
     return Response.json({ 
-      error: 'Internal server error', 
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to approve plan', 
+      details: errorMsg,
+      stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
     }, { status: 500 });
   }
 }
