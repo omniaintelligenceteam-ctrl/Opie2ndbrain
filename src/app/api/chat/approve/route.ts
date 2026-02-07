@@ -156,9 +156,9 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Successfully executed ${successCount}/${totalCount} actions.\n\n` } }] })}\n\n`;
     
     if (successCount === totalCount) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🎉 All actions completed successfully! The task has been executed as planned.` } }] })}\n\n`;
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🎉 All actions completed successfully! The task has been executed as planned.\n\n**Done!**` } }] })}\n\n`;
     } else {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Some actions encountered errors, but others completed successfully. Review the results above.` } }] })}\n\n`;
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Some actions encountered errors, but others completed successfully. Review the results above.\n\n**Done!**` } }] })}\n\n`;
     }
     
     // Update plan status
@@ -168,7 +168,7 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
     
   } catch (error) {
     console.error('[Approve] Execution error:', error);
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ **Execution Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n` } }] })}\n\n`;
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ **Execution Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\n**Done!**` } }] })}\n\n`;
     
     ExecutionPlanStore.updateStatus(plan.id, 'error', { error: error instanceof Error ? error.message : 'Unknown error' });
     
