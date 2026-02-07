@@ -44,6 +44,7 @@ interface FloatingChatProps {
   transcript: string;
   onCancelProcessing?: () => void;
   onStopSpeaking?: () => void;
+  voiceError?: string | null;
   interactionMode?: InteractionMode;
   onInteractionModeChange?: (mode: InteractionMode) => void;
   selectedModel?: AIModel;
@@ -370,6 +371,7 @@ export default function FloatingChat({
   transcript,
   onCancelProcessing,
   onStopSpeaking,
+  voiceError,
   interactionMode: controlledInteractionMode,
   onInteractionModeChange,
   selectedModel: controlledModel,
@@ -1666,6 +1668,21 @@ export default function FloatingChat({
           </div>
           
         </div>
+
+        {/* Voice error toast */}
+        {voiceError && (
+          <div style={{
+            padding: '8px 12px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: 8,
+            fontSize: '0.75rem',
+            color: '#fca5a5',
+            margin: '0 12px 4px',
+          }}>
+            {voiceError}
+          </div>
+        )}
 
         {/* Input Area */}
         <div style={styles.inputArea}>

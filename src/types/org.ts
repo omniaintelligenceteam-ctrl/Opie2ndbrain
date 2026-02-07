@@ -10,12 +10,13 @@ export interface OrgNode {
   costPer1M: number;
   skills: string[];
   reportsTo: string | null;
-  status: 'active' | 'busy' | 'idle';
+  status: 'active' | 'busy' | 'idle' | 'talking' | 'working' | 'thinking';
   avatar: string;
   color: string;
   activeSessions?: number;
   currentTask?: string;
   lastActive?: string;
+  agentIds?: string[];  // Maps to real-time agent IDs from agentMapping
 }
 
 export interface OrgNodeWithChildren extends OrgNode {
@@ -50,7 +51,8 @@ export const ORG_DATA: OrgNode[] = [
     avatar: '🎯',
     color: '#9333EA', // purple
     activeSessions: 3,
-    currentTask: 'Coordinating agent deployment'
+    currentTask: 'Coordinating agent deployment',
+    agentIds: ['*'],  // Coordinator: reflects all agent activity
   },
   {
     id: 'sonny',
@@ -65,7 +67,8 @@ export const ORG_DATA: OrgNode[] = [
     avatar: '🔧',
     color: '#10B981', // green
     activeSessions: 2,
-    currentTask: 'Building Organization Chart feature'
+    currentTask: 'Building Organization Chart feature',
+    agentIds: ['code'],
   },
   {
     id: 'atlas',
@@ -79,7 +82,8 @@ export const ORG_DATA: OrgNode[] = [
     status: 'active',
     avatar: '🔍',
     color: '#3B82F6', // blue
-    activeSessions: 1
+    activeSessions: 1,
+    agentIds: ['research', 'analyst'],
   },
   {
     id: 'glint',
@@ -93,7 +97,8 @@ export const ORG_DATA: OrgNode[] = [
     status: 'idle',
     avatar: '✨',
     color: '#F59E0B', // orange
-    activeSessions: 0
+    activeSessions: 0,
+    agentIds: ['content', 'outreach'],
   },
   {
     id: 'spark',
@@ -107,7 +112,8 @@ export const ORG_DATA: OrgNode[] = [
     status: 'active',
     avatar: '⚡',
     color: '#06B6D4', // cyan
-    activeSessions: 1
+    activeSessions: 1,
+    agentIds: ['qa', 'sales', 'proposal'],
   }
 ];
 
@@ -139,6 +145,9 @@ export function getStatusIndicator(status: OrgNode['status']): string {
   switch (status) {
     case 'active': return '🟢';
     case 'busy': return '🟡';
+    case 'talking': return '💬';
+    case 'working': return '⚙️';
+    case 'thinking': return '🧠';
     case 'idle': return '⚪';
     default: return '⚪';
   }
@@ -148,6 +157,9 @@ export function getStatusColor(status: OrgNode['status']): string {
   switch (status) {
     case 'active': return '#10B981';
     case 'busy': return '#F59E0B';
+    case 'talking': return '#A78BFA';
+    case 'working': return '#3B82F6';
+    case 'thinking': return '#8B5CF6';
     case 'idle': return '#6B7280';
     default: return '#6B7280';
   }

@@ -94,6 +94,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   const onSendRef = useRef(onSend);
   const mountedRef = useRef(true);
   const accumulatedFinalRef = useRef('');
+  const recognitionStartedAtRef = useRef<number | null>(null);
+  const healthCheckTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep refs in sync
   ctxRef.current = ctx;
@@ -110,27 +112,56 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     for (const effect of effects) {
       switch (effect.type) {
         case 'START_RECOGNITION': {
-          if (!recognitionRef.current) break;
+          if (!recognitionRef.current) {
+            console.warn('[VoiceEngine] START_RECOGNITION: recognitionRef is null — cannot start');
+            break;
+          }
           const rec = recognitionRef.current;
           // Cancel any pending onend restart
           restartingRef.current = true;
           // Reset accumulated transcript for fresh session
           accumulatedFinalRef.current = '';
+          // Clear any previous health check
+          if (healthCheckTimerRef.current) {
+            clearTimeout(healthCheckTimerRef.current);
+            healthCheckTimerRef.current = null;
+          }
+          recognitionStartedAtRef.current = null;
           // Stop first to ensure clean state
           try { rec.stop(); } catch { /* ok */ }
+          console.log('[VoiceEngine] Starting recognition...');
           setTimeout(() => {
             if (!mountedRef.current) return;
             // Verify we should still be listening
             if (!ctxRef.current.micOn || ctxRef.current.state !== 'listening') {
               restartingRef.current = false;
+              console.log('[VoiceEngine] Aborted start — state changed during delay');
               return;
             }
             restartingRef.current = false;
             try {
               rec.start();
+              console.log('[VoiceEngine] Recognition started successfully');
+              // Health check: if no result within 5s, restart
+              recognitionStartedAtRef.current = Date.now();
+              healthCheckTimerRef.current = setTimeout(() => {
+                if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && recognitionStartedAtRef.current) {
+                  console.warn('[VoiceEngine] No speech results after 5s — restarting recognition');
+                  try { recognitionRef.current?.stop(); } catch { /* ok */ }
+                  setTimeout(() => {
+                    if (!mountedRef.current || !ctxRef.current.micOn) return;
+                    try {
+                      recognitionRef.current?.start();
+                      recognitionStartedAtRef.current = Date.now();
+                      console.log('[VoiceEngine] Recognition restarted after health check');
+                    } catch { /* ok */ }
+                  }, 200);
+                }
+              }, 5000);
             } catch (e: any) {
               if (e?.name === 'InvalidStateError') {
                 // Already running — not an error
+                console.log('[VoiceEngine] Recognition already running (InvalidStateError)');
                 return;
               }
               console.warn('[VoiceEngine] Recognition start failed:', e);
@@ -360,6 +391,15 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       if (!mountedRef.current) return;
 
+      // Recognition is healthy — clear health check
+      if (recognitionStartedAtRef.current) {
+        recognitionStartedAtRef.current = null;
+        if (healthCheckTimerRef.current) {
+          clearTimeout(healthCheckTimerRef.current);
+          healthCheckTimerRef.current = null;
+        }
+      }
+
       // Only process NEW/changed results from resultIndex onward
       // (Web Speech API keeps all previous results in e.results with continuous mode)
       let newFinalText = '';
@@ -383,6 +423,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       const displayText = (accumulatedFinalRef.current + ' ' + interimText).trim();
       const isFinal = !!newFinalText.trim() && !interimText;
 
+      console.log(`[VoiceEngine] Got result: "${displayText}" (final=${isFinal})`);
+
       if (displayText) {
         dispatch({
           type: 'SPEECH_RESULT',
@@ -394,6 +436,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
     recognition.onend = () => {
       if (!mountedRef.current) return;
+      console.log(`[VoiceEngine] Recognition ended (micOn=${ctxRef.current.micOn}, state=${ctxRef.current.state}, restarting=${restartingRef.current})`);
       // Auto-restart if mic should still be on, we're in listening state,
       // and no START_RECOGNITION effect is already managing the restart
       if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && !restartingRef.current) {
@@ -410,6 +453,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
     recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
       if (!mountedRef.current) return;
+      console.log(`[VoiceEngine] Recognition error: ${e.error} (micOn=${ctxRef.current.micOn}, state=${ctxRef.current.state})`);
 
       // 'no-speech' and 'aborted' are expected — just restart
       if (e.error === 'no-speech' || e.error === 'aborted') {
@@ -434,6 +478,16 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
     recognitionRef.current = recognition;
 
+    // Recovery: if mic was already on when this effect re-ran (e.g., dispatch ref changed),
+    // start recognition since START_RECOGNITION was already processed
+    if (ctxRef.current.micOn && ctxRef.current.state === 'listening') {
+      console.log('[VoiceEngine] Recovery: mic was on when recognition re-initialized — starting');
+      setTimeout(() => {
+        if (!mountedRef.current || !ctxRef.current.micOn) return;
+        try { recognition.start(); } catch { /* ok */ }
+      }, 50);
+    }
+
     return () => {
       try { recognition.stop(); } catch { /* ok */ }
       recognition.onresult = null;
@@ -456,6 +510,12 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         silenceTimerRef.current = null;
       }
 
+      // Cleanup health check timer
+      if (healthCheckTimerRef.current) {
+        clearTimeout(healthCheckTimerRef.current);
+        healthCheckTimerRef.current = null;
+      }
+
       // Abort pending requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -471,7 +531,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Public API ────────────────────────────────────────────────
-  const toggleMic = useCallback(() => {
+  const toggleMic = useCallback(async () => {
+    console.log(`[VoiceEngine] toggleMic: micOn=${ctx.micOn}`);
     if (!browserSupport.speechRecognition) {
       alert(
         browserSupport.warnings[0] ||
@@ -482,9 +543,30 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
     if (ctx.micOn) {
       dispatch({ type: 'MIC_OFF' });
-    } else {
-      dispatch({ type: 'MIC_ON' });
+      return;
     }
+
+    // Pre-flight: explicitly request mic permission
+    // This catches permission issues that SpeechRecognition silently swallows
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Got permission — stop the stream immediately (SpeechRecognition manages its own)
+        stream.getTracks().forEach(t => t.stop());
+        console.log('[VoiceEngine] Mic permission granted');
+      } catch (err: any) {
+        console.error('[VoiceEngine] Mic permission check failed:', err);
+        const msg = err.name === 'NotAllowedError'
+          ? 'Microphone permission denied. Please allow mic access in browser settings.'
+          : err.name === 'NotFoundError'
+          ? 'No microphone found. Please connect a microphone.'
+          : `Microphone error: ${err.message}`;
+        dispatch({ type: 'ERROR', error: msg, code: err.name });
+        return;
+      }
+    }
+
+    dispatch({ type: 'MIC_ON' });
   }, [ctx.micOn, dispatch, browserSupport]);
 
   const stopSpeaking = useCallback(() => {

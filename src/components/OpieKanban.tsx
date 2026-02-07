@@ -1976,6 +1976,7 @@ export default function OpieKanban(): React.ReactElement {
         onStopSpeaking={stopSpeaking}
         onCancelProcessing={cancelVoiceProcessing}
         transcript={transcript}
+        voiceError={voiceEngine.error}
         interactionMode={interactionMode}
         onInteractionModeChange={setInteractionMode}
         selectedModel={selectedModel}
