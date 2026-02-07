@@ -75,7 +75,8 @@ async function fileRead(args: { path: string }) {
     }
     
     const fs = require('fs').promises;
-    const fullPath = `/root/.openclaw/workspace/${path}`;
+    const nodePath = require('path');
+    const fullPath = nodePath.join(WORKSPACE_BASE, path);
     const content = await fs.readFile(fullPath, 'utf-8');
     return { content: content.slice(0, 10000) }; // Limit to 10KB
   } catch (error) {
@@ -92,7 +93,8 @@ async function fileList(args: { path?: string }) {
     }
     
     const fs = require('fs').promises;
-    const fullPath = `/root/.openclaw/workspace/${path}`;
+    const nodePath = require('path');
+    const fullPath = nodePath.join(WORKSPACE_BASE, path);
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
     
     return {
@@ -110,7 +112,7 @@ async function fileList(args: { path?: string }) {
 
 // Execute shell command (restricted)
 async function shellExec(args: { command: string; cwd?: string }) {
-  const { command, cwd = '/root/.openclaw/workspace' } = args;
+  const { command, cwd = WORKSPACE_BASE } = args;
   
   // Security: whitelist safe commands only
   const allowedCommands = ['ls', 'cat', 'grep', 'find', 'head', 'tail', 'wc', 'git status', 'git log'];
@@ -271,7 +273,7 @@ export const TOOLS: Record<string, Tool> = {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Shell command to execute' },
-        cwd: { type: 'string', description: 'Working directory (default: workspace)', default: '/root/.openclaw/workspace' },
+        cwd: { type: 'string', description: 'Working directory (default: /tmp/workspace)', default: '/tmp/workspace' },
       },
       required: ['command'],
     },
@@ -397,7 +399,7 @@ export const TOOLS: Record<string, Tool> = {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Command to execute (must start with allowed command)' },
-        cwd: { type: 'string', description: 'Working directory (default: workspace)', default: '/root/.openclaw/workspace' },
+        cwd: { type: 'string', description: 'Working directory (default: /tmp/workspace)', default: '/tmp/workspace' },
       },
       required: ['command'],
     },
@@ -651,6 +653,9 @@ async function githubDeleteFile(args: { owner: string; repo: string; path: strin
   }
 }
 
+// Workspace base path - uses /tmp in production (Vercel), env override for local
+const WORKSPACE_BASE = process.env.WORKSPACE_BASE || '/tmp/workspace';
+
 // Write file to workspace
 async function fileWrite(args: { path: string; content: string }) {
   const { path, content } = args;
@@ -662,7 +667,7 @@ async function fileWrite(args: { path: string; content: string }) {
     
     const fs = require('fs').promises;
     const nodePath = require('path');
-    const fullPath = nodePath.join('/root/.openclaw/workspace', path);
+    const fullPath = nodePath.join(WORKSPACE_BASE, path);
     
     // Create directory if it doesn't exist
     const dir = nodePath.dirname(fullPath);
@@ -696,7 +701,7 @@ async function fileEdit(args: {
     
     const fs = require('fs').promises;
     const nodePath = require('path');
-    const fullPath = nodePath.join('/root/.openclaw/workspace', path);
+    const fullPath = nodePath.join(WORKSPACE_BASE, path);
     
     // Read current file
     let currentContent;
@@ -797,7 +802,7 @@ async function spawnAgent(args: { task: string; agent_name?: string; model?: str
 
 // Full shell execution with approval gate for dangerous commands
 async function execCommand(args: { command: string; cwd?: string }) {
-  const { command, cwd = '/root/.openclaw/workspace' } = args;
+  const { command, cwd = WORKSPACE_BASE } = args;
   
   // List of dangerous commands that should require explicit approval
   const dangerousCommands = [
@@ -1120,8 +1125,8 @@ Agent Operations:
 {"tool": "spawn_agent", "args": {"task": "Fix the bug in the login component", "agent_name": "BugFixer", "model": "anthropic/claude-sonnet-4-20250514"}}
 
 Shell Operations:
-{"tool": "exec", "args": {"command": "npm install", "cwd": "/root/.openclaw/workspace"}}
-{"tool": "shell_exec", "args": {"command": "ls -la src/"}}
+{"tool": "exec", "args": {"command": "npm install", "cwd": "/tmp/workspace"}}
+{"tool": "shell_exec", "args": {"command": "ls -la"}}
 
 Browser Operations:
 {"tool": "browser_navigate", "args": {"url": "https://github.com"}}
