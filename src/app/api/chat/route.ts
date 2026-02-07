@@ -322,46 +322,124 @@ async function generateExecutionPlan(
   };
   error?: string;
 }> {
+  // Try Claude Sonnet first (more reliable for JSON), fallback to Kimi if unavailable
+  const useAnthropic = process.env.ANTHROPIC_API_KEY && true; // Enable Claude for planning
+  
+  if (useAnthropic) {
+    return generateExecutionPlanAnthropic(messages, sessionId);
+  }
+  
+  // Fallback to Kimi with improved parsing
+  return generateExecutionPlanKimi(messages, sessionId);
+}
+
+// Claude Sonnet planning (reliable JSON)
+async function generateExecutionPlanAnthropic(
+  messages: Array<{ role: string; content: string }>,
+  sessionId: string
+): Promise<{
+  success: boolean;
+  plan?: {
+    message: string;
+    plannedActions: string[];
+    toolCalls: ToolCall[];
+  };
+  error?: string;
+}> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { success: false, error: 'ANTHROPIC_API_KEY not configured' };
+  }
+
+  try {
+    const planningPrompt = `Create an execution plan in JSON format:
+
+{
+  "plannedActions": ["Brief summary ending with 'Execute?'"],
+  "toolCalls": [{"tool": "...", "args": {...}, "description": "..."}]
+}
+
+User request: "${messages[messages.length - 1]?.content || ''}"
+
+Available tools: ${Object.keys(TOOLS).join(', ')}`;
+
+    const apiMessages = messages.slice(1, -1).map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    }));
+
+    apiMessages.push({
+      role: 'user',
+      content: planningPrompt,
+    });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1024,
+      system: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.',
+      messages: apiMessages,
+      temperature: 0.1,
+    });
+
+    const planText = response.content[0].type === 'text' ? response.content[0].text : '';
+    console.log('[Planning] Claude response:', planText.slice(0, 500));
+
+    // Parse JSON more robustly
+    const planJson = parseExecutionPlanJSON(planText);
+    if (!planJson) {
+      return { success: false, error: 'Failed to parse execution plan JSON' };
+    }
+
+    // Validate the plan
+    const validation = validateExecutionPlan(planJson);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    return {
+      success: true,
+      plan: {
+        message: messages[messages.length - 1]?.content || '',
+        plannedActions: planJson.plannedActions,
+        toolCalls: planJson.toolCalls,
+      },
+    };
+  } catch (error) {
+    console.error('[Planning] Claude error:', error);
+    // Fallback to Kimi if Claude fails
+    return generateExecutionPlanKimi(messages, sessionId);
+  }
+}
+
+// Kimi planning with improved JSON parsing
+async function generateExecutionPlanKimi(
+  messages: Array<{ role: string; content: string }>,
+  sessionId: string
+): Promise<{
+  success: boolean;
+  plan?: {
+    message: string;
+    plannedActions: string[];
+    toolCalls: ToolCall[];
+  };
+  error?: string;
+}> {
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
     return { success: false, error: 'OLLAMA_API_KEY not configured' };
   }
 
   try {
-    const planningPrompt = `
-VOICE-FRIENDLY PLANNING MODE: Create a simple execution plan for voice approval.
+    // Simplified prompt for better JSON consistency
+    const planningPrompt = `Create an execution plan in JSON format:
 
-Based on the user's request, create a simple plan in this EXACT JSON format:
 {
-  "plannedActions": [
-    "Simple 1-2 sentence summary ending with 'Execute?'"
-  ],
-  "toolCalls": [
-    {
-      "tool": "tool_name",
-      "args": {"param": "value"},
-      "description": "Human-readable description of what this tool call will do"
-    }
-  ]
+  "plannedActions": ["Brief summary ending with 'Execute?'"],
+  "toolCalls": [{"tool": "...", "args": {...}, "description": "..."}]
 }
 
-IMPORTANT RULES:
-- plannedActions should contain ONLY ONE item: a simple 1-2 sentence summary of what you'll do, ending with "Execute?"
-- Example: "I'll create a new React component and update the main page. Execute?"
-- Example: "I'll spawn a sub-agent to analyze the codebase and fix the bug. Execute?"
-- Example: "I'll open GitHub in the browser and take a screenshot. Execute?"
-- Do NOT list detailed steps - keep it conversational and brief for voice interaction
-- toolCalls should still be complete and accurate for actual execution
-- Your ENTIRE response must be valid JSON
+User request: "${messages[messages.length - 1]?.content || ''}"
 
-AVAILABLE TOOLS (with approval requirements):
-🔒 APPROVAL REQUIRED: file_write, file_edit, spawn_agent, browser_navigate, exec (dangerous), github_write_file, github_delete_file
-✅ SAFE: file_read, file_list, memory_search, web_search, shell_exec (safe), browser_screenshot, browser_snapshot, github_read_file, github_list_repo
-
-User's request: "${messages[messages.length - 1]?.content || ''}"
-
-Available tools: ${Object.keys(TOOLS).join(', ')}
-    `;
+Available tools: ${Object.keys(TOOLS).join(', ')}`;
 
     const planningMessages = [
       ...messages.slice(0, -1),
@@ -379,7 +457,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}
         stream: false,
         messages: planningMessages,
         max_tokens: 1024,
-        temperature: 0.3, // Lower temperature for more consistent JSON
+        temperature: 0.1, // Very low temperature for consistent JSON
       }),
     });
 
@@ -390,39 +468,18 @@ Available tools: ${Object.keys(TOOLS).join(', ')}
     const data = await response.json();
     const planText = data.choices?.[0]?.message?.content || '';
     
-    console.log('[Planning] Raw AI response:', planText.slice(0, 500));
+    console.log('[Planning] Kimi response:', planText.slice(0, 500));
 
-    // Try to extract JSON from the response
-    let planJson;
-    try {
-      // Look for JSON between ```json and ``` or just find the JSON object
-      const jsonMatch = planText.match(/```json\s*([\s\S]*?)\s*```/) || planText.match(/(\{[\s\S]*\})/);
-      const jsonString = jsonMatch ? jsonMatch[1] : planText;
-      planJson = JSON.parse(jsonString.trim());
-    } catch (e) {
-      console.error('[Planning] Failed to parse JSON:', e);
-      return { success: false, error: 'Failed to parse execution plan from AI response' };
+    // Parse JSON more robustly
+    const planJson = parseExecutionPlanJSON(planText);
+    if (!planJson) {
+      return { success: false, error: 'Failed to parse execution plan JSON' };
     }
 
-    if (!planJson.plannedActions || !Array.isArray(planJson.plannedActions)) {
-      return { success: false, error: 'Invalid plan format: missing plannedActions' };
-    }
-
-    if (!planJson.toolCalls || !Array.isArray(planJson.toolCalls)) {
-      return { success: false, error: 'Invalid plan format: missing toolCalls' };
-    }
-
-    // Validate tool calls
-    for (const toolCall of planJson.toolCalls) {
-      if (!toolCall.tool || !TOOLS[toolCall.tool]) {
-        return { success: false, error: `Invalid tool: ${toolCall.tool}` };
-      }
-      if (!toolCall.args || typeof toolCall.args !== 'object') {
-        return { success: false, error: `Invalid args for tool ${toolCall.tool}` };
-      }
-      if (!toolCall.description || typeof toolCall.description !== 'string') {
-        return { success: false, error: `Missing description for tool ${toolCall.tool}` };
-      }
+    // Validate the plan
+    const validation = validateExecutionPlan(planJson);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
     }
 
     return {
@@ -434,9 +491,121 @@ Available tools: ${Object.keys(TOOLS).join(', ')}
       },
     };
   } catch (error) {
-    console.error('[Planning] Error:', error);
+    console.error('[Planning] Kimi error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Planning failed' };
   }
+}
+
+// Robust JSON parsing function
+function parseExecutionPlanJSON(text: string): any | null {
+  console.log('[JSON Parser] Input:', text.slice(0, 500).replace(/\n/g, '\\n'));
+  
+  // Method 1: Try to find JSON between code blocks
+  let jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1].trim());
+      console.log('[JSON Parser] SUCCESS - code block');
+      return parsed;
+    } catch (e) {
+      console.log('[JSON Parser] Code block parse failed:', e);
+    }
+  }
+  
+  // Method 2: Find the first complete JSON object
+  let braceCount = 0;
+  let start = -1;
+  let end = -1;
+  
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      if (braceCount === 0) start = i;
+      braceCount++;
+    } else if (text[i] === '}') {
+      braceCount--;
+      if (braceCount === 0 && start !== -1) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  
+  if (start !== -1 && end !== -1) {
+    const jsonStr = text.slice(start, end);
+    try {
+      const parsed = JSON.parse(jsonStr);
+      console.log('[JSON Parser] SUCCESS - brace matching');
+      return parsed;
+    } catch (e) {
+      console.log('[JSON Parser] Brace matching parse failed:', e);
+    }
+  }
+  
+  // Method 3: Try to parse the entire text as JSON
+  try {
+    const parsed = JSON.parse(text.trim());
+    console.log('[JSON Parser] SUCCESS - direct parse');
+    return parsed;
+  } catch (e) {
+    console.log('[JSON Parser] Direct parse failed:', e);
+  }
+  
+  // Method 4: Try to extract JSON-like content more aggressively
+  const cleanText = text.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
+  if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(cleanText);
+      console.log('[JSON Parser] SUCCESS - aggressive clean');
+      return parsed;
+    } catch (e) {
+      console.log('[JSON Parser] Aggressive clean parse failed:', e);
+    }
+  }
+  
+  console.log('[JSON Parser] All methods failed');
+  return null;
+}
+
+// Validation function for execution plans
+function validateExecutionPlan(planJson: any): { valid: boolean; error?: string } {
+  if (!planJson || typeof planJson !== 'object') {
+    return { valid: false, error: 'Plan must be an object' };
+  }
+  
+  if (!planJson.plannedActions || !Array.isArray(planJson.plannedActions)) {
+    return { valid: false, error: 'Invalid plan format: missing plannedActions array' };
+  }
+  
+  if (planJson.plannedActions.length === 0) {
+    return { valid: false, error: 'plannedActions cannot be empty' };
+  }
+  
+  if (!planJson.toolCalls || !Array.isArray(planJson.toolCalls)) {
+    return { valid: false, error: 'Invalid plan format: missing toolCalls array' };
+  }
+  
+  // Validate each tool call
+  for (let i = 0; i < planJson.toolCalls.length; i++) {
+    const toolCall = planJson.toolCalls[i];
+    
+    if (!toolCall.tool || typeof toolCall.tool !== 'string') {
+      return { valid: false, error: `Tool call ${i + 1}: missing or invalid tool name` };
+    }
+    
+    if (!TOOLS[toolCall.tool]) {
+      return { valid: false, error: `Tool call ${i + 1}: unknown tool '${toolCall.tool}'` };
+    }
+    
+    if (!toolCall.args || typeof toolCall.args !== 'object') {
+      return { valid: false, error: `Tool call ${i + 1}: missing or invalid args` };
+    }
+    
+    if (!toolCall.description || typeof toolCall.description !== 'string') {
+      return { valid: false, error: `Tool call ${i + 1}: missing description` };
+    }
+  }
+  
+  return { valid: true };
 }
 
 // Call Ollama with tool execution loop (for EXECUTE mode)

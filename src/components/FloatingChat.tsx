@@ -359,59 +359,7 @@ function QuickAction({ emoji, label, onClick }: { emoji: string; label: string; 
   );
 }
 
-// Execution Plan Approval Component - Voice-friendly version
-const ExecutionPlanApproval = memo(function ExecutionPlanApproval({
-  plan,
-  onApprove,
-  onReject,
-}: {
-  plan: PendingExecutionPlan;
-  onApprove: () => void;
-  onReject: () => void;
-}) {
-  return (
-    <div style={styles.pendingPlanContainer}>
-      <div style={styles.pendingPlanHeader}>
-        <span style={styles.pendingPlanIcon}>✋</span>
-        <h3 style={styles.pendingPlanTitle}>{plan.plannedActions[0] || plan.message}</h3>
-      </div>
-      
-      <div style={styles.pendingPlanContent}>
-        <div style={styles.pendingPlanPrompt}>
-          <span style={styles.pendingPlanWaitingText}>
-            ✋ Waiting for approval — say <strong>'yes'</strong> to execute or <strong>'no'</strong> to cancel
-          </span>
-        </div>
-
-        {plan.toolCallCount > 0 && (
-          <div style={styles.pendingPlanMeta}>
-            <span style={styles.pendingPlanToolCount}>
-              {plan.toolCallCount} tool{plan.toolCallCount !== 1 ? 's' : ''} ready to execute
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Fallback buttons for when voice isn't working */}
-      <div style={styles.pendingPlanFallbackButtons}>
-        <button
-          onClick={onReject}
-          style={styles.pendingPlanButtonRejectFallback}
-          title="Cancel execution"
-        >
-          No
-        </button>
-        <button
-          onClick={onApprove}
-          style={styles.pendingPlanButtonExecuteFallback}
-          title="Execute plan"
-        >
-          Yes
-        </button>
-      </div>
-    </div>
-  );
-});
+// Execution Plan Approval is now handled inline with voice-only UI
 
 // ============================================================================
 // Main Component
@@ -1702,13 +1650,22 @@ export default function FloatingChat({
           </div>
         )}
 
-        {/* Pending Execution Plan */}
+        {/* Pending Execution Plan - Voice-Only Mode */}
         {pendingPlan && pendingPlan.requiresApproval && (
-          <ExecutionPlanApproval
-            plan={pendingPlan}
-            onApprove={() => onExecutePlan?.(pendingPlan.id)}
-            onReject={() => onRejectPlan?.(pendingPlan.id)}
-          />
+          <div style={styles.voiceOnlyApprovalContainer}>
+            <div style={styles.voiceOnlyApprovalHeader}>
+              <span style={styles.voiceOnlyApprovalIcon}>✋</span>
+              <span style={styles.voiceOnlyApprovalText}>
+                I'll {pendingPlan.plannedActions[0]?.replace(/Execute\?$/, '').trim() || 'execute the plan'}. 
+                Say <strong>'yes'</strong> to execute or <strong>'no'</strong> to cancel.
+              </span>
+            </div>
+            {pendingPlan.toolCallCount > 0 && (
+              <div style={styles.voiceOnlyApprovalMeta}>
+                {pendingPlan.toolCallCount} tool{pendingPlan.toolCallCount !== 1 ? 's' : ''} ready to execute
+              </div>
+            )}
+          </div>
         )}
 
         {/* Mode Toggle */}
@@ -2792,5 +2749,40 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     minWidth: 60,
+  },
+
+  // Voice-only approval styles
+  voiceOnlyApprovalContainer: {
+    margin: '12px 16px',
+    padding: 16,
+    borderRadius: 12,
+    border: '1px solid rgba(249, 115, 22, 0.4)',
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%)',
+    boxShadow: '0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05)',
+    animation: 'pendingPlanGlow 2s ease-in-out infinite',
+  },
+  voiceOnlyApprovalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  voiceOnlyApprovalIcon: {
+    fontSize: '24px',
+    filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
+    flexShrink: 0,
+  },
+  voiceOnlyApprovalText: {
+    fontSize: '0.95rem',
+    color: 'rgba(255, 255, 255, 0.95)',
+    lineHeight: 1.4,
+    fontWeight: 500,
+  },
+  voiceOnlyApprovalMeta: {
+    padding: '8px 0',
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center' as const,
+    fontWeight: 500,
   },
 };
