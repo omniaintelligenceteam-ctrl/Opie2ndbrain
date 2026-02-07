@@ -26,6 +26,70 @@ function createStreamResponse(generator: AsyncGenerator<string>) {
   });
 }
 
+// Helper to format tool results for display
+function formatToolResult(tool: string, result: any): string {
+  if (!result) return '';
+  
+  // Convert result to string if it's not already
+  const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  
+  // Handle different tool types with appropriate formatting
+  switch (tool) {
+    case 'memory_search':
+      if (typeof result === 'object' && result.results) {
+        const count = result.results.length;
+        let formatted = `**Found ${count} result${count !== 1 ? 's' : ''}:**\n\n`;
+        result.results.forEach((item: any, index: number) => {
+          formatted += `**${index + 1}.** ${item.title || item.content || item}\n`;
+          if (item.content && item.title) {
+            formatted += `   ${item.content.substring(0, 100)}${item.content.length > 100 ? '...' : ''}\n`;
+          }
+          formatted += '\n';
+        });
+        return formatted;
+      }
+      break;
+      
+    case 'shell_exec':
+    case 'git_status':
+      // Format shell output in code block
+      return `\`\`\`\n${resultStr.trim()}\n\`\`\`\n`;
+      
+    case 'web_search':
+      if (typeof result === 'object' && result.results) {
+        let formatted = `**Found ${result.results.length} search results:**\n\n`;
+        result.results.slice(0, 5).forEach((item: any, index: number) => {
+          formatted += `**${index + 1}.** [${item.title}](${item.url})\n`;
+          if (item.snippet) {
+            formatted += `   ${item.snippet}\n`;
+          }
+          formatted += '\n';
+        });
+        return formatted;
+      }
+      break;
+      
+    case 'file_read':
+    case 'file_write':
+      if (resultStr.length > 500) {
+        return `\`\`\`\n${resultStr.substring(0, 500)}...\n\`\`\`\n`;
+      } else {
+        return `\`\`\`\n${resultStr}\n\`\`\`\n`;
+      }
+      
+    default:
+      // Generic formatting for other tools
+      if (resultStr.length > 300) {
+        return `\`\`\`\n${resultStr.substring(0, 300)}...\n\`\`\`\n`;
+      } else {
+        return `**Result:** ${resultStr}\n`;
+      }
+  }
+  
+  // Fallback formatting
+  return `**Result:** ${resultStr}\n`;
+}
+
 // Execute a plan's tool calls with streaming feedback
 async function* executePlan(plan: any): AsyncGenerator<string> {
   try {
@@ -47,6 +111,13 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
       
       if (result.success) {
         yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ Success\n\n` } }] })}\n\n`;
+        
+        // Format and display the actual result
+        const formattedResult = formatToolResult(toolCall.tool, result.result);
+        if (formattedResult.trim()) {
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: formattedResult } }] })}\n\n`;
+        }
+        
         results.push({ tool: toolCall.tool, success: true, result: result.result });
       } else {
         yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ Error: ${result.error}\n\n` } }] })}\n\n`;
@@ -59,11 +130,29 @@ async function* executePlan(plan: any): AsyncGenerator<string> {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    // Summary
+    // Summary with results overview
     const successCount = results.filter(r => r.success).length;
     const totalCount = results.length;
     
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n**✨ Execution Complete**\n` } }] })}\n\n`;
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n---\n\n**✨ Execution Complete**\n\n` } }] })}\n\n`;
+    
+    // Summary of all successful results
+    if (successCount > 0) {
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `**Summary of Results:**\n\n` } }] })}\n\n`;
+      
+      results.forEach((r, i) => {
+        if (r.success) {
+          const toolCall = plan.toolCalls[i];
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ **${toolCall.tool}**: ${toolCall.description}\n` } }] })}\n\n`;
+        } else {
+          const toolCall = plan.toolCalls[i];
+          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ **${toolCall.tool}**: ${r.error}\n` } }] })}\n\n`;
+        }
+      });
+      
+      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n` } }] })}\n\n`;
+    }
+    
     yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Successfully executed ${successCount}/${totalCount} actions.\n\n` } }] })}\n\n`;
     
     if (successCount === totalCount) {
