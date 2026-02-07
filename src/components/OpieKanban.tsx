@@ -19,8 +19,10 @@ import { useVoiceEngine } from '../hooks/useVoiceEngine';
 import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
-import { PendingExecutionPlan } from '@/types/chat';
+import { ChatMessage, InteractionMode, AIModel, PendingExecutionPlan } from '@/types/chat';
+import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSidebar';
+import OpieAvatar from './OpieAvatar';
+import { Camera, Mic } from 'lucide-react';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import StatusOrb from './StatusOrb';
@@ -81,6 +83,68 @@ function saveSidebarState(expanded: boolean): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem('opie-sidebar-expanded', String(expanded));
   }
+}
+
+// AI model options (was in FloatingChat, now here since we removed that import)
+const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
+  { id: 'kimi', name: 'Kimi K2', description: 'Default - fast and capable' },
+  { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
+  { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
+  { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
+];
+
+// Daily motivational quotes (rotates by day of year)
+const DAILY_QUOTES = [
+  { text: 'The best way to predict the future is to create it.', author: 'Peter Drucker' },
+  { text: 'Done is better than perfect.', author: 'Sheryl Sandberg' },
+  { text: 'Move fast and break things.', author: 'Mark Zuckerberg' },
+  { text: 'Stay hungry, stay foolish.', author: 'Steve Jobs' },
+  { text: 'Simplicity is the ultimate sophistication.', author: 'Leonardo da Vinci' },
+  { text: 'Ship it.', author: 'Reid Hoffman' },
+  { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
+  { text: 'Think big, start small, act fast.', author: 'Anon' },
+  { text: 'Execution eats strategy for breakfast.', author: 'Peter Drucker' },
+  { text: 'Build something people want.', author: 'Y Combinator' },
+  { text: 'Your margin is my opportunity.', author: 'Jeff Bezos' },
+  { text: 'Be so good they can\'t ignore you.', author: 'Steve Martin' },
+  { text: 'Ideas are easy. Implementation is hard.', author: 'Guy Kawasaki' },
+  { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
+  { text: 'What gets measured gets managed.', author: 'Peter Drucker' },
+  { text: 'Doubt kills more dreams than failure ever will.', author: 'Suzy Kassem' },
+  { text: 'Every expert was once a beginner.', author: 'Helen Hayes' },
+  { text: 'Winners are not afraid of losing.', author: 'Robert Kiyosaki' },
+  { text: 'Make each day your masterpiece.', author: 'John Wooden' },
+  { text: 'Hustle beats talent when talent doesn\'t hustle.', author: 'Ross Simmonds' },
+  { text: 'Fortune favors the bold.', author: 'Virgil' },
+  { text: 'Work hard in silence, let success be your noise.', author: 'Frank Ocean' },
+  { text: 'Dream big. Start small. Act now.', author: 'Robin Sharma' },
+  { text: 'The harder I work, the luckier I get.', author: 'Gary Player' },
+  { text: 'Success is not final, failure is not fatal.', author: 'Winston Churchill' },
+  { text: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { text: 'Action is the foundational key to all success.', author: 'Pablo Picasso' },
+  { text: 'Innovation distinguishes between a leader and a follower.', author: 'Steve Jobs' },
+  { text: 'Strive not to be a success, but to be of value.', author: 'Albert Einstein' },
+  { text: 'It always seems impossible until it\'s done.', author: 'Nelson Mandela' },
+  { text: 'The best time to plant a tree was 20 years ago. The second best time is now.', author: 'Chinese Proverb' },
+];
+
+function getDailyQuote() {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+}
+
+// Weather code to emoji/description mapping
+function getWeatherInfo(code: number): { emoji: string; desc: string } {
+  if (code === 0) return { emoji: '☀️', desc: 'Clear' };
+  if (code <= 3) return { emoji: '⛅', desc: 'Partly Cloudy' };
+  if (code <= 48) return { emoji: '🌫️', desc: 'Foggy' };
+  if (code <= 57) return { emoji: '🌦️', desc: 'Drizzle' };
+  if (code <= 67) return { emoji: '🌧️', desc: 'Rain' };
+  if (code <= 77) return { emoji: '🌨️', desc: 'Snow' };
+  if (code <= 82) return { emoji: '🌧️', desc: 'Showers' };
+  if (code <= 86) return { emoji: '🌨️', desc: 'Snow Showers' };
+  if (code >= 95) return { emoji: '⛈️', desc: 'Thunderstorm' };
+  return { emoji: '🌤️', desc: 'Fair' };
 }
 
 // ViewId is now imported from useKeyboardShortcuts
@@ -462,6 +526,30 @@ export default function OpieKanban(): React.ReactElement {
   const [pinnedInputs, setPinnedInputs] = useState<Record<string, string>>({});
   const [pinnedLoading, setPinnedLoading] = useState<Record<string, boolean>>({});
 
+  // Dashboard chat: conversation sidebar, image upload, resizable panel
+  const [showDashboardSidebar, setShowDashboardSidebar] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [rightPanelWidth, setRightPanelWidth] = useState(isTablet ? 340 : 420);
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
+  const dashboardFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Command center header: weather + daily quote
+  const [weather, setWeather] = useState<{ temp: number; emoji: string; desc: string } | null>(null);
+  const dailyQuote = useMemo(() => getDailyQuote(), []);
+
+  useEffect(() => {
+    // Fetch Scottsdale, AZ weather from Open-Meteo (free, no API key)
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=33.49&longitude=-111.93&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=America%2FPhoenix')
+      .then(res => res.json())
+      .then(data => {
+        if (data.current) {
+          const info = getWeatherInfo(data.current.weather_code);
+          setWeather({ temp: Math.round(data.current.temperature_2m), ...info });
+        }
+      })
+      .catch(() => {}); // Silently fail if offline
+  }, []);
+
   // Use conversation messages instead of local state
   const messages = activeConversation?.messages || [];
   
@@ -715,6 +803,74 @@ export default function OpieKanban(): React.ReactElement {
     audioRef,
     browserSupport: voiceBrowserSupport,
   } = voiceEngine;
+
+  // Computed voice status for dashboard chat header
+  const dashboardStatusText = useMemo(() => {
+    switch (voiceState) {
+      case 'listening': return '🎤 Listening...';
+      case 'processing': return '✨ Thinking...';
+      case 'speaking': return '🔊 Speaking...';
+      default: return '● Online';
+    }
+  }, [voiceState]);
+
+  // Image upload helpers for dashboard chat
+  const fileToBase64 = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) { resolve(null); return; }
+      if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDashboardImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const base64 = await fileToBase64(file);
+    if (base64) setPendingImage(base64);
+    if (dashboardFileInputRef.current) dashboardFileInputRef.current.value = '';
+  };
+
+  const handleDashboardPaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const base64 = await fileToBase64(file);
+        if (base64) setPendingImage(base64);
+        return;
+      }
+    }
+  };
+
+  // Resizable panel divider handlers
+  const handlePanelResizeMove = useCallback((e: MouseEvent) => {
+    if (!isResizingPanel) return;
+    setRightPanelWidth(prev => Math.max(280, Math.min(600, prev - e.movementX)));
+  }, [isResizingPanel]);
+
+  useEffect(() => {
+    if (isResizingPanel) {
+      const handleMouseUp = () => setIsResizingPanel(false);
+      window.addEventListener('mousemove', handlePanelResizeMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      return () => {
+        window.removeEventListener('mousemove', handlePanelResizeMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizingPanel, handlePanelResizeMove]);
 
   // Ref for handleSend to avoid circular dependency with voice engine
   const handleSendRef = useRef<(text: string) => Promise<string | void>>(async () => {});
@@ -1556,7 +1712,7 @@ export default function OpieKanban(): React.ReactElement {
             paddingTop: isMobile ? '72px' : undefined,
             paddingBottom: isMobile ? '100px' : undefined,
           }}>
-            {/* Left/Center: Embedded Chat */}
+            {/* Left/Center: Full-Featured Chat */}
             <div style={{
               flex: 1,
               display: 'flex',
@@ -1565,69 +1721,206 @@ export default function OpieKanban(): React.ReactElement {
               minHeight: isMobile ? '60vh' : undefined,
               background: 'linear-gradient(180deg, #0a0a14 0%, #0d0d18 100%)',
             }}>
-              {/* Compact greeting banner */}
-              <div style={{
-                padding: isMobile ? '12px 16px' : '14px 32px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '16px',
-                flexShrink: 0,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '1.25rem' }}>👋</span>
-                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.95rem' }}>Hey Wes</span>
-                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>
-                    {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                {/* Inline model selector */}
-                <div style={{ position: 'relative' }}>
-                  <button
-                    onClick={() => setShowModelDropdown(!showModelDropdown)}
-                    style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      color: 'rgba(255,255,255,0.7)',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <span>🤖</span>
-                    <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}</span>
-                    <span style={{ fontSize: '0.6rem' }}>{showModelDropdown ? '▲' : '▼'}</span>
-                  </button>
-                  {showModelDropdown && (
-                    <div style={{
-                      ...styles.modelDropdownMenu,
-                      top: '100%',
-                      right: 0,
-                      left: 'auto',
-                      marginTop: '4px',
-                    }}>
-                      {AI_MODELS.map(model => (
-                        <button
-                          key={model.id}
-                          onClick={() => handleModelChange(model.id)}
-                          style={{
-                            ...styles.modelDropdownItem,
-                            ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
-                          }}
-                        >
-                          <span style={styles.modelDropdownName}>{model.name}</span>
-                          <span style={styles.modelDropdownDesc}>{model.description}</span>
-                        </button>
-                      ))}
+              {/* Command Center header */}
+              <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                {/* Top row: nav + title + weather + avatar + controls */}
+                <div style={{
+                  padding: isMobile ? '10px 16px' : '10px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Hamburger menu for conversation history */}
+                    <button
+                      onClick={() => setShowDashboardSidebar(true)}
+                      style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        border: 'none', background: 'rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.6)', fontSize: '18px',
+                        cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="Conversation history"
+                    >
+                      ☰
+                    </button>
+                    <OpieAvatar size={36} state={
+                      voiceState === 'listening' ? 'listening' :
+                      voiceState === 'processing' ? 'thinking' :
+                      voiceState === 'speaking' ? 'speaking' : 'idle'
+                    } />
+                    <div style={{ display: 'flex', flexDirection: 'column' as const }}>
+                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem', letterSpacing: '0.02em' }}>
+                        Command Center
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 500,
+                        color: voiceState !== 'idle' ? (
+                          voiceState === 'listening' ? '#22c55e' :
+                          voiceState === 'processing' ? '#667eea' : '#f59e0b'
+                        ) : 'rgba(255,255,255,0.4)',
+                      }}>
+                        {dashboardStatusText}
+                      </span>
                     </div>
+                    {/* Scottsdale weather */}
+                    {weather && !isMobile && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '4px 10px', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        marginLeft: '6px',
+                      }}>
+                        <span style={{ fontSize: '16px' }}>{weather.emoji}</span>
+                        <span style={{ color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>{weather.temp}°F</span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>Scottsdale</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* New conversation button */}
+                    <button
+                      onClick={() => createConversation()}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        border: '1px solid rgba(168,85,247,0.3)',
+                        background: 'rgba(168,85,247,0.1)',
+                        color: '#a855f7', fontSize: '18px', fontWeight: 300,
+                        cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="New conversation"
+                    >
+                      +
+                    </button>
+                    {/* Model selector */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setShowModelDropdown(!showModelDropdown)}
+                        style={{
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          color: 'rgba(255,255,255,0.7)',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>🤖</span>
+                        <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}</span>
+                        <span style={{ fontSize: '0.6rem' }}>{showModelDropdown ? '▲' : '▼'}</span>
+                      </button>
+                      {showModelDropdown && (
+                        <div style={{
+                          ...styles.modelDropdownMenu,
+                          top: '100%',
+                          right: 0,
+                          left: 'auto',
+                          marginTop: '4px',
+                        }}>
+                          {AI_MODELS.map(model => (
+                            <button
+                              key={model.id}
+                              onClick={() => handleModelChange(model.id)}
+                              style={{
+                                ...styles.modelDropdownItem,
+                                ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
+                              }}
+                            >
+                              <span style={styles.modelDropdownName}>{model.name}</span>
+                              <span style={styles.modelDropdownDesc}>{model.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Quote of the day bar */}
+                <div style={{
+                  padding: '6px 24px',
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(139,92,246,0.04)',
+                }}>
+                  <span style={{ fontSize: '12px', flexShrink: 0 }}>💡</span>
+                  <span style={{
+                    color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem', fontStyle: 'italic',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    &ldquo;{dailyQuote.text}&rdquo;
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem', flexShrink: 0 }}>
+                    — {dailyQuote.author}
+                  </span>
+                  {/* Mobile weather (shown here since header is tight) */}
+                  {weather && isMobile && (
+                    <span style={{
+                      marginLeft: 'auto', color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem',
+                      display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                    }}>
+                      {weather.emoji} {weather.temp}°F
+                    </span>
                   )}
                 </div>
               </div>
+
+              {/* Execution plan approval gate */}
+              {pendingPlan && pendingPlan.requiresApproval && (
+                <div style={{
+                  margin: isMobile ? '12px 16px' : '12px 24px', padding: 16, borderRadius: 12,
+                  border: '1px solid rgba(249,115,22,0.4)',
+                  background: 'linear-gradient(135deg, rgba(249,115,22,0.15) 0%, rgba(239,68,68,0.08) 100%)',
+                  boxShadow: '0 4px 15px rgba(249,115,22,0.2)',
+                  flexShrink: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, justifyContent: 'center' }}>
+                    <span style={{ fontSize: '24px', filter: 'drop-shadow(0 0 6px rgba(249,115,22,0.6))' }}>✋</span>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#fff', margin: 0 }}>
+                      {pendingPlan.plannedActions?.[0] || pendingPlan.message}
+                    </h3>
+                  </div>
+                  <div style={{
+                    padding: 14, marginBottom: 12, fontSize: '0.85rem',
+                    color: 'rgba(255,255,255,0.95)', background: 'rgba(0,0,0,0.3)',
+                    borderRadius: 12, textAlign: 'center' as const, border: '1px solid rgba(249,115,22,0.3)',
+                  }}>
+                    <span style={{ display: 'block', lineHeight: 1.5 }}>
+                      ✋ Waiting for approval — say <strong>&apos;yes&apos;</strong> to execute or <strong>&apos;no&apos;</strong> to cancel
+                    </span>
+                  </div>
+                  {pendingPlan.toolCallCount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                      <span style={{ fontWeight: 500 }}>
+                        {pendingPlan.toolCallCount} tool{pendingPlan.toolCallCount !== 1 ? 's' : ''} ready to execute
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <button onClick={() => handleRejectPlan(pendingPlan.id)}
+                      style={{ padding: '8px 20px', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 20,
+                        background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: '0.85rem',
+                        fontWeight: 500, cursor: 'pointer' }}>
+                      No
+                    </button>
+                    <button onClick={() => handleExecutePlan(pendingPlan.id)}
+                      style={{ padding: '8px 20px', border: '1px solid rgba(249,115,22,0.6)', borderRadius: 20,
+                        background: 'rgba(249,115,22,0.3)', color: '#fb923c', fontSize: '0.85rem',
+                        fontWeight: 500, cursor: 'pointer' }}>
+                      Yes, Execute
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Chat messages area */}
               <div style={{
@@ -1649,6 +1942,12 @@ export default function OpieKanban(): React.ReactElement {
                       ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
                     }}
                   >
+                    {m.image && (
+                      <img src={m.image} alt="Attached" style={{
+                        maxWidth: '100%', maxHeight: 200, borderRadius: 8,
+                        marginBottom: m.text ? 8 : 0, display: 'block',
+                      }} />
+                    )}
                     {m.text}
                   </div>
                 ))}
@@ -1668,44 +1967,191 @@ export default function OpieKanban(): React.ReactElement {
                 <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
               )}
 
-              {/* Input row */}
+              {/* Pending image preview */}
+              {pendingImage && (
+                <div style={{
+                  padding: '8px 24px', borderTop: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8,
+                  flexShrink: 0,
+                }}>
+                  <img src={pendingImage} alt="Preview" style={{
+                    maxWidth: 120, maxHeight: 80, borderRadius: 8, objectFit: 'cover' as const,
+                  }} />
+                  <button onClick={() => setPendingImage(null)} style={{
+                    width: 24, height: 24, borderRadius: '50%', border: 'none',
+                    background: 'rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                  }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Plan / Execute mode toggle */}
+              <div style={{
+                padding: '6px 24px', borderTop: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex', gap: 8,
+                background: 'rgba(0,0,0,0.15)', flexShrink: 0,
+              }}>
+                <button onClick={() => setInteractionMode('plan')} style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 12,
+                  border: interactionMode === 'plan'
+                    ? '1px solid rgba(139,92,246,0.5)'
+                    : '1px solid rgba(255,255,255,0.1)',
+                  background: interactionMode === 'plan'
+                    ? 'linear-gradient(135deg, rgba(139,92,246,0.3) 0%, rgba(168,85,247,0.2) 100%)'
+                    : 'rgba(255,255,255,0.05)',
+                  color: interactionMode === 'plan' ? '#a78bfa' : 'rgba(255,255,255,0.6)',
+                  fontSize: '0.85rem', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: '14px' }}>💭</span>
+                  <span>Plan</span>
+                </button>
+                <button onClick={() => setInteractionMode('execute')} style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 12,
+                  border: interactionMode === 'execute'
+                    ? '1px solid rgba(249,115,22,0.5)'
+                    : '1px solid rgba(255,255,255,0.1)',
+                  background: interactionMode === 'execute'
+                    ? 'linear-gradient(135deg, rgba(249,115,22,0.3) 0%, rgba(239,68,68,0.2) 100%)'
+                    : 'rgba(255,255,255,0.05)',
+                  color: interactionMode === 'execute' ? '#fb923c' : 'rgba(255,255,255,0.6)',
+                  fontSize: '0.85rem', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: '14px' }}>🔥</span>
+                  <span>EXECUTE</span>
+                </button>
+              </div>
+
+              {/* Input row with mic, camera, text, send */}
               <div style={{
                 ...styles.voiceInput,
-                padding: isMobile ? '16px' : '16px 32px',
+                padding: isMobile ? '12px 16px' : '12px 24px',
+                gap: '10px',
               }}>
-                <button
-                  onClick={toggleMic}
-                  style={{
-                    ...styles.micButton,
-                    padding: '14px 20px',
-                    background: micOn ? '#22c55e' : '#ef4444',
-                  }}
-                >
-                  {micOn ? '🎤 Listening...' : '🎤 Mic'}
+                {/* Mic button */}
+                <button onClick={toggleMic} style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  border: micOn ? '1px solid rgba(34,197,94,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                  background: micOn ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                    : voiceState === 'processing' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : 'rgba(255,255,255,0.08)',
+                  color: '#fff', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }} title={micOn ? 'Stop listening' : 'Start voice input'}>
+                  <Mic size={20} strokeWidth={2} />
                 </button>
+
+                {/* Cancel processing */}
+                {voiceState === 'processing' && cancelVoiceProcessing && (
+                  <button onClick={cancelVoiceProcessing} style={{
+                    width: 32, height: 32, borderRadius: '50%', border: 'none',
+                    background: 'rgba(239,68,68,0.2)', color: '#ef4444', fontSize: '14px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', flexShrink: 0,
+                  }} title="Cancel">✕</button>
+                )}
+                {/* Stop speaking */}
+                {voiceState === 'speaking' && stopSpeaking && (
+                  <button onClick={stopSpeaking} style={{
+                    width: 32, height: 32, borderRadius: '50%', border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    color: '#fff', fontSize: '14px', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }} title="Stop speaking">⏹</button>
+                )}
+
+                {/* Camera / image upload */}
+                <input ref={dashboardFileInputRef} type="file" accept="image/*"
+                  onChange={handleDashboardImageSelect} style={{ display: 'none' }} />
+                <button onClick={() => dashboardFileInputRef.current?.click()} style={{
+                  width: 40, height: 40, borderRadius: '50%',
+                  border: '1px solid rgba(139,92,246,0.3)',
+                  background: 'rgba(139,92,246,0.1)', color: '#a78bfa',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0,
+                }} title="Attach image">
+                  <Camera size={18} strokeWidth={2} />
+                </button>
+
+                {/* Text input */}
                 <input
+                  ref={chatInputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(input); } }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim() || pendingImage) {
+                        handleSend(input, pendingImage || undefined);
+                        setPendingImage(null);
+                      }
+                    }
+                  }}
                   placeholder="Type a message to Opie..."
                   style={styles.textInput}
                 />
+
+                {/* Send button */}
                 <button
-                  onClick={() => handleSend(input)}
-                  style={styles.sendButton}
-                  disabled={isLoading}
+                  onClick={() => {
+                    if (input.trim() || pendingImage) {
+                      handleSend(input, pendingImage || undefined);
+                      setPendingImage(null);
+                    }
+                  }}
+                  style={{
+                    ...styles.sendButton,
+                    opacity: (input.trim() || pendingImage) && !isLoading ? 1 : 0.5,
+                  }}
+                  disabled={isLoading || (!input.trim() && !pendingImage)}
                 >
-                  {isLoading ? '...' : 'Send'}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+                  </svg>
                 </button>
               </div>
             </div>
 
+            {/* Resizable divider handle (desktop only) */}
+            {!isMobile && (
+              <div
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingPanel(true); }}
+                style={{
+                  width: '6px',
+                  cursor: 'col-resize',
+                  background: isResizingPanel ? 'rgba(102,126,234,0.4)' : 'rgba(255,255,255,0.06)',
+                  transition: isResizingPanel ? 'none' : 'background 0.2s ease',
+                  flexShrink: 0,
+                  position: 'relative' as const,
+                  zIndex: 10,
+                }}
+                onMouseEnter={(e) => { if (!isResizingPanel) (e.currentTarget as HTMLElement).style.background = 'rgba(102,126,234,0.25)'; }}
+                onMouseLeave={(e) => { if (!isResizingPanel) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                title="Drag to resize"
+              >
+                <div style={{
+                  position: 'absolute' as const, top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: 'flex', flexDirection: 'column' as const, gap: 3,
+                }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{
+                      width: 3, height: 3, borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.25)',
+                    }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Right: War Room + Agent Stats (desktop/tablet only) */}
             {!isMobile && (
               <div style={{
-                width: isTablet ? '340px' : '420px',
+                width: `${rightPanelWidth}px`,
                 flexShrink: 0,
-                borderLeft: '1px solid rgba(255,255,255,0.06)',
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100vh',
@@ -1738,7 +2184,7 @@ export default function OpieKanban(): React.ReactElement {
                       fontSize: '0.7rem',
                       fontWeight: 700,
                       letterSpacing: '0.12em',
-                      textTransform: 'uppercase',
+                      textTransform: 'uppercase' as const,
                     }}>
                       Real-Time Agent Stats
                     </span>
@@ -1752,7 +2198,7 @@ export default function OpieKanban(): React.ReactElement {
 
                   {/* Agent rows */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {agentNodes.map((node, idx) => {
+                    {agentNodes.map((node) => {
                       const statusColor = node.status === 'working' ? '#f59e0b'
                         : node.status === 'connected' ? '#22c55e' : 'rgba(255,255,255,0.25)';
                       const statusLabel = node.status === 'working' ? 'BUSY'
@@ -1773,7 +2219,6 @@ export default function OpieKanban(): React.ReactElement {
                             lineHeight: 1.4,
                           }}
                         >
-                          {/* Agent name */}
                           <span style={{
                             color: node.color,
                             fontWeight: 600,
@@ -1785,8 +2230,6 @@ export default function OpieKanban(): React.ReactElement {
                           }}>
                             {node.emoji} {node.name.toUpperCase()}
                           </span>
-
-                          {/* Status badge */}
                           <span style={{
                             color: statusColor,
                             fontWeight: 700,
@@ -1796,13 +2239,11 @@ export default function OpieKanban(): React.ReactElement {
                             border: `1px solid ${statusColor}`,
                             background: `${statusColor}15`,
                             width: '52px',
-                            textAlign: 'center',
+                            textAlign: 'center' as const,
                             flexShrink: 0,
                           }}>
                             {statusLabel}
                           </span>
-
-                          {/* Task or info */}
                           <span style={{
                             color: isBusy ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
                             fontSize: '0.65rem',
@@ -1847,6 +2288,20 @@ export default function OpieKanban(): React.ReactElement {
                 </CollapsibleSection>
               </div>
             )}
+
+            {/* Conversation History Sidebar */}
+            <style>{sidebarAnimationStyles}</style>
+            <ConversationSidebar
+              isOpen={showDashboardSidebar}
+              onClose={() => setShowDashboardSidebar(false)}
+              conversations={conversations}
+              activeConversationId={activeConversation?.id || null}
+              onSelectConversation={(id) => { switchConversation(id); setShowDashboardSidebar(false); }}
+              onNewConversation={() => { createConversation(); setShowDashboardSidebar(false); }}
+              onDeleteConversation={deleteConversation}
+              pinnedConversationIds={pinnedConversationIds}
+              onPinConversation={pinConversation}
+            />
           </div>
         )}
 
@@ -2296,110 +2751,6 @@ export default function OpieKanban(): React.ReactElement {
         )}
         </Suspense>
       </main>
-
-      {/* Secondary Chat Windows */}
-      {pinnedConversationIds.map((pinnedId, index) => {
-        const pinnedConv = conversations.find(c => c.id === pinnedId);
-        if (!pinnedConv) return null;
-
-        return (
-          <FloatingChat
-            key={pinnedId}
-            messages={pinnedConv.messages}
-            isSecondary={true}
-            windowIndex={index}
-            onClose={() => unpinConversation(pinnedId)}
-            pinnedTitle={pinnedConv.title}
-            conversationId={pinnedId}
-            input={pinnedInputs[pinnedId] || ''}
-            setInput={(val) => setPinnedInputs(prev => ({ ...prev, [pinnedId]: val }))}
-            isLoading={pinnedLoading[pinnedId] || false}
-            micOn={false}
-            onMicToggle={() => {}}
-            isSpeaking={false}
-            transcript=""
-            onSend={(text, image, mode) => handleSendToPinned(pinnedId, text || pinnedInputs[pinnedId] || '', mode)}
-            interactionMode={interactionMode}
-            onInteractionModeChange={setInteractionMode}
-            pendingPlan={null}
-            onExecutePlan={() => {}}
-            onRejectPlan={() => {}}
-          />
-        );
-      })}
-
-      {/* Spawn New Chat Button */}
-      {pinnedConversationIds.length < 2 && (
-        <button
-          onClick={() => {
-            const newConv = createConversationForSecondary();
-            pinConversation(newConv.id);
-          }}
-          style={{
-            position: 'fixed',
-            bottom: 90,
-            right: 24,
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(6, 182, 212, 0.15) 100%)',
-            color: '#a855f7',
-            fontSize: '24px',
-            fontWeight: 300,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 997,
-            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.3)',
-            transition: 'all 0.3s ease',
-          }}
-          title="Open new chat window"
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 6px 25px rgba(168, 85, 247, 0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 20px rgba(168, 85, 247, 0.3)';
-          }}
-        >
-          +
-        </button>
-      )}
-
-      {/* Floating Chat Box */}
-      <FloatingChat
-        messages={messages}
-        input={input}
-        setInput={setInput}
-        isLoading={isLoading}
-        onSend={handleSend}
-        micOn={micOn}
-        onMicToggle={toggleMic}
-        isSpeaking={isSpeaking}
-        onStopSpeaking={stopSpeaking}
-        onCancelProcessing={cancelVoiceProcessing}
-        transcript={transcript}
-        voiceError={voiceEngine.error}
-        interactionMode={interactionMode}
-        onInteractionModeChange={setInteractionMode}
-        selectedModel={selectedModel}
-        onModelChange={handleModelChange}
-        pendingPlan={pendingPlan}
-        onExecutePlan={handleExecutePlan}
-        onRejectPlan={handleRejectPlan}
-        conversations={conversations}
-        activeConversationId={activeConversation?.id || null}
-        onConversationCreate={createConversation}
-        onConversationSwitch={switchConversation}
-        onConversationDelete={deleteConversation}
-        onConversationFork={forkConversation}
-        onSummarizeAndContinue={handleSummarizeAndContinue}
-        pinnedConversationIds={pinnedConversationIds}
-        onPinConversation={pinConversation}
-      />
 
       {/* Command Palette */}
       <CommandPalette 
