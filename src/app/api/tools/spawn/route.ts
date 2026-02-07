@@ -36,23 +36,12 @@ export async function POST(req: NextRequest) {
     const agentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Store agent info
-    const agentInfo: {
-      id: string;
-      name: string;
-      task: string;
-      model: string;
-      status: 'spawning' | 'active' | 'completed' | 'error';
-      createdAt: Date;
-      sessionKey?: string;
-      completedAt?: Date;
-      result?: any;
-      error?: string;
-    } = {
+    const agentInfo = {
       id: agentId,
       name: agent_name,
       task,
       model,
-      status: 'spawning',
+      status: 'spawning' as const,
       createdAt: new Date(),
     };
     
