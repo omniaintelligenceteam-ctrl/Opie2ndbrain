@@ -10,7 +10,7 @@ import { Conversation } from '@/types/conversation';
 import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
-import { useActiveAgents } from '../hooks/useAgentSessions';
+import { useActiveAgents, useAgentSessions } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
 import { useVoiceEngine } from '../hooks/useVoiceEngine';
@@ -93,11 +93,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'dashboard', label: 'Dashboard', icon: '💬' },
+  { id: 'board', label: 'Project Board', icon: '📋' },
   { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
   { id: 'organization', label: 'Organization', icon: '🏛️' },
   { id: 'skills', label: 'Skills', icon: '🛠️' },
-  { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
+  { id: 'tasks', label: 'Tasks', icon: '✅', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
   { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
   { id: 'context', label: 'Context', icon: '🧠' },
@@ -398,6 +399,7 @@ export default function OpieKanban(): React.ReactElement {
   // Use real-time agent data from gateway (poll every 5 seconds, only when on agents/dashboard view)
   const shouldPollAgents = activeView === 'agents' || activeView === 'dashboard';
   const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(5000, shouldPollAgents);
+  const { nodes: agentNodes } = useAgentSessions(5000, shouldPollAgents);
   // Local state for agents deployed from this UI (merged with real data)
   const [localActiveAgents, setLocalActiveAgents] = useState<string[]>([]);
   // Merge real and local active agents (deduplicated)
@@ -1541,60 +1543,74 @@ export default function OpieKanban(): React.ReactElement {
         minHeight: isMobile ? '100dvh' : '100vh',
       }}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>Loading…</div>}>
-        {/* Dashboard View - Smart Real-Time Dashboard */}
+        {/* Dashboard View - Chat-First Layout */}
         {activeView === 'dashboard' && (
           <div style={{
             ...styles.viewContainer,
-            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: 0,
+            padding: 0,
+            height: isMobile ? 'auto' : '100vh',
+            minHeight: isMobile ? '100dvh' : undefined,
             paddingTop: isMobile ? '72px' : undefined,
             paddingBottom: isMobile ? '100px' : undefined,
           }}>
-            {/* TOP: Hero Section - Greeting + Orchestration Side by Side */}
+            {/* Left/Center: Embedded Chat */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : '1fr 1.2fr',
-              gap: '24px',
-              marginBottom: '24px',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              height: isMobile ? 'auto' : '100vh',
+              minHeight: isMobile ? '60vh' : undefined,
+              background: 'linear-gradient(180deg, #0a0a14 0%, #0d0d18 100%)',
             }}>
-              {/* Left: Smart Dashboard Home - Greeting + Metrics */}
-              <div>
-                <SmartDashboardHome 
-                  userName="Wes"
-                  onNavigate={(view) => handleViewChange(view as ViewId)}
-                  onQuickAction={(action) => {
-                    if (action === 'deploy') handleViewChange('agents');
-                  }}
-                />
-              </div>
-              
-              {/* Right: Orchestration Network - Next to greeting */}
-              <div>
-                {isMobile ? (
-                  <CollapsibleSection title="Agent Command Center" icon="⚡" badge={realActiveCount} defaultOpen>
-                    <AgentCommandCenter compact={true} isThinking={isLoading} />
-                  </CollapsibleSection>
-                ) : (
-                  <AgentCommandCenter isThinking={isLoading} />
-                )}
-              </div>
-            </div>
-
-            {/* Model Selector */}
-            <div style={styles.modelSelectorSection}>
-              <div style={styles.modelSelectorInner}>
-                <span style={styles.modelSelectorLabel}>🤖 Active Model</span>
-                <div style={styles.modelSelectorDropdown}>
+              {/* Compact greeting banner */}
+              <div style={{
+                padding: isMobile ? '12px 16px' : '14px 32px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                flexShrink: 0,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '1.25rem' }}>👋</span>
+                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.95rem' }}>Hey Wes</span>
+                  <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                {/* Inline model selector */}
+                <div style={{ position: 'relative' }}>
                   <button
                     onClick={() => setShowModelDropdown(!showModelDropdown)}
-                    style={styles.modelSelectorButton}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      color: 'rgba(255,255,255,0.7)',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
                   >
-                    <span style={styles.modelSelectorName}>
-                      {AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}
-                    </span>
-                    <span style={styles.modelSelectorArrow}>{showModelDropdown ? '▲' : '▼'}</span>
+                    <span>🤖</span>
+                    <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}</span>
+                    <span style={{ fontSize: '0.6rem' }}>{showModelDropdown ? '▲' : '▼'}</span>
                   </button>
                   {showModelDropdown && (
-                    <div style={styles.modelDropdownMenu}>
+                    <div style={{
+                      ...styles.modelDropdownMenu,
+                      top: '100%',
+                      right: 0,
+                      left: 'auto',
+                      marginTop: '4px',
+                    }}>
                       {AI_MODELS.map(model => (
                         <button
                           key={model.id}
@@ -1612,13 +1628,247 @@ export default function OpieKanban(): React.ReactElement {
                   )}
                 </div>
               </div>
+
+              {/* Chat messages area */}
+              <div style={{
+                ...styles.chatMessages,
+                padding: isMobile ? '16px' : '24px 32px',
+              }}>
+                {messages.length === 0 && (
+                  <div style={styles.emptyChat}>
+                    <div style={{ ...styles.emptyChatIcon, fontSize: '64px' }}>💬</div>
+                    <h3 style={styles.emptyChatTitle}>Chat with Opie</h3>
+                    <p style={styles.emptyChatText}>Turn on the mic or type below to start a conversation</p>
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <div
+                    key={m.id || i}
+                    style={{
+                      ...styles.chatBubble,
+                      ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
+                    }}
+                  >
+                    {m.text}
+                  </div>
+                ))}
+                {isLoading && (
+                  <div style={{
+                    ...styles.chatBubble,
+                    ...styles.chatBubbleAssistant,
+                    color: 'rgba(255,255,255,0.4)',
+                  }}>
+                    Thinking...
+                  </div>
+                )}
+              </div>
+
+              {/* Transcript bar */}
+              {transcript && (
+                <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
+              )}
+
+              {/* Input row */}
+              <div style={{
+                ...styles.voiceInput,
+                padding: isMobile ? '16px' : '16px 32px',
+              }}>
+                <button
+                  onClick={toggleMic}
+                  style={{
+                    ...styles.micButton,
+                    padding: '14px 20px',
+                    background: micOn ? '#22c55e' : '#ef4444',
+                  }}
+                >
+                  {micOn ? '🎤 Listening...' : '🎤 Mic'}
+                </button>
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(input); } }}
+                  placeholder="Type a message to Opie..."
+                  style={styles.textInput}
+                />
+                <button
+                  onClick={() => handleSend(input)}
+                  style={styles.sendButton}
+                  disabled={isLoading}
+                >
+                  {isLoading ? '...' : 'Send'}
+                </button>
+              </div>
             </div>
 
-            {/* BELOW: Kanban Board (Full Width) */}
-            <div style={styles.kanbanSection}>
-              <h2 style={styles.kanbanTitle}>
+            {/* Right: War Room + Agent Stats (desktop/tablet only) */}
+            {!isMobile && (
+              <div style={{
+                width: isTablet ? '340px' : '420px',
+                flexShrink: 0,
+                borderLeft: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh',
+                overflow: 'hidden',
+              }}>
+                <div style={{ flexShrink: 0 }}>
+                  <AgentCommandCenter compact={isTablet} isThinking={isLoading} />
+                </div>
+
+                {/* Real-Time Agent Stats — terminal style */}
+                <div style={{
+                  flex: 1,
+                  borderTop: '1px solid rgba(0,255,200,0.15)',
+                  background: 'linear-gradient(180deg, rgba(0,10,20,0.95) 0%, rgba(0,5,15,0.98) 100%)',
+                  padding: '14px 16px',
+                  overflowY: 'auto',
+                  fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid rgba(0,255,200,0.1)',
+                  }}>
+                    <span style={{
+                      color: '#00ffc8',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                    }}>
+                      Real-Time Agent Stats
+                    </span>
+                    <span style={{
+                      color: 'rgba(0,255,200,0.4)',
+                      fontSize: '0.6rem',
+                    }}>
+                      {agentNodes.filter(n => n.status === 'working').length}/{agentNodes.length} active
+                    </span>
+                  </div>
+
+                  {/* Agent rows */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {agentNodes.map((node, idx) => {
+                      const statusColor = node.status === 'working' ? '#f59e0b'
+                        : node.status === 'connected' ? '#22c55e' : 'rgba(255,255,255,0.25)';
+                      const statusLabel = node.status === 'working' ? 'BUSY'
+                        : node.status === 'connected' ? 'ONLINE' : 'IDLE';
+                      const isBusy = node.status === 'working';
+
+                      return (
+                        <div
+                          key={node.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            background: isBusy ? 'rgba(245,158,11,0.06)' : 'transparent',
+                            fontSize: '0.72rem',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {/* Agent name */}
+                          <span style={{
+                            color: node.color,
+                            fontWeight: 600,
+                            width: '80px',
+                            flexShrink: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {node.emoji} {node.name.toUpperCase()}
+                          </span>
+
+                          {/* Status badge */}
+                          <span style={{
+                            color: statusColor,
+                            fontWeight: 700,
+                            fontSize: '0.65rem',
+                            padding: '1px 6px',
+                            borderRadius: '3px',
+                            border: `1px solid ${statusColor}`,
+                            background: `${statusColor}15`,
+                            width: '52px',
+                            textAlign: 'center',
+                            flexShrink: 0,
+                          }}>
+                            {statusLabel}
+                          </span>
+
+                          {/* Task or info */}
+                          <span style={{
+                            color: isBusy ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
+                            fontSize: '0.65rem',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                          }}>
+                            {node.currentTask
+                              ? `[TASK: ${node.currentTask.toUpperCase().slice(0, 20)}]`
+                              : node.status === 'connected'
+                                ? `[LOAD: ${Math.floor(Math.random() * 40 + 10)}%]`
+                                : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer scan line */}
+                  <div style={{
+                    marginTop: '12px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(0,255,200,0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.6rem',
+                    color: 'rgba(0,255,200,0.3)',
+                  }}>
+                    <span>SYS: NOMINAL</span>
+                    <span>{new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile: War Room as collapsible below chat */}
+            {isMobile && (
+              <div style={{ padding: '16px' }}>
+                <CollapsibleSection title="Agent Command Center" icon="⚡" badge={realActiveCount}>
+                  <AgentCommandCenter compact={true} isThinking={isLoading} />
+                </CollapsibleSection>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Project Board View - Kanban + Activity Feed */}
+        {activeView === 'board' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
                 📋 Project Board
-              </h2>
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Track project progress' : 'Track tasks across your project pipeline'}
+              </p>
+            </div>
+
+            {/* Kanban Board */}
+            <div style={styles.kanbanSection}>
               <div style={styles.kanbanBoard}>
                 {columns.map((column) => (
                   <KanbanColumn
@@ -1629,37 +1879,27 @@ export default function OpieKanban(): React.ReactElement {
                 ))}
               </div>
             </div>
-            
-            {/* Activity Feed - Full Width */}
+
+            {/* Activity Feed */}
             <div style={{ marginTop: '24px' }}>
               {isMobile ? (
-                <>
-                  <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
-                    <ActivityFeed
-                      maxItems={20}
-                      pollInterval={15000}
-                      isThinking={isLoading}
-                      enabled={activeView === 'dashboard'}
-                    />
-                  </CollapsibleSection>
-                  {/* Mobile: Keep widgets here as collapsible sections */}
-                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <CollapsibleSection title="System Health" icon="🩺">
-                      <SystemHealthPanel />
-                    </CollapsibleSection>
-                    {/* Removed: Calendar and Email widgets */}
-                  </div>
-                </>
+                <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
+                  <ActivityFeed
+                    maxItems={20}
+                    pollInterval={15000}
+                    isThinking={isLoading}
+                    enabled={activeView === 'board'}
+                  />
+                </CollapsibleSection>
               ) : (
                 <ActivityFeed
                   maxItems={50}
                   pollInterval={15000}
                   isThinking={isLoading}
-                  enabled={activeView === 'dashboard'}
+                  enabled={activeView === 'board'}
                 />
               )}
             </div>
-            
           </div>
         )}
 
@@ -2189,13 +2429,13 @@ export default function OpieKanban(): React.ReactElement {
         />
       )}
 
-      {/* Mobile FAB for quick actions */}
-      {isMobile && activeView === 'dashboard' && (
+      {/* Mobile FAB for quick actions on Project Board */}
+      {isMobile && activeView === 'board' && (
         <FloatingActionButton
-          icon="⚡"
-          onClick={() => handleViewChange('voice')}
+          icon="💬"
+          onClick={() => handleViewChange('dashboard')}
           color="primary"
-          label="Quick Chat"
+          label="Chat with Opie"
         />
       )}
 

@@ -11,11 +11,12 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'dashboard', label: 'Dashboard', icon: '💬' },
+  { id: 'board', label: 'Project Board', icon: '📋' },
   { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
   { id: 'organization', label: 'Organization', icon: '🏛️' },
   { id: 'skills', label: 'Skills', icon: '🛠️' },
-  { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
+  { id: 'tasks', label: 'Tasks', icon: '✅', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
   { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
   { id: 'context', label: 'Context', icon: '🧠' },
