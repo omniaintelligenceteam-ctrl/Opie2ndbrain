@@ -20,6 +20,7 @@ import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
 import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
+import { PendingExecutionPlan } from '@/types/chat';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import StatusOrb from './StatusOrb';
@@ -356,6 +357,9 @@ export default function OpieKanban(): React.ReactElement {
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('kimi');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  
+  // Pending execution plan state
+  const [pendingPlan, setPendingPlan] = useState<PendingExecutionPlan | null>(null);
 
   // Handle model switching
   const handleModelChange = async (model: AIModel) => {
@@ -555,6 +559,146 @@ export default function OpieKanban(): React.ReactElement {
     onSend: handleVoiceSend,
     autoSpeak: true,
   });
+
+  // ─── Plan Approval Handlers ────────────────────────────────────
+  const handleExecutePlan = useCallback(async (planId: string) => {
+    if (!pendingPlan || pendingPlan.id !== planId) {
+      console.error('[Plan] Cannot execute: plan not found or mismatch');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setPendingPlan(null); // Clear the pending plan immediately
+
+      // Call the approval API
+      const res = await fetch('/api/chat/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, action: 'approve' }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to approve plan: ${res.status}`);
+      }
+
+      // Check if response is streaming execution
+      const contentType = res.headers.get('content-type') || '';
+      const isStreaming = contentType.includes('text/event-stream');
+
+      const assistantMsgId = generateMessageId();
+
+      if (isStreaming && res.body) {
+        // Handle streaming execution response
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Read the execution stream
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.choices?.[0]?.delta?.content) {
+                  fullText += parsed.choices[0].delta.content;
+                  setMessages(prev => prev.map(m => 
+                    m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  ));
+                }
+              } catch {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      } else {
+        // Handle JSON response
+        const data = await res.json();
+        
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: data.message || 'Plan executed successfully.',
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+      }
+
+    } catch (error) {
+      console.error('[Plan] Execution error:', error);
+      
+      // Add error message to chat
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: `Sorry, failed to execute the plan: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pendingPlan, setMessages]);
+
+  const handleRejectPlan = useCallback(async (planId: string) => {
+    if (!pendingPlan || pendingPlan.id !== planId) {
+      console.error('[Plan] Cannot reject: plan not found or mismatch');
+      return;
+    }
+
+    try {
+      // Call the approval API to reject
+      const res = await fetch('/api/chat/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, action: 'reject' }),
+      });
+
+      if (!res.ok) {
+        console.error('[Plan] Failed to reject plan:', res.status);
+      }
+
+      // Clear the pending plan
+      setPendingPlan(null);
+
+      // Add a message to the chat indicating the plan was cancelled
+      const cancelMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: 'Plan cancelled. Let me know if you\'d like to try a different approach.',
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, cancelMessage]);
+
+    } catch (error) {
+      console.error('[Plan] Rejection error:', error);
+      setPendingPlan(null); // Clear anyway
+    }
+  }, [pendingPlan, setMessages]);
 
   const {
     micOn,
@@ -766,6 +910,24 @@ export default function OpieKanban(): React.ReactElement {
       } else {
         // Regular JSON response
         const data = await res.json();
+
+        // Check for pending execution plan
+        if (data.pendingPlan && data.pendingPlan.requiresApproval) {
+          console.log('[Chat] Received pending plan:', data.pendingPlan);
+          setPendingPlan({
+            id: data.pendingPlan.id,
+            message: data.pendingPlan.message,
+            plannedActions: data.pendingPlan.plannedActions,
+            status: data.pendingPlan.status as 'pending' | 'approved' | 'rejected' | 'executing' | 'completed' | 'error',
+            createdAt: new Date(data.pendingPlan.createdAt),
+            requiresApproval: data.pendingPlan.requiresApproval,
+            toolCallCount: data.pendingPlan.toolCallCount,
+          });
+          
+          // Don't continue with normal response handling - the plan UI will take over
+          setIsLoading(false);
+          return;
+        }
 
         // Check for async mode (EXECUTE)
         if (data.mode === 'async' && data.poll_url) {
@@ -1918,6 +2080,9 @@ export default function OpieKanban(): React.ReactElement {
             onSend={(text, image, mode) => handleSendToPinned(pinnedId, text || pinnedInputs[pinnedId] || '', mode)}
             interactionMode={interactionMode}
             onInteractionModeChange={setInteractionMode}
+            pendingPlan={null}
+            onExecutePlan={() => {}}
+            onRejectPlan={() => {}}
           />
         );
       })}
@@ -1981,6 +2146,9 @@ export default function OpieKanban(): React.ReactElement {
         onInteractionModeChange={setInteractionMode}
         selectedModel={selectedModel}
         onModelChange={handleModelChange}
+        pendingPlan={pendingPlan}
+        onExecutePlan={handleExecutePlan}
+        onRejectPlan={handleRejectPlan}
         conversations={conversations}
         activeConversationId={activeConversation?.id || null}
         onConversationCreate={createConversation}
