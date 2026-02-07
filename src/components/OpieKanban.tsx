@@ -532,6 +532,17 @@ export default function OpieKanban(): React.ReactElement {
   const [rightPanelWidth, setRightPanelWidth] = useState(isTablet ? 340 : 420);
   const [isResizingPanel, setIsResizingPanel] = useState(false);
   const dashboardFileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUp = useRef(false);
+
+  // Smart auto-scroll: scroll to bottom on new messages unless user scrolled up
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // Consider "at bottom" if within 80px of the bottom
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    isUserScrolledUp.current = !atBottom;
+  }, []);
 
   // Command center header: weather + daily quote
   const [weather, setWeather] = useState<{ temp: number; emoji: string; desc: string } | null>(null);
@@ -635,15 +646,46 @@ export default function OpieKanban(): React.ReactElement {
 
   useEffect(() => { setSessionId(getSessionId()); }, []);
 
+  // ─── Voice Grammar Cleanup ─────────────────────────────────────
+  // Cleans up raw speech-to-text: capitalizes sentences, adds punctuation,
+  // fixes common STT artifacts — all client-side, zero latency.
+  const cleanVoiceGrammar = useCallback((raw: string): string => {
+    let text = raw.trim();
+    if (!text) return text;
+
+    // Collapse multiple spaces
+    text = text.replace(/\s{2,}/g, ' ');
+
+    // Capitalize first letter
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+
+    // Capitalize after sentence-ending punctuation
+    text = text.replace(/([.!?])\s+([a-z])/g, (_, p, c) => p + ' ' + c.toUpperCase());
+
+    // Capitalize "I" when standalone
+    text = text.replace(/\bi\b/g, 'I');
+
+    // Fix "i'm" → "I'm", "i'll" → "I'll", "i've" → "I've", "i'd" → "I'd"
+    text = text.replace(/\bI('m|'ll|'ve|'d)\b/gi, (_, s) => 'I' + s.toLowerCase());
+
+    // Add period at end if no punctuation
+    if (!/[.!?]$/.test(text)) {
+      text += '.';
+    }
+
+    return text;
+  }, []);
+
   // ─── Voice Engine (new unified system) ─────────────────────────
   // The voice engine handles: mic input → STT → silence detection → send → TTS → playback
   // with proper state machine, barge-in, cleanup, and browser compat.
   const handleVoiceSend = useCallback(async (text: string): Promise<string | void> => {
     // This is called by the voice engine when silence is detected.
-    // We trigger handleSend and return the response for TTS.
+    // Clean up grammar before sending to chat.
+    const cleaned = cleanVoiceGrammar(text);
     // handleSend is defined below, so we use the ref pattern.
-    return handleSendRef.current(text);
-  }, []);
+    return handleSendRef.current(cleaned);
+  }, [cleanVoiceGrammar]);
 
   const voiceEngine = useVoiceEngine({
     onSend: handleVoiceSend,
@@ -813,6 +855,15 @@ export default function OpieKanban(): React.ReactElement {
       default: return '● Online';
     }
   }, [voiceState]);
+
+  // Smart auto-scroll: scroll to bottom on new messages unless user scrolled up
+  useEffect(() => {
+    if (isUserScrolledUp.current) return;
+    const el = chatContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, isLoading, transcript]);
 
   // Image upload helpers for dashboard chat
   const fileToBase64 = (file: File): Promise<string | null> => {
@@ -1923,7 +1974,10 @@ export default function OpieKanban(): React.ReactElement {
               )}
 
               {/* Chat messages area */}
-              <div style={{
+              <div
+                ref={chatContainerRef}
+                onScroll={handleChatScroll}
+                style={{
                 ...styles.chatMessages,
                 padding: isMobile ? '16px' : '24px 32px',
               }}>
