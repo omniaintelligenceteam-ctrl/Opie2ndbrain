@@ -90,89 +90,95 @@ function formatToolResult(tool: string, result: any): string {
   return `**Result:** ${resultStr}\n`;
 }
 
+// Helper to build SSE data line from content string
+function sseData(content: string): string {
+  return 'data: ' + JSON.stringify({ choices: [{ delta: { content } }] }) + '\n\n';
+}
+
 // Execute a plan's tool calls with streaming feedback
 async function* executePlan(plan: any): AsyncGenerator<string> {
   try {
     // Mark as executing
     ExecutionPlanStore.updateStatus(plan.id, 'executing');
-    
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🚀 **Executing Plan: ${plan.message}**\n\n` } }] })}\n\n`;
-    
-    const results = [];
-    
+
+    yield sseData('🚀 **Executing Plan: ' + plan.message + '**\n\n');
+
+    const results: Array<{ tool: string; success: boolean; result?: any; error?: string }> = [];
+
     // Execute each tool call
     for (let i = 0; i < plan.toolCalls.length; i++) {
       const toolCall = plan.toolCalls[i];
-      
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `**${i + 1}.** ${toolCall.description}\n` } }] })}\n\n`;
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🔧 Executing \`${toolCall.tool}\`...\n` } }] })}\n\n`;
-      
+
+      yield sseData('**' + (i + 1) + '.** ' + toolCall.description + '\n');
+      yield sseData('🔧 Executing `' + toolCall.tool + '`...\n');
+
       const result = await executeTool(toolCall);
-      
+
       if (result.success) {
-        yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ Success\n\n` } }] })}\n\n`;
-        
+        yield sseData('✅ Success\n\n');
+
         // Format and display the actual result
         const formattedResult = formatToolResult(toolCall.tool, result.result);
         if (formattedResult.trim()) {
-          yield `data: ${JSON.stringify({ choices: [{ delta: { content: formattedResult } }] })}\n\n`;
+          yield sseData(formattedResult);
         }
-        
+
         results.push({ tool: toolCall.tool, success: true, result: result.result });
       } else {
-        yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ Error: ${result.error}\n\n` } }] })}\n\n`;
+        yield sseData('❌ Error: ' + result.error + '\n\n');
         results.push({ tool: toolCall.tool, success: false, error: result.error });
-        
+
         // Continue with other tools even if one fails
       }
-      
+
       // Small delay between tools for better UX
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
+
     // Summary with results overview
     const successCount = results.filter(r => r.success).length;
     const totalCount = results.length;
-    
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n---\n\n**✨ Execution Complete**\n\n` } }] })}\n\n`;
-    
+
+    yield sseData('\n---\n\n**✨ Execution Complete**\n\n');
+
     // Summary of all successful results
     if (successCount > 0) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `**Summary of Results:**\n\n` } }] })}\n\n`;
-      
+      yield sseData('**Summary of Results:**\n\n');
+
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const toolCall = plan.toolCalls[i];
         if (r.success) {
-          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `✅ **${toolCall.tool}**: ${toolCall.description}\n` } }] })}\n\n`;
+          yield sseData('✅ **' + toolCall.tool + '**: ' + toolCall.description + '\n');
         } else {
-          yield `data: ${JSON.stringify({ choices: [{ delta: { content: `❌ **${toolCall.tool}**: ${r.error}\n` } }] })}\n\n`;
+          yield sseData('❌ **' + toolCall.tool + '**: ' + r.error + '\n');
         }
       }
-      
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n` } }] })}\n\n`;
+
+      yield sseData('\n');
     }
-    
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `Successfully executed ${successCount}/${totalCount} actions.\n\n` } }] })}\n\n`;
-    
+
+    yield sseData('Successfully executed ' + successCount + '/' + totalCount + ' actions.\n\n');
+
     if (successCount === totalCount) {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `🎉 All actions completed successfully! The task has been executed as planned.\n\n**Done!**` } }] })}\n\n`;
+      yield sseData('🎉 All actions completed successfully! The task has been executed as planned.\n\n**Done!**');
     } else {
-      yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Some actions encountered errors, but others completed successfully. Review the results above.\n\n**Done!**` } }] })}\n\n`;
+      yield sseData('⚠️ Some actions encountered errors, but others completed successfully. Review the results above.\n\n**Done!**');
     }
-    
+
     // Update plan status
     ExecutionPlanStore.updateStatus(plan.id, 'completed', { result: results });
-    
-    yield `data: [DONE]\n\n`;
-    
+
+    yield 'data: [DONE]\n\n';
+
   } catch (error) {
     console.error('[Approve] Execution error:', error);
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n❌ **Execution Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\n**Done!**` } }] })}\n\n`;
-    
-    ExecutionPlanStore.updateStatus(plan.id, 'error', { error: error instanceof Error ? error.message : 'Unknown error' });
-    
-    yield `data: [DONE]\n\n`;
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    yield sseData('\n❌ **Execution Failed**\n\nError: ' + errorMsg + '\n\n**Done!**');
+
+    ExecutionPlanStore.updateStatus(plan.id, 'error', { error: errorMsg });
+
+    yield 'data: [DONE]\n\n';
   }
 }
 
