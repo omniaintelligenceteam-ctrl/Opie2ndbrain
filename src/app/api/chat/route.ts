@@ -3,6 +3,7 @@ import { PersonalityParameters, parametersToApiConfig } from '@/lib/personalityT
 import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
+import { ExecutionPlanStore, type ToolCall } from '@/lib/execution-plans';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -248,6 +249,137 @@ function parseToolCall(text: string): { tool: string; args: Record<string, any> 
   return null;
 }
 
+// Generate an execution plan by asking AI what it would do
+async function generateExecutionPlan(
+  messages: Array<{ role: string; content: string }>,
+  sessionId: string
+): Promise<{
+  success: boolean;
+  plan?: {
+    message: string;
+    plannedActions: string[];
+    toolCalls: ToolCall[];
+  };
+  error?: string;
+}> {
+  const ollamaKey = process.env.OLLAMA_API_KEY;
+  if (!ollamaKey) {
+    return { success: false, error: 'OLLAMA_API_KEY not configured' };
+  }
+
+  try {
+    const planningPrompt = `
+PLANNING MODE: Before executing, create a detailed execution plan.
+
+Based on the user's request, create a comprehensive plan that outlines:
+1. What actions you would take
+2. What tools you would use
+3. The order of operations
+
+Your response must be in this EXACT JSON format:
+{
+  "plannedActions": [
+    "Step 1: Description of what you'll do",
+    "Step 2: Another action",
+    "Step 3: Final step"
+  ],
+  "toolCalls": [
+    {
+      "tool": "tool_name",
+      "args": {"param": "value"},
+      "description": "Human-readable description of what this tool call will do"
+    }
+  ]
+}
+
+IMPORTANT: 
+- Your ENTIRE response must be valid JSON
+- plannedActions should be clear, human-readable steps
+- toolCalls should use actual tool names from the available tools
+- description in each toolCall should explain what that specific call will accomplish
+- Only include tools you would actually need to execute
+
+User's request: "${messages[messages.length - 1]?.content || ''}"
+
+Available tools: ${Object.keys(TOOLS).join(', ')}
+    `;
+
+    const planningMessages = [
+      ...messages.slice(0, -1),
+      { role: 'user', content: planningPrompt }
+    ];
+
+    const response = await fetch('https://ollama.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ollamaKey}`,
+      },
+      body: JSON.stringify({
+        model: 'kimi-k2.5:cloud',
+        stream: false,
+        messages: planningMessages,
+        max_tokens: 1024,
+        temperature: 0.3, // Lower temperature for more consistent JSON
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `Planning API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const planText = data.choices?.[0]?.message?.content || '';
+    
+    console.log('[Planning] Raw AI response:', planText.slice(0, 500));
+
+    // Try to extract JSON from the response
+    let planJson;
+    try {
+      // Look for JSON between ```json and ``` or just find the JSON object
+      const jsonMatch = planText.match(/```json\s*([\s\S]*?)\s*```/) || planText.match(/(\{[\s\S]*\})/);
+      const jsonString = jsonMatch ? jsonMatch[1] : planText;
+      planJson = JSON.parse(jsonString.trim());
+    } catch (e) {
+      console.error('[Planning] Failed to parse JSON:', e);
+      return { success: false, error: 'Failed to parse execution plan from AI response' };
+    }
+
+    if (!planJson.plannedActions || !Array.isArray(planJson.plannedActions)) {
+      return { success: false, error: 'Invalid plan format: missing plannedActions' };
+    }
+
+    if (!planJson.toolCalls || !Array.isArray(planJson.toolCalls)) {
+      return { success: false, error: 'Invalid plan format: missing toolCalls' };
+    }
+
+    // Validate tool calls
+    for (const toolCall of planJson.toolCalls) {
+      if (!toolCall.tool || !TOOLS[toolCall.tool]) {
+        return { success: false, error: `Invalid tool: ${toolCall.tool}` };
+      }
+      if (!toolCall.args || typeof toolCall.args !== 'object') {
+        return { success: false, error: `Invalid args for tool ${toolCall.tool}` };
+      }
+      if (!toolCall.description || typeof toolCall.description !== 'string') {
+        return { success: false, error: `Missing description for tool ${toolCall.tool}` };
+      }
+    }
+
+    return {
+      success: true,
+      plan: {
+        message: messages[messages.length - 1]?.content || '',
+        plannedActions: planJson.plannedActions,
+        toolCalls: planJson.toolCalls,
+      },
+    };
+  } catch (error) {
+    console.error('[Planning] Error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Planning failed' };
+  }
+}
+
 // Call Ollama with tool execution loop (for EXECUTE mode)
 async function* streamOllamaWithTools(
   messages: Array<{ role: string; content: string }>,
@@ -439,14 +571,69 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? EXECUTE_PROMPT : PLAN_PROMPT;
 
-  // EXECUTE MODE: Execute with tools
+  // EXECUTE MODE: Generate execution plan (approval gate)
   console.log('[Chat] EXECUTE mode entered, interactionMode:', interactionMode);
   if (interactionMode === 'execute') {
-    // Option A: Local tool execution (fast, streaming) - default
-    const useLocalExecution = process.env.EXECUTE_LOCAL !== 'false';
+    // Option A: Generate execution plan for approval (new approval gate system) - default
+    const useApprovalGate = process.env.EXECUTE_APPROVAL_GATE !== 'false';
+
+    if (useApprovalGate) {
+      console.log('[Chat] EXECUTE mode: Generating execution plan for approval');
+      
+      // Build native message array (proper multi-turn format)
+      const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.text || m.content || ''
+      }));
+      
+      console.log('[Chat] Native message array - history count:', historyMessages.length);
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...historyMessages,
+        { role: 'user', content: userMessage }
+      ];
+
+      // Generate execution plan
+      const planResult = await generateExecutionPlan(messages, sessionId);
+      
+      if (!planResult.success) {
+        console.error('[Chat] Failed to generate execution plan:', planResult.error);
+        return Response.json({ 
+          error: 'Failed to generate execution plan', 
+          details: planResult.error 
+        }, { status: 500 });
+      }
+
+      // Store the plan
+      const executionPlan = ExecutionPlanStore.create({
+        sessionId,
+        message: planResult.plan!.message,
+        plannedActions: planResult.plan!.plannedActions,
+        toolCalls: planResult.plan!.toolCalls,
+      });
+
+      console.log(`[Chat] Created execution plan ${executionPlan.id} with ${executionPlan.toolCalls.length} tool calls`);
+
+      // Return plan for approval
+      return Response.json({
+        pendingPlan: {
+          id: executionPlan.id,
+          message: executionPlan.message,
+          plannedActions: executionPlan.plannedActions,
+          status: executionPlan.status,
+          createdAt: executionPlan.createdAt,
+          requiresApproval: true,
+          toolCallCount: executionPlan.toolCalls.length,
+        }
+      });
+    }
+    
+    // Option B: Direct execution without approval (fallback when EXECUTE_APPROVAL_GATE=false)
+    const useLocalExecution = true; // Keep the existing direct execution as fallback
 
     if (useLocalExecution) {
-      console.log('[Chat] EXECUTE mode: Using local tool execution');
+      console.log('[Chat] EXECUTE mode: Using direct tool execution (no approval)');
       
       // Build native message array (proper multi-turn format)
       const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({

@@ -5,6 +5,7 @@ import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContext
 import { Conversation } from '@/types/conversation';
 import { OpieAvatar } from './OpieAvatar';
 import { Mic, Camera } from 'lucide-react';
+import { PendingExecutionPlan } from '@/types/chat';
 
 // ============================================================================
 // Types
@@ -48,6 +49,10 @@ interface FloatingChatProps {
   onInteractionModeChange?: (mode: InteractionMode) => void;
   selectedModel?: AIModel;
   onModelChange?: (model: AIModel) => void;
+  // Execution approval gate
+  pendingPlan?: PendingExecutionPlan | null;
+  onExecutePlan?: (planId: string) => void;
+  onRejectPlan?: (planId: string) => void;
   // Conversation management (new)
   conversations?: Conversation[];
   activeConversationId?: string | null;
@@ -353,6 +358,71 @@ function QuickAction({ emoji, label, onClick }: { emoji: string; label: string; 
   );
 }
 
+// Execution Plan Approval Component
+const ExecutionPlanApproval = memo(function ExecutionPlanApproval({
+  plan,
+  onApprove,
+  onReject,
+}: {
+  plan: PendingExecutionPlan;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div style={styles.pendingPlanContainer}>
+      <div style={styles.pendingPlanHeader}>
+        <span style={styles.pendingPlanIcon}>🎯</span>
+        <h3 style={styles.pendingPlanTitle}>Execution Plan Ready</h3>
+        <span style={styles.pendingPlanStatus}>Requires Approval</span>
+      </div>
+      
+      <div style={styles.pendingPlanContent}>
+        <div style={styles.pendingPlanMessage}>
+          <strong>Request:</strong> {plan.message}
+        </div>
+        
+        <div style={styles.pendingPlanActions}>
+          <h4 style={styles.pendingPlanSubtitle}>I will:</h4>
+          <ul style={styles.pendingPlanList}>
+            {plan.plannedActions.map((action, i) => (
+              <li key={i} style={styles.pendingPlanListItem}>
+                <span style={styles.pendingPlanStepNumber}>{i + 1}.</span>
+                <span>{action}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div style={styles.pendingPlanMeta}>
+          <span style={styles.pendingPlanToolCount}>
+            {plan.toolCallCount} tool{plan.toolCallCount !== 1 ? 's' : ''} to execute
+          </span>
+          <span style={styles.pendingPlanTime}>
+            Created {formatTime(plan.createdAt, true)}
+          </span>
+        </div>
+      </div>
+
+      <div style={styles.pendingPlanButtons}>
+        <button
+          onClick={onReject}
+          style={styles.pendingPlanButtonReject}
+        >
+          <span>❌</span>
+          <span>Cancel</span>
+        </button>
+        <button
+          onClick={onApprove}
+          style={styles.pendingPlanButtonExecute}
+        >
+          <span>🚀</span>
+          <span>Execute Plan</span>
+        </button>
+      </div>
+    </div>
+  );
+});
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -374,6 +444,9 @@ export default function FloatingChat({
   onInteractionModeChange,
   selectedModel: controlledModel,
   onModelChange,
+  pendingPlan,
+  onExecutePlan,
+  onRejectPlan,
   conversations,
   activeConversationId,
   onConversationCreate,
@@ -1638,6 +1711,15 @@ export default function FloatingChat({
           </div>
         )}
 
+        {/* Pending Execution Plan */}
+        {pendingPlan && pendingPlan.requiresApproval && (
+          <ExecutionPlanApproval
+            plan={pendingPlan}
+            onApprove={() => onExecutePlan?.(pendingPlan.id)}
+            onReject={() => onRejectPlan?.(pendingPlan.id)}
+          />
+        )}
+
         {/* Mode Toggle */}
         <div style={styles.modeToggleContainer}>
           <div style={styles.modeToggle}>
@@ -1858,6 +1940,24 @@ const animationStyles = `
     50% {
       box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.4);
       transform: scale(1.02);
+    }
+  }
+  
+  @keyframes pendingPlanGlow {
+    0%, 100% {
+      box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05);
+    }
+    50% {
+      box-shadow: 0 4px 25px rgba(249, 115, 22, 0.4), inset 0 0 30px rgba(249, 115, 22, 0.1);
+    }
+  }
+  
+  @keyframes executeButtonPulse {
+    0%, 100% {
+      box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4);
+    }
+    50% {
+      box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6), 0 0 15px rgba(239, 68, 68, 0.3);
     }
   }
   ${sidebarAnimationStyles}
@@ -2598,5 +2698,139 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 3,
     borderRadius: 2,
     animation: 'waveform 0.5s ease-in-out infinite',
+  },
+
+  // Pending Execution Plan
+  pendingPlanContainer: {
+    margin: '12px 16px',
+    padding: 16,
+    borderRadius: 12,
+    border: '1px solid rgba(249, 115, 22, 0.4)',
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%)',
+    boxShadow: '0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05)',
+    animation: 'pendingPlanGlow 2s ease-in-out infinite',
+  },
+  pendingPlanHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  pendingPlanIcon: {
+    fontSize: '20px',
+    filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
+  },
+  pendingPlanTitle: {
+    flex: 1,
+    fontSize: '1rem',
+    fontWeight: 700,
+    color: '#fff',
+    margin: 0,
+  },
+  pendingPlanStatus: {
+    padding: '4px 10px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#fb923c',
+    background: 'rgba(249, 115, 22, 0.2)',
+    border: '1px solid rgba(249, 115, 22, 0.4)',
+    borderRadius: 12,
+  },
+  pendingPlanContent: {
+    marginBottom: 16,
+  },
+  pendingPlanMessage: {
+    padding: 10,
+    marginBottom: 12,
+    fontSize: '0.85rem',
+    color: 'rgba(255, 255, 255, 0.9)',
+    background: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 8,
+    borderLeft: '3px solid #fb923c',
+  },
+  pendingPlanActions: {
+    marginBottom: 12,
+  },
+  pendingPlanSubtitle: {
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: 'rgba(255, 255, 255, 0.8)',
+    margin: '0 0 8px 0',
+  },
+  pendingPlanList: {
+    margin: 0,
+    padding: 0,
+    listStyle: 'none',
+  },
+  pendingPlanListItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: '4px 0',
+    fontSize: '0.8rem',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  pendingPlanStepNumber: {
+    minWidth: 20,
+    padding: '2px 6px',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    color: '#fb923c',
+    background: 'rgba(249, 115, 22, 0.15)',
+    borderRadius: 4,
+    textAlign: 'center' as const,
+  },
+  pendingPlanMeta: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 0 0 0',
+    fontSize: '0.7rem',
+    color: 'rgba(255, 255, 255, 0.5)',
+    borderTop: '1px solid rgba(249, 115, 22, 0.2)',
+  },
+  pendingPlanToolCount: {
+    fontWeight: 500,
+  },
+  pendingPlanTime: {
+    fontStyle: 'italic',
+  },
+  pendingPlanButtons: {
+    display: 'flex',
+    gap: 10,
+  },
+  pendingPlanButtonReject: {
+    flex: 1,
+    padding: '10px 16px',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
+    borderRadius: 8,
+    background: 'rgba(239, 68, 68, 0.15)',
+    color: '#ef4444',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    transition: 'all 0.2s ease',
+  },
+  pendingPlanButtonExecute: {
+    flex: 2,
+    padding: '10px 16px',
+    border: '1px solid rgba(249, 115, 22, 0.6)',
+    borderRadius: 8,
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.8) 0%, rgba(239, 68, 68, 0.6) 100%)',
+    color: '#fff',
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 10px rgba(249, 115, 22, 0.4)',
+    animation: 'executeButtonPulse 2s ease-in-out infinite',
   },
 };
