@@ -794,6 +794,7 @@ export default function OpieKanban(): React.ReactElement {
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
           memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in EXECUTE mode
+          pendingPlanId: pendingPlan?.id, // Pass pending plan ID for approval responses
         }),
         signal: abortController.signal,
       });

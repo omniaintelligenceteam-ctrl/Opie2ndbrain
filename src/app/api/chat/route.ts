@@ -195,6 +195,30 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
   }
 }
 
+// Parse user response for yes/no intent
+function parseApprovalIntent(text: string): 'yes' | 'no' | 'unclear' {
+  const cleanText = text.toLowerCase().trim();
+  
+  // Yes indicators
+  const yesKeywords = ['yes', 'yeah', 'yep', 'go', 'do it', 'execute', 'run', 'proceed', 'continue', 'sure', 'ok', 'okay', 'yea'];
+  const noKeywords = ['no', 'nah', 'cancel', 'stop', 'wait', 'hold on', 'not yet', 'nope', 'abort'];
+  
+  // Check for exact matches or phrases
+  for (const keyword of yesKeywords) {
+    if (cleanText === keyword || cleanText.includes(keyword)) {
+      return 'yes';
+    }
+  }
+  
+  for (const keyword of noKeywords) {
+    if (cleanText === keyword || cleanText.includes(keyword)) {
+      return 'no';
+    }
+  }
+  
+  return 'unclear';
+}
+
 // Parse tool call JSON from AI response
 function parseToolCall(text: string): { tool: string; args: Record<string, any> } | null {
   console.log('[parseToolCall] Input:', text.slice(0, 500).replace(/\n/g, '\\n'));
@@ -269,19 +293,12 @@ async function generateExecutionPlan(
 
   try {
     const planningPrompt = `
-PLANNING MODE: Before executing, create a detailed execution plan.
+VOICE-FRIENDLY PLANNING MODE: Create a simple execution plan for voice approval.
 
-Based on the user's request, create a comprehensive plan that outlines:
-1. What actions you would take
-2. What tools you would use
-3. The order of operations
-
-Your response must be in this EXACT JSON format:
+Based on the user's request, create a simple plan in this EXACT JSON format:
 {
   "plannedActions": [
-    "Step 1: Description of what you'll do",
-    "Step 2: Another action",
-    "Step 3: Final step"
+    "Simple 1-2 sentence summary ending with 'Execute?'"
   ],
   "toolCalls": [
     {
@@ -292,12 +309,12 @@ Your response must be in this EXACT JSON format:
   ]
 }
 
-IMPORTANT: 
+IMPORTANT RULES:
+- plannedActions should contain ONLY ONE item: a simple 1-2 sentence summary of what you'll do, ending with "Execute?"
+- Example: "I'll search your memory for GitHub information and check your recent commits. Execute?"
+- Do NOT list detailed steps - keep it conversational and brief for voice interaction
+- toolCalls should still be complete and accurate for actual execution
 - Your ENTIRE response must be valid JSON
-- plannedActions should be clear, human-readable steps
-- toolCalls should use actual tool names from the available tools
-- description in each toolCall should explain what that specific call will accomplish
-- Only include tools you would actually need to execute
 
 User's request: "${messages[messages.length - 1]?.content || ''}"
 
@@ -526,6 +543,7 @@ export async function POST(req: NextRequest) {
     provider,
     memoryContext,
     image,
+    pendingPlanId, // Check if user is responding to a pending plan
   } = body;
 
   // Use request-scoped variables — module-level mutation is unreliable in serverless
@@ -541,6 +559,83 @@ export async function POST(req: NextRequest) {
 
   if (!message) {
     return Response.json({ error: 'No message provided' }, { status: 400 });
+  }
+
+  // Handle approval responses for pending execution plans
+  if (pendingPlanId && message) {
+    console.log('[Chat API] Checking for approval response to plan:', pendingPlanId);
+    const intent = parseApprovalIntent(message);
+    console.log('[Chat API] Detected intent:', intent, 'for message:', message);
+    
+    if (intent === 'yes') {
+      // Approve the plan
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/chat/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: pendingPlanId, action: 'approve' }),
+        });
+        
+        if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+          // Stream the approval execution back
+          return response;
+        } else {
+          const errorData = await response.json();
+          return Response.json({ error: errorData.error || 'Failed to approve plan' }, { status: 500 });
+        }
+      } catch (error) {
+        console.error('[Chat API] Approval error:', error);
+        return Response.json({ error: 'Failed to approve plan' }, { status: 500 });
+      }
+    } else if (intent === 'no') {
+      // Reject the plan and continue with normal chat
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/chat/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: pendingPlanId, action: 'reject' }),
+        });
+        
+        // Continue with normal PLAN mode conversation asking what to do instead
+        const userMessage = isVoice ? VOICE_INSTRUCTIONS + 'Task cancelled. ' + message : 'Task cancelled. ' + message;
+        
+        // Build native message array for normal chat
+        const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.text || m.content || ''
+        }));
+        
+        const messages = [
+          { role: 'system', content: `${SYSTEM_PROMPT}\n\nYou are in PLAN mode. The user just cancelled a task execution. Ask what they'd like to do instead and help them explore options.` },
+          ...historyMessages,
+          { role: 'user', content: userMessage }
+        ];
+        
+        const generator = streamOllama(messages, MODELS.kimi.model);
+        return createStreamResponse(generator);
+        
+      } catch (error) {
+        console.error('[Chat API] Rejection error:', error);
+        // Continue anyway with normal chat
+      }
+    } else if (intent === 'unclear') {
+      // Ask for clarification
+      const clarificationMessage = isVoice 
+        ? "I didn't catch that. Please say 'yes' to execute or 'no' to cancel."
+        : "Please respond with 'yes' to execute the plan or 'no' to cancel.";
+        
+      return Response.json({
+        pendingPlan: {
+          id: pendingPlanId,
+          message: clarificationMessage,
+          plannedActions: ["Waiting for clear yes/no response..."],
+          status: 'pending',
+          createdAt: new Date(),
+          requiresApproval: true,
+          toolCallCount: 0,
+        }
+      });
+    }
   }
 
   // Build user message with context

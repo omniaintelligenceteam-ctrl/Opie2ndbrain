@@ -359,7 +359,7 @@ function QuickAction({ emoji, label, onClick }: { emoji: string; label: string; 
   );
 }
 
-// Execution Plan Approval Component
+// Execution Plan Approval Component - Voice-friendly version
 const ExecutionPlanApproval = memo(function ExecutionPlanApproval({
   plan,
   onApprove,
@@ -372,52 +372,41 @@ const ExecutionPlanApproval = memo(function ExecutionPlanApproval({
   return (
     <div style={styles.pendingPlanContainer}>
       <div style={styles.pendingPlanHeader}>
-        <span style={styles.pendingPlanIcon}>🎯</span>
-        <h3 style={styles.pendingPlanTitle}>Execution Plan Ready</h3>
-        <span style={styles.pendingPlanStatus}>Requires Approval</span>
+        <span style={styles.pendingPlanIcon}>✋</span>
+        <h3 style={styles.pendingPlanTitle}>{plan.plannedActions[0] || plan.message}</h3>
       </div>
       
       <div style={styles.pendingPlanContent}>
-        <div style={styles.pendingPlanMessage}>
-          <strong>Request:</strong> {plan.message}
-        </div>
-        
-        <div style={styles.pendingPlanActions}>
-          <h4 style={styles.pendingPlanSubtitle}>I will:</h4>
-          <ul style={styles.pendingPlanList}>
-            {plan.plannedActions.map((action, i) => (
-              <li key={i} style={styles.pendingPlanListItem}>
-                <span style={styles.pendingPlanStepNumber}>{i + 1}.</span>
-                <span>{action}</span>
-              </li>
-            ))}
-          </ul>
+        <div style={styles.pendingPlanPrompt}>
+          <span style={styles.pendingPlanWaitingText}>
+            ✋ Waiting for approval — say <strong>'yes'</strong> to execute or <strong>'no'</strong> to cancel
+          </span>
         </div>
 
-        <div style={styles.pendingPlanMeta}>
-          <span style={styles.pendingPlanToolCount}>
-            {plan.toolCallCount} tool{plan.toolCallCount !== 1 ? 's' : ''} to execute
-          </span>
-          <span style={styles.pendingPlanTime}>
-            Created {formatTime(plan.createdAt, true)}
-          </span>
-        </div>
+        {plan.toolCallCount > 0 && (
+          <div style={styles.pendingPlanMeta}>
+            <span style={styles.pendingPlanToolCount}>
+              {plan.toolCallCount} tool{plan.toolCallCount !== 1 ? 's' : ''} ready to execute
+            </span>
+          </div>
+        )}
       </div>
 
-      <div style={styles.pendingPlanButtons}>
+      {/* Fallback buttons for when voice isn't working */}
+      <div style={styles.pendingPlanFallbackButtons}>
         <button
           onClick={onReject}
-          style={styles.pendingPlanButtonReject}
+          style={styles.pendingPlanButtonRejectFallback}
+          title="Cancel execution"
         >
-          <span>❌</span>
-          <span>Cancel</span>
+          No
         </button>
         <button
           onClick={onApprove}
-          style={styles.pendingPlanButtonExecute}
+          style={styles.pendingPlanButtonExecuteFallback}
+          title="Execute plan"
         >
-          <span>🚀</span>
-          <span>Execute Plan</span>
+          Yes
         </button>
       </div>
     </div>
@@ -2717,7 +2706,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     animation: 'waveform 0.5s ease-in-out infinite',
   },
 
-  // Pending Execution Plan
+  // Pending Execution Plan - Voice-friendly
   pendingPlanContainer: {
     margin: '12px 16px',
     padding: 16,
@@ -2732,122 +2721,76 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: 10,
     marginBottom: 12,
+    textAlign: 'center' as const,
+    justifyContent: 'center',
   },
   pendingPlanIcon: {
-    fontSize: '20px',
+    fontSize: '24px',
     filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
   },
   pendingPlanTitle: {
-    flex: 1,
     fontSize: '1rem',
-    fontWeight: 700,
+    fontWeight: 600,
     color: '#fff',
     margin: 0,
-  },
-  pendingPlanStatus: {
-    padding: '4px 10px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#fb923c',
-    background: 'rgba(249, 115, 22, 0.2)',
-    border: '1px solid rgba(249, 115, 22, 0.4)',
-    borderRadius: 12,
+    textAlign: 'center' as const,
   },
   pendingPlanContent: {
-    marginBottom: 16,
-  },
-  pendingPlanMessage: {
-    padding: 10,
-    marginBottom: 12,
-    fontSize: '0.85rem',
-    color: 'rgba(255, 255, 255, 0.9)',
-    background: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 8,
-    borderLeft: '3px solid #fb923c',
-  },
-  pendingPlanActions: {
     marginBottom: 12,
   },
-  pendingPlanSubtitle: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: 'rgba(255, 255, 255, 0.8)',
-    margin: '0 0 8px 0',
-  },
-  pendingPlanList: {
-    margin: 0,
-    padding: 0,
-    listStyle: 'none',
-  },
-  pendingPlanListItem: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 8,
-    padding: '4px 0',
-    fontSize: '0.8rem',
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  pendingPlanStepNumber: {
-    minWidth: 20,
-    padding: '2px 6px',
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    color: '#fb923c',
-    background: 'rgba(249, 115, 22, 0.15)',
-    borderRadius: 4,
+  pendingPlanPrompt: {
+    padding: 16,
+    marginBottom: 12,
+    fontSize: '0.9rem',
+    color: 'rgba(255, 255, 255, 0.95)',
+    background: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
     textAlign: 'center' as const,
+    border: '1px solid rgba(249, 115, 22, 0.3)',
+  },
+  pendingPlanWaitingText: {
+    display: 'block',
+    lineHeight: 1.5,
   },
   pendingPlanMeta: {
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: '8px 0 0 0',
-    fontSize: '0.7rem',
-    color: 'rgba(255, 255, 255, 0.5)',
-    borderTop: '1px solid rgba(249, 115, 22, 0.2)',
+    padding: '8px 0',
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   pendingPlanToolCount: {
     fontWeight: 500,
   },
-  pendingPlanTime: {
-    fontStyle: 'italic',
-  },
-  pendingPlanButtons: {
+  pendingPlanFallbackButtons: {
     display: 'flex',
-    gap: 10,
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 8,
   },
-  pendingPlanButtonReject: {
-    flex: 1,
-    padding: '10px 16px',
+  pendingPlanButtonRejectFallback: {
+    padding: '8px 16px',
     border: '1px solid rgba(239, 68, 68, 0.4)',
-    borderRadius: 8,
+    borderRadius: 20,
     background: 'rgba(239, 68, 68, 0.15)',
     color: '#ef4444',
-    fontSize: '0.85rem',
-    fontWeight: 600,
+    fontSize: '0.8rem',
+    fontWeight: 500,
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
     transition: 'all 0.2s ease',
+    minWidth: 60,
   },
-  pendingPlanButtonExecute: {
-    flex: 2,
-    padding: '10px 16px',
+  pendingPlanButtonExecuteFallback: {
+    padding: '8px 16px',
     border: '1px solid rgba(249, 115, 22, 0.6)',
-    borderRadius: 8,
-    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.8) 0%, rgba(239, 68, 68, 0.6) 100%)',
-    color: '#fff',
-    fontSize: '0.85rem',
-    fontWeight: 700,
+    borderRadius: 20,
+    background: 'rgba(249, 115, 22, 0.3)',
+    color: '#fb923c',
+    fontSize: '0.8rem',
+    fontWeight: 500,
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 10px rgba(249, 115, 22, 0.4)',
-    animation: 'executeButtonPulse 2s ease-in-out infinite',
+    minWidth: 60,
   },
 };
