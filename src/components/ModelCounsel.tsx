@@ -15,7 +15,7 @@ interface ModelCounselState {
   responses: {
     opus?: ModelResponse;
     sonnet?: ModelResponse;
-    gemini?: ModelResponse;
+    kimi?: ModelResponse;
   };
   synthesis?: string;
   isLoading: boolean;
@@ -25,7 +25,7 @@ interface ModelCounselState {
 const MODELS = [
   { id: 'opus', name: 'Claude Opus 4.6', color: '#ff6b6b' },
   { id: 'sonnet', name: 'Claude Sonnet 4', color: '#4ecdc4' },
-  { id: 'gemini', name: 'Gemini 2.5 Pro', color: '#45b7d1' }
+  { id: 'kimi', name: 'Kimi K2.5', color: '#45b7d1' }
 ];
 
 export default function ModelCounsel() {
