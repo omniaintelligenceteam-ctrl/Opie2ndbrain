@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useCallback } from 'react';
-import { ChevronDown, ChevronUp, Clock, Hash, Sparkles, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, Hash, Sparkles, Loader2, Settings } from 'lucide-react';
 
 interface ModelResponse {
   model: string;
@@ -10,23 +10,36 @@ interface ModelResponse {
   error?: string;
 }
 
+interface ModelConfig {
+  id: string;
+  name: string;
+  color: string;
+  modelId: string;
+  provider: 'anthropic' | 'ollama';
+}
+
 interface ModelCounselState {
   question: string;
   responses: {
-    opus?: ModelResponse;
-    sonnet?: ModelResponse;
-    kimi?: ModelResponse;
+    [key: string]: ModelResponse | undefined;
   };
   synthesis?: string;
   isLoading: boolean;
   expandedPanels: Set<string>;
 }
 
-const MODELS = [
-  { id: 'opus', name: 'Claude Opus 4.6', color: '#ff6b6b' },
-  { id: 'sonnet', name: 'Claude Sonnet 4', color: '#4ecdc4' },
-  { id: 'kimi', name: 'Kimi K2.5', color: '#45b7d1' }
+// Available models to choose from
+const AVAILABLE_MODELS: ModelConfig[] = [
+  { id: 'opus46', name: 'Claude Opus 4.6', color: '#c084fc', modelId: 'claude-opus-4-6-20251022', provider: 'anthropic' },
+  { id: 'sonnet4', name: 'Claude Sonnet 4', color: '#4ecdc4', modelId: 'claude-sonnet-4-20250514', provider: 'anthropic' },
+  { id: 'sonnet5', name: 'Claude Sonnet 5', color: '#22d3ee', modelId: 'claude-sonnet-5-20260203', provider: 'anthropic' },
+  { id: 'opus45', name: 'Claude Opus 4.5', color: '#a78bfa', modelId: 'claude-opus-4-5', provider: 'anthropic' },
+  { id: 'haiku', name: 'Claude Haiku 3.5', color: '#fb923c', modelId: 'claude-3-5-haiku-latest', provider: 'anthropic' },
+  { id: 'kimi', name: 'Kimi K2.5', color: '#38bdf8', modelId: 'kimi-k2.5:cloud', provider: 'ollama' },
 ];
+
+// Default active models (indices into AVAILABLE_MODELS)
+const DEFAULT_MODELS = ['opus46', 'sonnet4', 'kimi'];
 
 export default function ModelCounsel() {
   // CSS-in-JS for responsive styles
@@ -57,12 +70,17 @@ export default function ModelCounsel() {
       document.head.removeChild(style);
     };
   }, []);
+
+  const [activeModelIds, setActiveModelIds] = useState<string[]>(DEFAULT_MODELS);
+  const [showSettings, setShowSettings] = useState(false);
+  const activeModels = AVAILABLE_MODELS.filter(m => activeModelIds.includes(m.id));
+
   const [state, setState] = useState<ModelCounselState>({
     question: '',
     responses: {},
     synthesis: undefined,
     isLoading: false,
-    expandedPanels: new Set(['opus', 'sonnet', 'gemini', 'synthesis'])
+    expandedPanels: new Set([...DEFAULT_MODELS, 'synthesis'])
   });
 
   const togglePanel = useCallback((panelId: string) => {
@@ -86,7 +104,15 @@ export default function ModelCounsel() {
       const response = await fetch('/api/model-counsel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: state.question })
+        body: JSON.stringify({ 
+          question: state.question,
+          models: activeModels.map(m => ({
+            id: m.id,
+            name: m.name,
+            modelId: m.modelId,
+            provider: m.provider
+          }))
+        })
       });
 
       if (!response.ok) {
@@ -310,18 +336,39 @@ export default function ModelCounsel() {
     >
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{
-          color: '#fff',
-          fontSize: '2rem',
-          fontWeight: 700,
-          margin: '0 0 8px 0',
-          letterSpacing: '-0.02em',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          🎯 Model Counsel
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1 style={{
+            color: '#fff',
+            fontSize: '2rem',
+            fontWeight: 700,
+            margin: '0 0 8px 0',
+            letterSpacing: '-0.02em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            🎯 Model Counsel
+          </h1>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            style={{
+              background: showSettings ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '10px',
+              padding: '8px 12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: showSettings ? '#a855f7' : '#888',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Settings size={16} />
+            Models
+          </button>
+        </div>
         <p style={{
           color: 'rgba(255,255,255,0.7)',
           fontSize: '1.1rem',
@@ -331,6 +378,63 @@ export default function ModelCounsel() {
           Get perspectives from multiple AI models and find the best synthesized answer
         </p>
       </div>
+
+      {/* Model Settings Panel */}
+      {showSettings && (
+        <div style={{
+          background: 'rgba(255,255,255,0.03)',
+          borderRadius: '16px',
+          border: '1px solid rgba(255,255,255,0.08)',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', margin: '0 0 16px 0' }}>
+            Select 2-4 models to compare. Click to toggle.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {AVAILABLE_MODELS.map(model => {
+              const isActive = activeModelIds.includes(model.id);
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => {
+                    if (isActive && activeModelIds.length <= 2) return; // Min 2 models
+                    setActiveModelIds(prev =>
+                      isActive ? prev.filter(id => id !== model.id) : [...prev, model.id].slice(0, 4)
+                    );
+                  }}
+                  style={{
+                    background: isActive ? `${model.color}20` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${isActive ? model.color : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: isActive ? '#fff' : '#666',
+                    fontSize: '0.9rem',
+                    fontWeight: isActive ? 600 : 400,
+                    transition: 'all 0.2s ease',
+                    opacity: !isActive && activeModelIds.length >= 4 ? 0.4 : 1
+                  }}
+                >
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: isActive ? model.color : '#444'
+                  }} />
+                  {model.name}
+                  <span style={{ color: '#555', fontSize: '0.75rem' }}>
+                    {model.provider}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Question Input */}
       <div style={{
@@ -415,11 +519,11 @@ export default function ModelCounsel() {
         }}
         className="model-responses-grid"
       >
-        {MODELS.map(model => (
+        {activeModels.map(model => (
           <ResponseCard
             key={model.id}
             model={model.name}
-            response={state.responses[model.id as keyof typeof state.responses]}
+            response={state.responses[model.id]}
             panelId={model.id}
             color={model.color}
           />

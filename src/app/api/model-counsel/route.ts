@@ -14,48 +14,38 @@ interface ModelResponse {
   error?: string;
 }
 
+interface RequestModel {
+  id: string;
+  name: string;
+  modelId: string;
+  provider: 'anthropic' | 'ollama';
+}
+
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Model configurations - easily configurable
-// TO CHANGE MODELS: Just update the model IDs below to any models you have access to
-// Supported providers: 'anthropic' or 'ollama'
-const MODELS = {
-  opus: { 
-    model: 'claude-opus-4-6-20251022', 
-    name: 'Claude Opus 4.6',
-    provider: 'anthropic'
-  },
-  sonnet: { 
-    model: 'claude-sonnet-4-20250514', 
-    name: 'Claude Sonnet 4',
-    provider: 'anthropic'
-  },
-  kimi: { 
-    model: 'kimi-k2.5:cloud', 
-    name: 'Kimi K2.5',
-    provider: 'ollama'
-  }
-};
+// Fallback models if none provided
+const DEFAULT_MODELS: RequestModel[] = [
+  { id: 'opus46', name: 'Claude Opus 4.6', modelId: 'claude-opus-4-6-20251022', provider: 'anthropic' },
+  { id: 'sonnet4', name: 'Claude Sonnet 4', modelId: 'claude-sonnet-4-20250514', provider: 'anthropic' },
+  { id: 'kimi', name: 'Kimi K2.5', modelId: 'kimi-k2.5:cloud', provider: 'ollama' },
+];
 
-async function queryModel(modelKey: string, question: string): Promise<ModelResponse> {
+async function queryModel(model: RequestModel, question: string): Promise<ModelResponse> {
   const startTime = Date.now();
   
   try {
-    const modelConfig = MODELS[modelKey as keyof typeof MODELS];
-    
-    if (modelConfig.provider === 'anthropic') {
-      // Use Anthropic API
+    if (model.provider === 'anthropic') {
       const response = await anthropic.messages.create({
-        model: modelConfig.model,
+        model: model.modelId,
         max_tokens: 1000,
-        temperature: modelKey === 'opus' ? 0.7 : modelKey === 'sonnet' ? 0.5 : 0.3,
+        temperature: 0.5,
         messages: [
           {
             role: 'user',
-            content: `You are ${modelConfig.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}`
+            content: `You are ${model.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}`
           }
         ]
       });
@@ -68,20 +58,23 @@ async function queryModel(modelKey: string, question: string): Promise<ModelResp
       }
 
       return {
-        model: modelConfig.name,
+        model: model.name,
         response: content.text,
         timing,
-        tokens: response.usage?.input_tokens + response.usage?.output_tokens || 0,
+        tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
       };
       
-    } else if (modelConfig.provider === 'ollama') {
-      // Use Ollama API (for Kimi)
-      const ollamaResponse = await fetch('http://localhost:11434/api/generate', {
+    } else if (model.provider === 'ollama') {
+      const ollamaUrl = process.env.OLLAMA_BASE_URL || 'https://ollama.com/v1';
+      const ollamaResponse = await fetch(`${ollamaUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OLLAMA_API_KEY || ''}`
+        },
         body: JSON.stringify({
-          model: modelConfig.model,
-          prompt: `You are ${modelConfig.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}`,
+          model: model.modelId,
+          messages: [{ role: 'user', content: `You are ${model.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}` }],
           stream: false
         })
       });
@@ -94,21 +87,21 @@ async function queryModel(modelKey: string, question: string): Promise<ModelResp
       const timing = Date.now() - startTime;
       
       return {
-        model: modelConfig.name,
-        response: data.response || '',
+        model: model.name,
+        response: data.choices?.[0]?.message?.content || '',
         timing,
-        tokens: data.prompt_eval_count + data.eval_count || 0,
+        tokens: (data.usage?.prompt_tokens || 0) + (data.usage?.completion_tokens || 0),
       };
     } else {
-      throw new Error(`Unsupported provider: ${modelConfig.provider}`);
+      throw new Error(`Unsupported provider: ${model.provider}`);
     }
 
   } catch (error) {
     const timing = Date.now() - startTime;
-    console.error(`Error querying ${modelKey}:`, error);
+    console.error(`Error querying ${model.name}:`, error);
     
     return {
-      model: MODELS[modelKey as keyof typeof MODELS].name,
+      model: model.name,
       response: '',
       timing,
       tokens: 0,
@@ -121,7 +114,7 @@ async function synthesizeResponses(question: string, responses: ModelResponse[])
   const validResponses = responses.filter(r => !r.error && r.response.trim());
   
   if (validResponses.length === 0) {
-    return "I apologize, but I wasn't able to get valid responses from any of the models to synthesize an answer.";
+    return "Unable to get valid responses from any models to synthesize an answer.";
   }
 
   if (validResponses.length === 1) {
@@ -133,21 +126,18 @@ async function synthesizeResponses(question: string, responses: ModelResponse[])
 
 Here are their responses:
 
-${validResponses.map((r, i) => `**${r.model}:**
-${r.response}
+${validResponses.map(r => `**${r.model}:**\n${r.response}\n`).join('\n')}
 
-`).join('')}
-
-Please synthesize these responses into a single, best answer that:
-1. Combines the strongest insights from each response
-2. Resolves any contradictions by explaining different perspectives
-3. Provides a comprehensive yet concise final answer
-4. Acknowledges when models agree vs. disagree
+Synthesize these into a single best answer that:
+1. Combines the strongest insights from each
+2. Resolves contradictions by noting different perspectives
+3. Is comprehensive yet concise
+4. Notes where models agree vs disagree
 
 Synthesis:`;
 
     const synthesis = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1500,
       temperature: 0.3,
       messages: [{ role: 'user', content: synthesisPrompt }]
@@ -162,15 +152,13 @@ Synthesis:`;
 
   } catch (error) {
     console.error('Error synthesizing responses:', error);
-    
-    // Fallback: return the first valid response with a note
-    return `Based on the available responses, here's the best answer I can provide:\n\n${validResponses[0].response}\n\n_Note: Unable to fully synthesize all model responses due to processing error._`;
+    return `Best available answer:\n\n${validResponses[0].response}\n\n_Note: Unable to fully synthesize all responses._`;
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { question } = await req.json();
+    const { question, models } = await req.json();
 
     if (!question || typeof question !== 'string' || question.trim().length === 0) {
       return NextResponse.json({
@@ -186,19 +174,21 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Query all models in parallel
-    const modelPromises = Object.keys(MODELS).map(modelKey => 
-      queryModel(modelKey, trimmedQuestion)
-    );
+    // Use provided models or defaults
+    const activeModels: RequestModel[] = (models && Array.isArray(models) && models.length >= 2)
+      ? models
+      : DEFAULT_MODELS;
 
-    const responses = await Promise.all(modelPromises);
+    // Query all models in parallel
+    const responses = await Promise.all(
+      activeModels.map(model => queryModel(model, trimmedQuestion))
+    );
     
-    // Build the response object with model keys
-    const responseMap = {
-      opus: responses.find(r => r.model === MODELS.opus.name),
-      sonnet: responses.find(r => r.model === MODELS.sonnet.name),
-      kimi: responses.find(r => r.model === MODELS.kimi.name)
-    };
+    // Build response map keyed by model id
+    const responseMap: Record<string, ModelResponse> = {};
+    activeModels.forEach((model, i) => {
+      responseMap[model.id] = responses[i];
+    });
 
     // Synthesize the responses
     const synthesis = await synthesizeResponses(trimmedQuestion, responses);
