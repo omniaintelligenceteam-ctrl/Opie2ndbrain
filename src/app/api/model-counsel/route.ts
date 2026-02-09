@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { gatewayChatClient, shouldUseGateway, type ChatMessage } from '@/lib/gateway-chat';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -37,7 +38,40 @@ async function queryModel(model: RequestModel, question: string): Promise<ModelR
   const startTime = Date.now();
   
   try {
+    const promptContent = `You are ${model.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}`;
+
+    // Try gateway routing first if available
+    if (shouldUseGateway()) {
+      console.log(`[Model Counsel] Using gateway for ${model.name}`);
+      try {
+        const gatewayMessages: ChatMessage[] = [
+          { role: 'user', content: promptContent }
+        ];
+
+        const response = await gatewayChatClient.createCompletion({
+          messages: gatewayMessages,
+          model: model.modelId,
+          max_tokens: 1000,
+          temperature: 0.5,
+        });
+
+        const timing = Date.now() - startTime;
+        
+        return {
+          model: model.name,
+          response: response.content,
+          timing,
+          tokens: 0, // Gateway doesn't return token count yet
+        };
+      } catch (gatewayError) {
+        console.error(`[Model Counsel] Gateway failed for ${model.name}, falling back:`, gatewayError);
+        // Continue to fallback below
+      }
+    }
+
+    // Fallback to direct API calls
     if (model.provider === 'anthropic') {
+      console.log(`[Model Counsel] Using direct Anthropic API for ${model.name}`);
       const response = await anthropic.messages.create({
         model: model.modelId,
         max_tokens: 1000,
@@ -45,7 +79,7 @@ async function queryModel(model: RequestModel, question: string): Promise<ModelR
         messages: [
           {
             role: 'user',
-            content: `You are ${model.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}`
+            content: promptContent
           }
         ]
       });
@@ -65,6 +99,7 @@ async function queryModel(model: RequestModel, question: string): Promise<ModelR
       };
       
     } else if (model.provider === 'ollama') {
+      console.log(`[Model Counsel] Using direct Ollama API for ${model.name}`);
       const ollamaUrl = process.env.OLLAMA_BASE_URL || 'https://ollama.com/v1';
       const ollamaResponse = await fetch(`${ollamaUrl}/chat/completions`, {
         method: 'POST',
@@ -74,7 +109,7 @@ async function queryModel(model: RequestModel, question: string): Promise<ModelR
         },
         body: JSON.stringify({
           model: model.modelId,
-          messages: [{ role: 'user', content: `You are ${model.name}. Please answer this question with your unique perspective and capabilities:\n\n${question}` }],
+          messages: [{ role: 'user', content: promptContent }],
           stream: false
         })
       });
@@ -136,6 +171,30 @@ Synthesize these into a single best answer that:
 
 Synthesis:`;
 
+    // Try gateway first if available
+    if (shouldUseGateway()) {
+      console.log('[Model Counsel] Using gateway for synthesis');
+      try {
+        const gatewayMessages: ChatMessage[] = [
+          { role: 'user', content: synthesisPrompt }
+        ];
+
+        const response = await gatewayChatClient.createCompletion({
+          messages: gatewayMessages,
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          temperature: 0.3,
+        });
+
+        return response.content;
+      } catch (gatewayError) {
+        console.error('[Model Counsel] Gateway synthesis failed, falling back:', gatewayError);
+        // Continue to fallback below
+      }
+    }
+
+    // Fallback to direct Anthropic API
+    console.log('[Model Counsel] Using direct Anthropic API for synthesis');
     const synthesis = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1500,

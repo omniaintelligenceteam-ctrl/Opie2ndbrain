@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ExecutionPlanStore, type ToolCall } from '@/lib/execution-plans';
+import { gatewayChatClient, shouldUseGateway, type ChatMessage } from '@/lib/gateway-chat';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -127,8 +128,39 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
   }
 }
 
-// Call Ollama with streaming
+// Call Ollama with streaming (with gateway routing)
 async function* streamOllama(messages: Array<{role: string, content: string}>, model: string) {
+  // Try gateway routing first if available
+  if (shouldUseGateway()) {
+    console.log('[streamOllama] Using gateway routing');
+    try {
+      const gatewayMessages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.map(msg => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content,
+        }))
+      ];
+
+      const stream = await gatewayChatClient.createStreamingCompletion({
+        messages: gatewayMessages,
+        model: model,
+        stream: true,
+        max_tokens: 1024,
+      });
+
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+      return;
+    } catch (error) {
+      console.error('[streamOllama] Gateway failed, falling back to direct API:', error);
+      // Continue to fallback below
+    }
+  }
+
+  // Fallback to direct Ollama API
+  console.log('[streamOllama] Using direct Ollama API');
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
     yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
@@ -333,7 +365,7 @@ async function generateExecutionPlan(
   return generateExecutionPlanKimi(messages, sessionId);
 }
 
-// Claude Sonnet planning (reliable JSON)
+// Claude Sonnet planning (reliable JSON) - with gateway support
 async function generateExecutionPlanAnthropic(
   messages: Array<{ role: string; content: string }>,
   sessionId: string
@@ -346,9 +378,6 @@ async function generateExecutionPlanAnthropic(
   };
   error?: string;
 }> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { success: false, error: 'ANTHROPIC_API_KEY not configured' };
-  }
 
   try {
     const planningPrompt = `Create an execution plan in JSON format:
@@ -362,26 +391,65 @@ User request: "${messages[messages.length - 1]?.content || ''}"
 
 Available tools: ${Object.keys(TOOLS).join(', ')}`;
 
-    const apiMessages = messages.slice(1, -1).map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-    }));
+    let planText = '';
 
-    apiMessages.push({
-      role: 'user',
-      content: planningPrompt,
-    });
+    // Try gateway first if available
+    if (shouldUseGateway()) {
+      console.log('[Planning] Using gateway for Claude planning');
+      try {
+        const gatewayMessages: ChatMessage[] = [
+          { role: 'system', content: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.' },
+          ...messages.slice(1, -1).map(msg => ({
+            role: msg.role as 'system' | 'user' | 'assistant',
+            content: msg.content,
+          })),
+          { role: 'user', content: planningPrompt }
+        ];
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1024,
-      system: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.',
-      messages: apiMessages,
-      temperature: 0.1,
-    });
+        const response = await gatewayChatClient.createCompletion({
+          messages: gatewayMessages,
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          temperature: 0.1,
+        });
 
-    const planText = response.content[0].type === 'text' ? response.content[0].text : '';
-    console.log('[Planning] Claude response:', planText.slice(0, 500));
+        planText = response.content;
+        console.log('[Planning] Gateway Claude response:', planText.slice(0, 500));
+      } catch (gatewayError) {
+        console.error('[Planning] Gateway failed, falling back to direct Claude API:', gatewayError);
+        // Continue to fallback below
+      }
+    }
+
+    // Fallback to direct Anthropic API if gateway failed or not available
+    if (!planText && process.env.ANTHROPIC_API_KEY) {
+      console.log('[Planning] Using direct Anthropic API');
+      const apiMessages = messages.slice(1, -1).map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      }));
+
+      apiMessages.push({
+        role: 'user',
+        content: planningPrompt,
+      });
+
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        system: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.',
+        messages: apiMessages,
+        temperature: 0.1,
+      });
+
+      planText = response.content[0].type === 'text' ? response.content[0].text : '';
+      console.log('[Planning] Direct Claude response:', planText.slice(0, 500));
+    }
+
+    // If no response from either method, return error
+    if (!planText) {
+      return { success: false, error: 'No response from Claude (gateway or direct API)' };
+    }
 
     // Parse JSON more robustly
     const planJson = parseExecutionPlanJSON(planText);
@@ -410,7 +478,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}`;
   }
 }
 
-// Kimi planning with improved JSON parsing
+// Kimi planning with improved JSON parsing - with gateway support
 async function generateExecutionPlanKimi(
   messages: Array<{ role: string; content: string }>,
   sessionId: string
@@ -423,10 +491,6 @@ async function generateExecutionPlanKimi(
   };
   error?: string;
 }> {
-  const ollamaKey = process.env.OLLAMA_API_KEY;
-  if (!ollamaKey) {
-    return { success: false, error: 'OLLAMA_API_KEY not configured' };
-  }
 
   try {
     // Simplified prompt for better JSON consistency
@@ -441,34 +505,76 @@ User request: "${messages[messages.length - 1]?.content || ''}"
 
 Available tools: ${Object.keys(TOOLS).join(', ')}`;
 
-    const planningMessages = [
-      ...messages.slice(0, -1),
-      { role: 'user', content: planningPrompt }
-    ];
+    let planText = '';
 
-    const response = await fetch('https://ollama.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ollamaKey}`,
-      },
-      body: JSON.stringify({
-        model: 'kimi-k2.5:cloud',
-        stream: false,
-        messages: planningMessages,
-        max_tokens: 1024,
-        temperature: 0.1, // Very low temperature for consistent JSON
-      }),
-    });
+    // Try gateway first if available
+    if (shouldUseGateway()) {
+      console.log('[Planning] Using gateway for Kimi planning');
+      try {
+        const gatewayMessages: ChatMessage[] = [
+          ...messages.slice(0, -1).map(msg => ({
+            role: msg.role as 'system' | 'user' | 'assistant',
+            content: msg.content,
+          })),
+          { role: 'user', content: planningPrompt }
+        ];
 
-    if (!response.ok) {
-      return { success: false, error: `Planning API error: ${response.status}` };
+        const response = await gatewayChatClient.createCompletion({
+          messages: gatewayMessages,
+          model: 'kimi-k2.5:cloud',
+          max_tokens: 1024,
+          temperature: 0.1,
+        });
+
+        planText = response.content;
+        console.log('[Planning] Gateway Kimi response:', planText.slice(0, 500));
+      } catch (gatewayError) {
+        console.error('[Planning] Gateway failed, falling back to direct Ollama API:', gatewayError);
+        // Continue to fallback below
+      }
     }
 
-    const data = await response.json();
-    const planText = data.choices?.[0]?.message?.content || '';
-    
-    console.log('[Planning] Kimi response:', planText.slice(0, 500));
+    // Fallback to direct Ollama API if gateway failed or not available
+    if (!planText) {
+      console.log('[Planning] Using direct Ollama API');
+      const ollamaKey = process.env.OLLAMA_API_KEY;
+      if (!ollamaKey) {
+        return { success: false, error: 'OLLAMA_API_KEY not configured and gateway not available' };
+      }
+
+      const planningMessages = [
+        ...messages.slice(0, -1),
+        { role: 'user', content: planningPrompt }
+      ];
+
+      const response = await fetch('https://ollama.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ollamaKey}`,
+        },
+        body: JSON.stringify({
+          model: 'kimi-k2.5:cloud',
+          stream: false,
+          messages: planningMessages,
+          max_tokens: 1024,
+          temperature: 0.1, // Very low temperature for consistent JSON
+        }),
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Planning API error: ${response.status}` };
+      }
+
+      const data = await response.json();
+      planText = data.choices?.[0]?.message?.content || '';
+      console.log('[Planning] Direct Kimi response:', planText.slice(0, 500));
+    }
+
+    // If no response from either method, return error
+    if (!planText) {
+      return { success: false, error: 'No response from Kimi (gateway or direct API)' };
+    }
 
     // Parse JSON more robustly
     const planJson = parseExecutionPlanJSON(planText);
@@ -614,6 +720,10 @@ async function* streamOllamaWithTools(
   model: string,
   maxToolIterations = 25
 ): AsyncGenerator<string> {
+  // For tool execution, we need non-streaming responses to parse tool calls
+  // So we'll check gateway availability but use the fallback for now
+  // TODO: Add gateway support for tool execution when OpenClaw supports it better
+  
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
     yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
@@ -702,8 +812,39 @@ async function* streamOllamaWithTools(
   yield `data: [DONE]\n\n`;
 }
 
-// Call Anthropic with streaming
+// Call Anthropic with streaming (with gateway routing)
 async function* streamAnthropic(messages: Array<{role: string, content: string}>, model: string) {
+  // Try gateway routing first if available
+  if (shouldUseGateway()) {
+    console.log('[streamAnthropic] Using gateway routing');
+    try {
+      const gatewayMessages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(1).map(msg => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content,
+        }))
+      ];
+
+      const stream = await gatewayChatClient.createStreamingCompletion({
+        messages: gatewayMessages,
+        model: model,
+        stream: true,
+        max_tokens: 1024,
+      });
+
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+      return;
+    } catch (error) {
+      console.error('[streamAnthropic] Gateway failed, falling back to direct API:', error);
+      // Continue to fallback below
+    }
+  }
+
+  // Fallback to direct Anthropic API
+  console.log('[streamAnthropic] Using direct Anthropic API');
   if (!process.env.ANTHROPIC_API_KEY) {
     yield `data: ${JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' })}\n\n`;
     return;
