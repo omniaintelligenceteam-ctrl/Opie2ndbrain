@@ -42,6 +42,7 @@ const OpieStatusWidget = lazy(() => import('./OpieStatusWidget'));
 const SidebarWidgets = lazy(() => import('./SidebarWidgets'));
 const AgentLeaderboard = lazy(() => import('./AgentLeaderboard'));
 const OrganizationChart = lazy(() => import('./OrganizationChart'));
+const ModelCounsel = lazy(() => import('./ModelCounsel'));
 const ContextWindowVisualizer = lazy(() => import('./ContextWindowVisualizer'));
 const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
 const ParticleBackground = lazy(() => import('./ParticleBackground'));
@@ -165,6 +166,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'tasks', label: 'Tasks', icon: '✅', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
   { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { id: 'model-counsel', label: 'Model Counsel', icon: '🎯' },
   { id: 'context', label: 'Context', icon: '🧠' },
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '📁' },
@@ -2648,6 +2650,29 @@ export default function OpieKanban(): React.ReactElement {
             <div style={{ maxWidth: 800 }}>
               <AgentLeaderboard />
             </div>
+          </div>
+        )}
+
+        {/* Model Counsel View */}
+        {activeView === 'model-counsel' && (
+          <div style={{
+            ...styles.viewContainer,
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <Suspense fallback={
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                height: '400px',
+                color: '#666'
+              }}>
+                Loading Model Counsel...
+              </div>
+            }>
+              <ModelCounsel />
+            </Suspense>
           </div>
         )}
 
