@@ -1,6 +1,6 @@
 // Gateway configuration - centralized for all API routes
-// Now uses OpenClaw's native HTTP API (port 18789)
-export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'http://localhost:18789';
+// Uses Tailscale Serve HTTPS for production, localhost for development
+export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net:9443';
 export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'opie-token-123';
 
 // Check if we're likely in a production environment without local gateway
