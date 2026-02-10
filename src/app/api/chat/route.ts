@@ -5,6 +5,7 @@ import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ExecutionPlanStore, type ToolCall } from '@/lib/execution-plans';
 import { gatewayChatClient, shouldUseGateway, type ChatMessage } from '@/lib/gateway-chat';
+import { saveToSharedContext, getSharedContextPrompt } from '@/lib/shared-context';
 
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
@@ -1054,6 +1055,30 @@ export async function POST(req: NextRequest) {
   if (shouldUseGateway()) {
     console.log('[Chat] Unified mode: Using OpenClaw gateway');
     
+    // Load shared context from Supabase (bridges Dashboard ↔ Telegram)
+    let sharedContextPrompt = '';
+    try {
+      sharedContextPrompt = await getSharedContextPrompt(10);
+      if (sharedContextPrompt) {
+        console.log('[Chat] Loaded shared context from Telegram session');
+      }
+    } catch (e) {
+      console.log('[Chat] Shared context load skipped:', e instanceof Error ? e.message : 'unknown');
+    }
+
+    // Save user message to shared context
+    try {
+      await saveToSharedContext({
+        role: 'user',
+        content: typeof userMessage === 'string' ? userMessage : JSON.stringify(userMessage),
+        source: 'dashboard',
+        session_id: 'wes-main-session',
+      });
+      console.log('[Chat] Saved user message to shared context');
+    } catch (e) {
+      console.log('[Chat] Shared context save skipped:', e instanceof Error ? e.message : 'unknown');
+    }
+    
     const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
       role: m.role as 'user' | 'assistant',
       content: m.text || m.content || ''
@@ -1067,7 +1092,9 @@ export async function POST(req: NextRequest) {
         ]
       : userMessage;
 
+    // Add shared context as a system message if available
     const gatewayMessages: ChatMessage[] = [
+      ...(sharedContextPrompt ? [{ role: 'system' as const, content: sharedContextPrompt }] : []),
       ...historyMessages.map((msg: any) => ({
         role: msg.role as 'system' | 'user' | 'assistant',
         content: msg.content,
