@@ -663,6 +663,8 @@ export function useChat(): UseChatReturn {
                   } else if (parsed.choices?.[0]?.delta?.content) {
                     fullText += parsed.choices[0].delta.content;
                   }
+                  // Filter out internal markers like "<final>" that may leak through
+                  fullText = fullText.replace(/<(final|start|end)>/g, '');
                   setMessages((prev) =>
                     prev.map((m) => (m.id === assistantMsgId ? { ...m, text: fullText } : m))
                   );
