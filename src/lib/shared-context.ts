@@ -22,6 +22,11 @@ const SHARED_SESSION_ID = 'wes-main-session';
 export async function saveToSharedContext(
   message: Omit<SharedMessage, 'id' | 'created_at'>
 ): Promise<void> {
+  if (!supabaseAdmin) {
+    console.log('[SharedContext] Supabase not configured, skipping save');
+    return;
+  }
+  
   try {
     const { error } = await supabaseAdmin
       .from('shared_conversations')
@@ -48,6 +53,11 @@ export async function loadSharedContext(
   limit: number = 20,
   sessionId: string = SHARED_SESSION_ID
 ): Promise<SharedMessage[]> {
+  if (!supabaseAdmin) {
+    console.log('[SharedContext] Supabase not configured, skipping load');
+    return [];
+  }
+  
   try {
     const { data, error } = await supabaseAdmin
       .from('shared_conversations')
@@ -95,6 +105,11 @@ export async function getSharedContextPrompt(
 export async function clearSharedContext(
   sessionId: string = SHARED_SESSION_ID
 ): Promise<void> {
+  if (!supabaseAdmin) {
+    console.log('[SharedContext] Supabase not configured, skipping clear');
+    return;
+  }
+  
   try {
     const { error } = await supabaseAdmin
       .from('shared_conversations')
