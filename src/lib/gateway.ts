@@ -1,11 +1,11 @@
 // Gateway configuration - centralized for all API routes
-// Uses Tailscale Serve HTTPS for production, localhost for development
-export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net:9443';
-export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'opie-token-123';
+// Uses proxy endpoint to bypass CORS issues with OpenClaw direct API
+export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || '/api/openclaw-proxy';
+export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'proxy-internal';
 
 // Check if we're likely in a production environment without local gateway
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
-export const GATEWAY_AVAILABLE = !IS_VERCEL || (GATEWAY_URL && !GATEWAY_URL.includes('localhost'));
+export const GATEWAY_AVAILABLE = true; // Always available through proxy
 
 export interface GatewayFetchOptions extends RequestInit {
   timeout?: number;

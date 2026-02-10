@@ -57,7 +57,7 @@ export class GatewayChatClient {
       throw new Error('Gateway not configured');
     }
 
-    const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
+    const response = await fetch(`${this.gatewayUrl}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -85,7 +85,7 @@ export class GatewayChatClient {
       throw new Error('Gateway not configured');
     }
 
-    const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
+    const response = await fetch(`${this.gatewayUrl}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
