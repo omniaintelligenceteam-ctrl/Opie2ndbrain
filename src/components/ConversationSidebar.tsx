@@ -40,6 +40,8 @@ const ConversationItem = memo(function ConversationItem({
   conversation,
   isActive,
   isPinned,
+  isChild,
+  parentTitle,
   onSelect,
   onDelete,
   onPin,
@@ -47,6 +49,8 @@ const ConversationItem = memo(function ConversationItem({
   conversation: Conversation;
   isActive: boolean;
   isPinned: boolean;
+  isChild: boolean;
+  parentTitle?: string;
   onSelect: () => void;
   onDelete: () => void;
   onPin?: () => void;
@@ -60,10 +64,14 @@ const ConversationItem = memo(function ConversationItem({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         ...styles.conversationItem,
+        paddingLeft: isChild ? 32 : 16,
         background: isActive ? 'rgba(102, 126, 234, 0.2)' : isPinned ? 'rgba(234, 179, 102, 0.1)' : isHovered ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
         borderLeft: isActive ? '3px solid #667eea' : isPinned ? '3px solid #eab366' : '3px solid transparent',
       }}
     >
+      {isChild && (
+        <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginRight: 4, flexShrink: 0, marginTop: 2 }}>↳</span>
+      )}
       <div style={styles.conversationContent}>
         <div style={styles.conversationHeader}>
           <span style={styles.conversationTitle}>
@@ -77,8 +85,8 @@ const ConversationItem = memo(function ConversationItem({
         <div style={styles.conversationPreview}>
           {getPreview(conversation)}
         </div>
-        {conversation.parentId && (
-          <div style={styles.forkBadge}>Forked</div>
+        {conversation.parentId && parentTitle && (
+          <div style={styles.forkBadge}>Branched from {parentTitle}</div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -150,19 +158,53 @@ export default function ConversationSidebar({
               No conversations yet. Start chatting!
             </div>
           ) : (
-            conversations
-              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-              .map(conv => (
-                <ConversationItem
-                  key={conv.id}
-                  conversation={conv}
-                  isActive={conv.id === activeConversationId}
-                  isPinned={pinnedConversationIds.includes(conv.id)}
-                  onSelect={() => onSelectConversation(conv.id)}
-                  onDelete={() => onDeleteConversation(conv.id)}
-                  onPin={onPinConversation && pinnedConversationIds.length < 5 ? () => onPinConversation(conv.id) : undefined}
-                />
-              ))
+            (() => {
+              // Build parent/child tree: show parents, then their children indented beneath
+              const sorted = [...conversations].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+              const convMap = new Map(sorted.map(c => [c.id, c]));
+              const childIds = new Set(sorted.filter(c => c.parentId).map(c => c.id));
+              const elements: React.ReactNode[] = [];
+
+              for (const conv of sorted) {
+                // Skip children here - they'll be rendered under their parent
+                if (conv.parentId && convMap.has(conv.parentId)) continue;
+
+                const parent = conv.parentId ? convMap.get(conv.parentId) : undefined;
+                elements.push(
+                  <ConversationItem
+                    key={conv.id}
+                    conversation={conv}
+                    isActive={conv.id === activeConversationId}
+                    isPinned={pinnedConversationIds.includes(conv.id)}
+                    isChild={!!conv.parentId}
+                    parentTitle={parent?.title}
+                    onSelect={() => onSelectConversation(conv.id)}
+                    onDelete={() => onDeleteConversation(conv.id)}
+                    onPin={onPinConversation && pinnedConversationIds.length < 5 ? () => onPinConversation(conv.id) : undefined}
+                  />
+                );
+
+                // Render children of this conversation
+                const children = sorted.filter(c => c.parentId === conv.id);
+                for (const child of children) {
+                  elements.push(
+                    <ConversationItem
+                      key={child.id}
+                      conversation={child}
+                      isActive={child.id === activeConversationId}
+                      isPinned={pinnedConversationIds.includes(child.id)}
+                      isChild={true}
+                      parentTitle={conv.title}
+                      onSelect={() => onSelectConversation(child.id)}
+                      onDelete={() => onDeleteConversation(child.id)}
+                      onPin={onPinConversation && pinnedConversationIds.length < 5 ? () => onPinConversation(child.id) : undefined}
+                    />
+                  );
+                }
+              }
+
+              return elements;
+            })()
           )}
         </div>
       </div>

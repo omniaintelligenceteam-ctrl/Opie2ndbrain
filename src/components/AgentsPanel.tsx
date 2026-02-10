@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 
 interface Agent {
   id: string;
@@ -58,6 +58,8 @@ const ALL_AGENTS: Agent[] = [
   { id: 'research-template', name: 'Research Template', emoji: '🔍', description: 'Template for research agents', level: 'specialist' },
 ];
 
+type FilterLevel = 'all' | 'core' | 'advanced' | 'specialist' | 'active';
+
 function getLevelColor(level: string): string {
   switch (level) {
     case 'core': return '#22c55e';
@@ -76,21 +78,134 @@ function getLevelLabel(level: string): string {
   }
 }
 
+// Recently used persistence
+const RECENT_KEY = 'opie-recent-agents';
+const MAX_RECENT = 5;
+
+function getRecentAgents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function addRecentAgent(agentId: string) {
+  try {
+    const recent = getRecentAgents().filter(id => id !== agentId);
+    recent.unshift(agentId);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+  } catch {}
+}
+
 interface AgentsPanelProps {
   onDeploy?: (agentId: string, task: string) => void;
   activeAgents?: string[];
 }
 
-export default function AgentsPanel({ onDeploy }: AgentsPanelProps) {
+export default function AgentsPanel({ onDeploy, activeAgents = [] }: AgentsPanelProps) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [deployTask, setDeployTask] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<FilterLevel>('all');
+  const [recentIds, setRecentIds] = useState<string[]>([]);
 
-  const handleDeploy = () => {
+  useEffect(() => {
+    setRecentIds(getRecentAgents());
+  }, []);
+
+  const activeSet = useMemo(() => new Set(activeAgents.map(a => a.toLowerCase())), [activeAgents]);
+
+  const filteredAgents = useMemo(() => {
+    let agents = ALL_AGENTS;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      agents = agents.filter(a =>
+        a.name.toLowerCase().includes(q) ||
+        a.description.toLowerCase().includes(q) ||
+        a.id.toLowerCase().includes(q)
+      );
+    }
+
+    // Level filter
+    if (filter === 'active') {
+      agents = agents.filter(a => activeSet.has(a.id));
+    } else if (filter !== 'all') {
+      agents = agents.filter(a => a.level === filter);
+    }
+
+    return agents;
+  }, [searchQuery, filter, activeSet]);
+
+  const recentAgents = useMemo(() => {
+    if (searchQuery.trim() || filter !== 'all') return [];
+    return recentIds
+      .map(id => ALL_AGENTS.find(a => a.id === id))
+      .filter((a): a is Agent => !!a);
+  }, [recentIds, searchQuery, filter]);
+
+  const handleSelect = useCallback((agent: Agent) => {
+    if (selectedAgent?.id === agent.id) {
+      setSelectedAgent(null);
+    } else {
+      setSelectedAgent(agent);
+      addRecentAgent(agent.id);
+      setRecentIds(getRecentAgents());
+    }
+  }, [selectedAgent]);
+
+  const handleDeploy = useCallback(() => {
     if (selectedAgent && deployTask.trim() && onDeploy) {
       onDeploy(selectedAgent.id, deployTask);
       setDeployTask('');
       setSelectedAgent(null);
     }
+  }, [selectedAgent, deployTask, onDeploy]);
+
+  const FILTERS: { id: FilterLevel; label: string; count?: number }[] = [
+    { id: 'all', label: 'All', count: ALL_AGENTS.length },
+    { id: 'core', label: 'Core', count: ALL_AGENTS.filter(a => a.level === 'core').length },
+    { id: 'advanced', label: 'Advanced', count: ALL_AGENTS.filter(a => a.level === 'advanced').length },
+    { id: 'specialist', label: 'Specialist', count: ALL_AGENTS.filter(a => a.level === 'specialist').length },
+    ...(activeAgents.length > 0 ? [{ id: 'active' as FilterLevel, label: 'Active', count: activeAgents.length }] : []),
+  ];
+
+  const renderAgentCard = (agent: Agent, isRecent = false) => {
+    const isSelected = selectedAgent?.id === agent.id;
+    const isActive = activeSet.has(agent.id);
+
+    return (
+      <div
+        key={`${isRecent ? 'recent-' : ''}${agent.id}`}
+        onClick={() => handleSelect(agent)}
+        style={{
+          ...styles.agentCard,
+          ...(isSelected ? styles.agentCardSelected : {}),
+        }}
+      >
+        <div style={styles.agentCardHeader}>
+          <div style={{ position: 'relative' }}>
+            <span style={styles.agentEmoji}>{agent.emoji}</span>
+            {isActive && <span style={styles.activeIndicator} />}
+          </div>
+          <div style={styles.agentInfo}>
+            <div style={styles.agentName}>{agent.name}</div>
+            <div style={styles.agentDesc}>{agent.description}</div>
+          </div>
+          <span style={{
+            ...styles.levelBadge,
+            background: `${getLevelColor(agent.level)}20`,
+            color: getLevelColor(agent.level),
+            borderColor: `${getLevelColor(agent.level)}40`,
+          }}>
+            {getLevelLabel(agent.level)}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -99,36 +214,66 @@ export default function AgentsPanel({ onDeploy }: AgentsPanelProps) {
       <div style={styles.header}>
         <span style={styles.headerIcon}>🤖</span>
         <h2 style={styles.title}>Agents</h2>
+        <span style={styles.agentCount}>{ALL_AGENTS.length}</span>
       </div>
+
+      {/* Search */}
+      <div style={styles.searchWrapper}>
+        <span style={styles.searchIcon}>🔍</span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search agents by name or skill..."
+          style={styles.searchInput}
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery('')} style={styles.clearBtn}>
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Filter pills */}
+      <div style={styles.filterRow}>
+        {FILTERS.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            style={{
+              ...styles.filterPill,
+              ...(filter === f.id ? styles.filterPillActive : {}),
+            }}
+          >
+            {f.label}
+            {f.count !== undefined && (
+              <span style={styles.filterCount}>{f.count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Recently Used */}
+      {recentAgents.length > 0 && (
+        <div style={styles.recentSection}>
+          <div style={styles.sectionLabel}>Recently Used</div>
+          {recentAgents.map(agent => renderAgentCard(agent, true))}
+          <div style={styles.sectionDivider} />
+        </div>
+      )}
 
       {/* Agents List */}
       <div style={styles.agentsList}>
-        {ALL_AGENTS.map(agent => (
-          <div
-            key={agent.id}
-            onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-            style={{
-              ...styles.agentCard,
-              ...(selectedAgent?.id === agent.id ? styles.agentCardSelected : {}),
-            }}
-          >
-            <div style={styles.agentCardHeader}>
-              <span style={styles.agentEmoji}>{agent.emoji}</span>
-              <div style={styles.agentInfo}>
-                <div style={styles.agentName}>{agent.name}</div>
-                <div style={styles.agentDesc}>{agent.description}</div>
-              </div>
-              <span style={{
-                ...styles.levelBadge,
-                background: `${getLevelColor(agent.level)}20`,
-                color: getLevelColor(agent.level),
-                borderColor: `${getLevelColor(agent.level)}40`,
-              }}>
-                {getLevelLabel(agent.level)}
-              </span>
-            </div>
+        {filteredAgents.length === 0 ? (
+          <div style={styles.emptyState}>
+            <span style={{ fontSize: 32, opacity: 0.5 }}>🔎</span>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+              {searchQuery ? `No agents matching "${searchQuery}"` : 'No agents in this category'}
+            </span>
           </div>
-        ))}
+        ) : (
+          filteredAgents.map(agent => renderAgentCard(agent))
+        )}
       </div>
 
       {/* Deploy Section */}
@@ -179,13 +324,93 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     margin: 0,
+    flex: 1,
+  },
+  agentCount: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: '0.8rem',
+    fontWeight: 500,
+  },
+  searchWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  },
+  searchIcon: {
+    fontSize: '14px',
+    opacity: 0.5,
+  },
+  searchInput: {
+    flex: 1,
+    background: 'transparent',
+    border: 'none',
+    outline: 'none',
+    color: '#fff',
+    fontSize: '0.875rem',
+  },
+  clearBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(255,255,255,0.4)',
+    cursor: 'pointer',
+    fontSize: '12px',
+    padding: '4px',
+  },
+  filterRow: {
+    display: 'flex',
+    gap: '6px',
+    padding: '10px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+    overflowX: 'auto',
+  },
+  filterPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    padding: '6px 12px',
+    borderRadius: '20px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
+  },
+  filterPillActive: {
+    background: 'rgba(102,126,234,0.2)',
+    borderColor: 'rgba(102,126,234,0.4)',
+    color: '#fff',
+  },
+  filterCount: {
+    opacity: 0.6,
+    fontSize: '0.7rem',
+  },
+  recentSection: {
+    padding: '0',
+  },
+  sectionLabel: {
+    padding: '10px 20px 4px',
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  sectionDivider: {
+    height: 1,
+    background: 'rgba(255,255,255,0.06)',
+    margin: '4px 20px',
   },
   agentsList: {
-    maxHeight: '500px',
+    maxHeight: '420px',
     overflowY: 'auto',
   },
   agentCard: {
-    padding: '14px 20px',
+    padding: '12px 20px',
     cursor: 'pointer',
     borderBottom: '1px solid rgba(255,255,255,0.04)',
     transition: 'background 0.15s',
@@ -201,8 +426,20 @@ const styles: { [key: string]: React.CSSProperties } = {
   agentEmoji: {
     fontSize: '24px',
   },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: '50%',
+    background: '#22c55e',
+    border: '2px solid rgba(13, 13, 21, 0.95)',
+    boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)',
+  },
   agentInfo: {
     flex: 1,
+    minWidth: 0,
   },
   agentName: {
     color: '#fff',
@@ -213,6 +450,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'rgba(255,255,255,0.5)',
     fontSize: '0.75rem',
     marginTop: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   levelBadge: {
     fontSize: '0.65rem',
@@ -222,6 +462,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '1px solid',
     textTransform: 'uppercase',
     letterSpacing: '0.03em',
+    flexShrink: 0,
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    padding: '40px 20px',
   },
   deploySection: {
     padding: '16px 20px',

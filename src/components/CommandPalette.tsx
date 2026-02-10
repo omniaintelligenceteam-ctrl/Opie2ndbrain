@@ -27,16 +27,25 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
   const listRef = useRef<HTMLDivElement>(null);
 
   const commands: Command[] = [
-    // Navigation
-    { id: 'dashboard', title: 'Go to Dashboard', icon: '📊', shortcut: ['mod', '1'], action: () => onNavigate('dashboard'), category: 'navigation' },
-    { id: 'agents', title: 'Go to Agents', icon: '🤖', shortcut: ['mod', '2'], action: () => onNavigate('agents'), category: 'navigation' },
-    { id: 'skills', title: 'Go to Skills', icon: '🛠️', shortcut: ['mod', '3'], action: () => onNavigate('skills'), category: 'navigation' },
-    { id: 'tasks', title: 'Go to Tasks', icon: '📋', shortcut: ['mod', '4'], action: () => onNavigate('tasks'), category: 'navigation' },
-    { id: 'crons', title: 'Go to Crons', icon: '⏰', shortcut: ['mod', '5'], action: () => onNavigate('crons'), category: 'navigation' },
-    { id: 'voice', title: 'Go to Voice Chat', icon: '🎤', action: () => onNavigate('voice'), category: 'navigation' },
-    { id: 'memory', title: 'Go to Memory', icon: '🧠', action: () => onNavigate('memory'), category: 'navigation' },
-    { id: 'settings', title: 'Go to Settings', icon: '⚙️', action: () => onNavigate('settings'), category: 'navigation' },
-    
+    // Navigation — Home
+    { id: 'dashboard', title: 'Go to Dashboard', icon: '🏠', shortcut: ['mod', '1'], action: () => onNavigate('dashboard'), category: 'navigation' },
+    // Navigation — Agents group
+    { id: 'agents', title: 'Go to Agents', description: 'Agent list and management', icon: '🤖', shortcut: ['mod', '2'], action: () => onNavigate('agents'), category: 'navigation' },
+    { id: 'organization', title: 'Go to Organization', description: 'Agent org chart', icon: '🏛️', action: () => onNavigate('organization'), category: 'navigation' },
+    { id: 'skills', title: 'Go to Skills', description: 'Agent skill registry', icon: '🛠️', shortcut: ['mod', '3'], action: () => onNavigate('skills'), category: 'navigation' },
+    { id: 'leaderboard', title: 'Go to Leaderboard', description: 'Agent performance rankings', icon: '🏆', action: () => onNavigate('leaderboard'), category: 'navigation' },
+    { id: 'context', title: 'Go to Context', description: 'Context window visualizer', icon: '🧠', action: () => onNavigate('context'), category: 'navigation' },
+    // Navigation — Work group
+    { id: 'board', title: 'Go to Project Board', description: 'Kanban project board', icon: '📋', action: () => onNavigate('board'), category: 'navigation' },
+    { id: 'tasks', title: 'Go to Tasks', description: 'Active task tracker', icon: '✅', shortcut: ['mod', '4'], action: () => onNavigate('tasks'), category: 'navigation' },
+    { id: 'crons', title: 'Go to Crons', description: 'Scheduled automations', icon: '⏰', shortcut: ['mod', '5'], action: () => onNavigate('crons'), category: 'navigation' },
+    // Navigation — Knowledge group
+    { id: 'memory', title: 'Go to Memory', description: 'Knowledge base and files', icon: '📁', action: () => onNavigate('memory'), category: 'navigation' },
+    { id: 'voice', title: 'Go to Chat', description: 'Voice and text chat', icon: '💬', action: () => onNavigate('voice'), category: 'navigation' },
+    { id: 'model-counsel', title: 'Go to Model Counsel', description: 'Multi-model AI panel', icon: '🎯', action: () => onNavigate('model-counsel'), category: 'navigation' },
+    // Settings
+    { id: 'settings', title: 'Go to Settings', icon: '⚙️', action: () => onNavigate('settings'), category: 'settings' },
+
     // Actions
     { id: 'new-message', title: 'New Message to Opie', description: 'Start a conversation', icon: '💬', shortcut: ['mod', 'N'], action: onNewMessage, category: 'action' },
     { id: 'deploy-agent', title: 'Deploy New Agent', description: 'Launch an AI agent', icon: '🚀', action: () => onNavigate('agents'), category: 'action' },

@@ -364,7 +364,9 @@ export function useToast() {
 // useSmartGreeting - Time-aware greeting
 // =============================================================================
 
-export function useSmartGreeting(userName = 'Wes') {
+export function useSmartGreeting(userName?: string) {
+  // Use stored name from onboarding, fallback to provided name or 'there'
+  const resolvedName = userName || (typeof window !== 'undefined' ? localStorage.getItem('opie-user-name') : null) || 'there';
   const [greeting, setGreeting] = useState('');
   const [suggestion, setSuggestion] = useState('');
 
@@ -378,18 +380,18 @@ export function useSmartGreeting(userName = 'Wes') {
       let suggest = '';
 
       if (hour >= 5 && hour < 12) {
-        greet = `Good morning, ${userName}`;
-        suggest = isWeekend 
+        greet = `Good morning, ${resolvedName}`;
+        suggest = isWeekend
           ? "Relaxed start to the day. Your agents are ready when you are."
           : "Ready to tackle the day? Here's what's happening.";
       } else if (hour >= 12 && hour < 17) {
-        greet = `Good afternoon, ${userName}`;
+        greet = `Good afternoon, ${resolvedName}`;
         suggest = "Afternoon check-in. Let's see what's been accomplished.";
       } else if (hour >= 17 && hour < 21) {
-        greet = `Good evening, ${userName}`;
+        greet = `Good evening, ${resolvedName}`;
         suggest = "Evening wrap-up. Time to review today's progress.";
       } else {
-        greet = `Hey ${userName}`;
+        greet = `Hey ${resolvedName}`;
         suggest = "Burning the midnight oil? Your agents are here 24/7.";
       }
 
@@ -401,7 +403,7 @@ export function useSmartGreeting(userName = 'Wes') {
     // Update every minute
     const interval = setInterval(updateGreeting, 60000);
     return () => clearInterval(interval);
-  }, [userName]);
+  }, [resolvedName]);
 
   return { greeting, suggestion };
 }

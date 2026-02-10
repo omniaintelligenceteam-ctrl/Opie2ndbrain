@@ -28,6 +28,9 @@ import { Camera, Mic } from 'lucide-react';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import StatusOrb from './StatusOrb';
+import SidebarNav from './sidebar/SidebarNav';
+import OnboardingModal, { isOnboardingComplete, getUserName, resetOnboarding } from './OnboardingModal';
+import MessageContextMenu from './MessageContextMenu';
 
 // ─── Lazy-loaded panels (only imported when their view is active) ────────────
 const AgentsPanel = lazy(() => import('./AgentsPanel'));
@@ -454,6 +457,8 @@ export default function OpieKanban(): React.ReactElement {
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [userName, setUserName] = useState('');
   const [mobileSheetContent, setMobileSheetContent] = useState<'agents' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -500,6 +505,8 @@ export default function OpieKanban(): React.ReactElement {
   
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
+  // Message context menu (for fork/copy)
+  const [msgContextMenu, setMsgContextMenu] = useState<{ x: number; y: number; messageId: string; messageText: string; isAssistant: boolean } | null>(null);
   
   // Theme, sounds, and mobile hooks
   const { theme, themeName, toggleTheme } = useTheme();
@@ -583,6 +590,11 @@ export default function OpieKanban(): React.ReactElement {
   useEffect(() => {
     setActiveView(getSavedView() as ViewId);
     setSidebarExpanded(getSidebarState());
+    // Check if onboarding is needed
+    if (!isOnboardingComplete()) {
+      setShowOnboarding(true);
+    }
+    setUserName(getUserName());
   }, []);
 
   // Initialize conversation on first load
@@ -1612,45 +1624,13 @@ export default function OpieKanban(): React.ReactElement {
           </div>
         )}
 
-        {/* Navigation */}
-        <nav style={styles.nav}>
-          {NAV_ITEMS.map(item => {
-            const count = getCount(item.id);
-            const isActive = activeView === item.id;
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleViewChange(item.id)}
-                style={{
-                  ...styles.navItem,
-                  ...(isActive ? styles.navItemActive : {}),
-                  justifyContent: sidebarExpanded ? 'flex-start' : 'center',
-                }}
-                title={!sidebarExpanded ? item.label : undefined}
-              >
-                <span style={styles.navIcon}>{item.icon}</span>
-                {sidebarExpanded && (
-                  <>
-                    <span style={styles.navLabel}>{item.label}</span>
-                    {count !== null && count > 0 && (
-                      <span style={{
-                        ...styles.navBadge,
-                        background: item.id === 'tasks' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
-                        color: item.id === 'tasks' ? '#f59e0b' : '#22c55e',
-                      }}>
-                        {count}
-                      </span>
-                    )}
-                  </>
-                )}
-                {!sidebarExpanded && count !== null && count > 0 && (
-                  <span style={styles.navBadgeCollapsed}>{count}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+        {/* Navigation - grouped with progressive disclosure */}
+        <SidebarNav
+          activeView={activeView}
+          sidebarExpanded={sidebarExpanded}
+          onNavigate={handleViewChange}
+          getCount={getCount}
+        />
 
         {/* Quick Stats */}
         {sidebarExpanded && (
@@ -1691,7 +1671,16 @@ export default function OpieKanban(): React.ReactElement {
         {/* Footer */}
         <div style={styles.sidebarFooter}>
           {sidebarExpanded ? (
-            <span style={styles.footerText}>Omnia Intelligence</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={styles.footerText}>Omnia Intelligence</span>
+              <button
+                onClick={() => { resetOnboarding(); setShowOnboarding(true); }}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '14px', padding: '4px', borderRadius: 6 }}
+                title="Replay welcome tour"
+              >
+                ?
+              </button>
+            </div>
           ) : (
             <span style={styles.footerIcon}>🌟</span>
           )}
@@ -1987,14 +1976,52 @@ export default function OpieKanban(): React.ReactElement {
               }}>
                 {messages.length === 0 && (
                   <div style={styles.emptyChat}>
-                    <div style={{ ...styles.emptyChatIcon, fontSize: '64px' }}>💬</div>
-                    <h3 style={styles.emptyChatTitle}>Chat with Opie</h3>
-                    <p style={styles.emptyChatText}>Turn on the mic or type below to start a conversation</p>
+                    <OpieAvatar size={64} state="idle" />
+                    <h3 style={styles.emptyChatTitle}>
+                      {userName ? `Hey ${userName}, what are we working on?` : 'What are we working on?'}
+                    </h3>
+                    <p style={styles.emptyChatText}>Ask a question, give a task, or try one of these:</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 500, marginTop: 8 }}>
+                      {[
+                        { label: 'Research a topic', icon: '🔍' },
+                        { label: 'Write content', icon: '✍️' },
+                        { label: 'Analyze data', icon: '📊' },
+                        { label: 'Deploy an agent', icon: '🤖' },
+                      ].map(chip => (
+                        <button
+                          key={chip.label}
+                          onClick={() => {
+                            setInput(chip.label);
+                            chatInputRef.current?.focus();
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: 20,
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            background: 'rgba(255,255,255,0.04)',
+                            color: 'rgba(255,255,255,0.7)',
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>{chip.icon}</span>
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {messages.map((m, i) => (
                   <div
                     key={m.id || i}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMsgContextMenu({ x: e.clientX, y: e.clientY, messageId: m.id || `msg-${i}`, messageText: m.text, isAssistant: m.role === 'assistant' });
+                    }}
                     style={{
                       ...styles.chatBubble,
                       ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
@@ -2019,6 +2046,25 @@ export default function OpieKanban(): React.ReactElement {
                   </div>
                 )}
               </div>
+
+              {/* Message context menu (fork/copy) */}
+              {msgContextMenu && (
+                <MessageContextMenu
+                  x={msgContextMenu.x}
+                  y={msgContextMenu.y}
+                  onClose={() => setMsgContextMenu(null)}
+                  onFork={() => {
+                    forkConversation(msgContextMenu.messageId);
+                    setMsgContextMenu(null);
+                  }}
+                  onSummarize={() => setMsgContextMenu(null)}
+                  onCopy={() => {
+                    navigator.clipboard.writeText(msgContextMenu.messageText);
+                    setMsgContextMenu(null);
+                  }}
+                  isAssistantMessage={msgContextMenu.isAssistant}
+                />
+              )}
 
               {/* Transcript bar */}
               {transcript && (
@@ -3107,6 +3153,17 @@ export default function OpieKanban(): React.ReactElement {
           outline-offset: 2px;
         }
       `}</style>
+
+      {/* Onboarding Modal - first-run experience */}
+      {showOnboarding && (
+        <OnboardingModal
+          onComplete={(newName) => {
+            setUserName(newName);
+            setShowOnboarding(false);
+          }}
+          onNavigate={(view) => handleViewChange(view as ViewId)}
+        />
+      )}
       </div>
     </NotificationProvider>
   );
