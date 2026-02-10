@@ -720,10 +720,36 @@ async function* streamOllamaWithTools(
   model: string,
   maxToolIterations = 25
 ): AsyncGenerator<string> {
-  // For tool execution, we need non-streaming responses to parse tool calls
-  // So we'll check gateway availability but use the fallback for now
-  // TODO: Add gateway support for tool execution when OpenClaw supports it better
+  // Try gateway routing first if available (OpenClaw handles tools natively)
+  if (shouldUseGateway()) {
+    console.log('[streamOllamaWithTools] Using OpenClaw gateway for tools');
+    try {
+      const gatewayMessages: ChatMessage[] = [
+        { role: 'system', content: messages[0]?.content || SYSTEM_PROMPT },
+        ...messages.slice(1).map(msg => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content,
+        }))
+      ];
+
+      const stream = await gatewayChatClient.createStreamingCompletion({
+        messages: gatewayMessages,
+        model: "openclaw:main", // OpenClaw main agent with tools
+        stream: true,
+        max_tokens: 2048,
+      });
+
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+      return;
+    } catch (error) {
+      console.error('[streamOllamaWithTools] OpenClaw gateway failed, falling back to direct API:', error);
+      // Continue to fallback below
+    }
+  }
   
+  console.log('[streamOllamaWithTools] Using direct Ollama API');
   const ollamaKey = process.env.OLLAMA_API_KEY;
   if (!ollamaKey) {
     yield `data: ${JSON.stringify({ error: 'OLLAMA_API_KEY not configured' })}\n\n`;
