@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface KanbanTask {
   id: string;
@@ -278,7 +279,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/kanban');
+      const response = await apiFetch('/api/kanban');
       const data = await response.json();
       
       if (!response.ok) {
@@ -296,7 +297,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
   };
 
   const addTask = async (columnId: string, text: string): Promise<KanbanTask> => {
-    const response = await fetch('/api/kanban', {
+    const response = await apiFetch('/api/kanban', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, column_id: columnId }),
@@ -312,7 +313,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
   };
 
   const updateTask = async (taskId: string, updates: Partial<KanbanTask>): Promise<KanbanTask> => {
-    const response = await fetch('/api/kanban', {
+    const response = await apiFetch('/api/kanban', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: taskId, ...updates }),
@@ -328,7 +329,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
   };
 
   const deleteTask = async (taskId: string): Promise<void> => {
-    const response = await fetch(`/api/kanban?id=${taskId}`, {
+    const response = await apiFetch(`/api/kanban?id=${taskId}`, {
       method: 'DELETE',
     });
     
