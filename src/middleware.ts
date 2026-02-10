@@ -10,6 +10,7 @@ const PUBLIC_ROUTES = [
   '/api/chat/:path*', // All chat sub-routes (poll, etc.)
   '/api/tts',       // Text-to-speech
   '/api/openclaw/:path*', // OpenClaw integration
+  '/api/kanban',          // Kanban board (G needs access)
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
