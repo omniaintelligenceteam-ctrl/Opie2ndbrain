@@ -14,6 +14,7 @@ import { useActiveAgents, useAgentSessions } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
 import { useVoiceEngine } from '../hooks/useVoiceEngine';
+import { KanbanBoard } from './KanbanBoard';
 
 // ─── Always-visible / critical-path components (loaded eagerly) ──────────────
 import CommandPalette, { ShortcutsHelp } from './CommandPalette';
@@ -2360,15 +2361,7 @@ export default function OpieKanban(): React.ReactElement {
 
             {/* Kanban Board */}
             <div style={styles.kanbanSection}>
-              <div style={styles.kanbanBoard}>
-                {columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    isMobile={isMobile}
-                  />
-                ))}
-              </div>
+              <KanbanBoard isMobile={isMobile} />
             </div>
 
             {/* Activity Feed */}
