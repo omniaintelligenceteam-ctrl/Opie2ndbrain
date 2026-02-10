@@ -51,8 +51,9 @@ User said: `;
 
 const SYSTEM_PROMPT = `You are Opie, a helpful AI assistant. You're friendly, concise, and practical.`;
 
-// For OpenClaw routing - let the agent use its natural identity
-const OPENCLAW_SYSTEM_PROMPT = `You are Wes's AI assistant. Be helpful, direct, and practical.`;
+// For OpenClaw routing - let the agent use its natural identity with EXECUTE confirmation
+const OPENCLAW_SYSTEM_PROMPT = `You are Wes's AI assistant. Be helpful, direct, and practical.
+IMPORTANT: Before executing any action that changes files, runs commands, or modifies anything, ask "EXECUTE?" and wait for confirmation. Safe read-only actions (checking status, listing files, searching) can proceed without asking.`;
 
 // Helper to create SSE stream
 function createStreamResponse(generator: AsyncGenerator<string>) {
@@ -1047,88 +1048,58 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? EXECUTE_PROMPT : PLAN_PROMPT;
 
-  // EXECUTE MODE: Route directly through OpenClaw for tool execution
-  console.log('[Chat] EXECUTE mode entered, interactionMode:', interactionMode);
-  if (interactionMode === 'execute') {
-    // Route through OpenClaw gateway (handles tools natively)
-    if (shouldUseGateway()) {
-      console.log('[Chat] EXECUTE mode: Using OpenClaw gateway directly');
-      
-      const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.text || m.content || ''
-      }));
+  // UNIFIED MODE: Route through OpenClaw gateway
+  // No more Plan/Execute split - OpenClaw handles everything
+  // Agent asks "EXECUTE?" before destructive actions
+  if (shouldUseGateway()) {
+    console.log('[Chat] Unified mode: Using OpenClaw gateway');
+    
+    const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.text || m.content || ''
+    }));
 
-      // Build user message content - include image if present
-      const userContent: any = image 
-        ? [
-            { type: 'text', text: userMessage || 'What do you see in this image?' },
-            { type: 'image_url', image_url: { url: image } }
-          ]
-        : userMessage;
+    // Build user content with optional image
+    const userContent: any = image 
+      ? [
+          { type: 'text', text: userMessage || 'What do you see in this image?' },
+          { type: 'image_url', image_url: { url: image } }
+        ]
+      : userMessage;
 
-      const gatewayMessages: ChatMessage[] = [
-        ...historyMessages.map((msg: any) => ({
-          role: msg.role as 'system' | 'user' | 'assistant',
-          content: msg.content,
-        })),
-        { role: 'user', content: userContent }
-      ];
+    const gatewayMessages: ChatMessage[] = [
+      ...historyMessages.map((msg: any) => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content,
+      })),
+      { role: 'user', content: userContent }
+    ];
 
-      try {
-        const stream = await gatewayChatClient.createStreamingCompletion({
-          messages: gatewayMessages,
-          model: "openclaw:main",
-          stream: true,
-          max_tokens: 4096,
-        });
+    try {
+      const stream = await gatewayChatClient.createStreamingCompletion({
+        messages: gatewayMessages,
+        model: "openclaw:main",
+        stream: true,
+        max_tokens: 4096,
+      });
 
-        return createStreamResponse(stream);
-      } catch (error) {
-        console.error('[Chat] OpenClaw gateway failed:', error);
-        // Fall through to local execution below
-      }
-    }
-
-    // Fallback: Local execution with tools
-    console.log('[Chat] EXECUTE mode: Using local tool execution');
-    {
-      const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.text || m.content || ''
-      }));
-
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        ...historyMessages,
-        { role: 'user', content: userMessage + '\n[MODE: EXECUTE] Execute tasks using available tools.' }
-      ];
-
-      const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
-      return createStreamResponse(generator);
+      return createStreamResponse(stream);
+    } catch (error) {
+      console.error('[Chat] OpenClaw gateway failed, falling back:', error);
     }
   }
 
-  // PLAN MODE: Fast streaming via Ollama (with OpenClaw gateway routing)
+  // Fallback: Direct streaming (when gateway unavailable)
+  console.log('[Chat] Fallback: Using direct streaming');
   const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
     role: m.role as 'user' | 'assistant',
     content: m.text || m.content || ''
   }));
-  
-  console.log('[Chat] Plan mode - history count:', historyMessages.length);
-
-  // Build user content with optional image
-  const planUserContent: any = image
-    ? [
-        { type: 'text', text: userMessage },
-        { type: 'image_url', image_url: { url: image } }
-      ]
-    : userMessage;
 
   const messages = [
     { role: 'system', content: systemPrompt },
     ...historyMessages,
-    { role: 'user', content: planUserContent }
+    { role: 'user', content: userMessage }
   ];
   
   const generator = streamOllama(messages, MODELS.kimi.model);

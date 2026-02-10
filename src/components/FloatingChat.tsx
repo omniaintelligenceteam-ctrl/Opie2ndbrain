@@ -1243,35 +1243,9 @@ export default function FloatingChat({
             <div ref={chatEndRef} />
           </div>
 
-          {/* Mode Toggle - Simplified */}
-          <div style={{
-            ...styles.modeToggleContainer,
-            padding: '6px 12px',
-          }}>
-            <div style={styles.modeToggle}>
-              <button
-                onClick={() => setInteractionMode('plan')}
-                style={{
-                  ...styles.modeButton,
-                  padding: '6px 10px',
-                  ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
-                }}
-              >
-                <span style={styles.modeIcon}>💭</span>
-                <span>Plan</span>
-              </button>
-              <button
-                onClick={() => setInteractionMode('execute')}
-                style={{
-                  ...styles.modeButton,
-                  padding: '6px 10px',
-                  ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
-                }}
-              >
-                <span style={styles.modeIcon}>🔥</span>
-                <span>EXECUTE</span>
-              </button>
-            </div>
+          {/* Mode toggle removed - unified mode with EXECUTE? confirmation */}
+          <div style={{ display: 'none' }}>
+            {/* Hidden - keeping state for compatibility */}
           </div>
 
           {/* Input Area */}
@@ -1281,11 +1255,13 @@ export default function FloatingChat({
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (input.trim() && !isLoading) {
-                      onSend(input.trim(), undefined, interactionMode);
+                    if ((input.trim() || pendingImage) && !isLoading) {
+                      onSend(input.trim(), pendingImage || undefined, interactionMode);
+                      setPendingImage(null);
                     }
                   }
                 }}
@@ -1668,34 +1644,7 @@ export default function FloatingChat({
           </div>
         )}
 
-        {/* Mode Toggle */}
-        <div style={styles.modeToggleContainer}>
-          <div style={styles.modeToggle}>
-            <button
-              onClick={() => setInteractionMode('plan')}
-              style={{
-                ...styles.modeButton,
-                ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
-              }}
-              title="Plan Mode - Brainstorm and discuss without taking action"
-            >
-              <span style={styles.modeIcon}>💭</span>
-              <span>Plan</span>
-            </button>
-            <button
-              onClick={() => setInteractionMode('execute')}
-              style={{
-                ...styles.modeButton,
-                ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
-              }}
-              title="EXECUTE Mode - Execute with OpenClaw power"
-            >
-              <span style={styles.modeIcon}>🔥</span>
-              <span>EXECUTE</span>
-            </button>
-          </div>
-          
-        </div>
+        {/* Mode toggle removed - unified mode */}
 
         {/* Voice error toast */}
         {voiceError && (
