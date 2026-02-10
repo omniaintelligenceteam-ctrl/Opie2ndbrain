@@ -255,6 +255,7 @@ export function MobileHeader({
         {onMenuClick && (
           <button
             onClick={onMenuClick}
+            aria-label="Open navigation menu"
             style={{
               width: '44px',
               height: '44px',
@@ -272,6 +273,7 @@ export function MobileHeader({
           >
             ☰
           </button>
+
         )}
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

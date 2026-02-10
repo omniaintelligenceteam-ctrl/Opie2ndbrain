@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { ChatMessage } from './FloatingChat';
+import { ChatMessage } from '@/types/chat';
 
 export interface ChatPanelProps {
   messages: ChatMessage[];

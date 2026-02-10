@@ -1,5 +1,5 @@
 // src/types/conversation.ts
-import { ChatMessage } from '@/components/FloatingChat';
+import { ChatMessage } from '@/types/chat';
 
 export interface Conversation {
   id: string;

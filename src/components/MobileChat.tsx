@@ -121,6 +121,7 @@ export default function MobileChat({
             fontSize: '20px',
             cursor: 'pointer',
           }}
+          aria-label="Close chat"
         >
           ✕
         </button>
@@ -279,6 +280,7 @@ export default function MobileChat({
         {onBack && (
           <button
             onClick={onBack}
+            aria-label="Go back"
             style={{
               width: '44px',
               height: '44px',
@@ -355,6 +357,7 @@ export default function MobileChat({
             fontSize: '20px',
             cursor: 'pointer',
           }}
+          aria-label="Toggle voice input"
         >
           🎤
         </button>
@@ -505,6 +508,7 @@ export default function MobileChat({
             transition: 'all 0.2s ease',
             boxShadow: micOn ? '0 0 20px rgba(34, 197, 94, 0.4)' : 'none',
           }}
+          aria-label={micOn ? 'Stop voice input' : 'Start voice input'}
         >
           🎤
         </button>

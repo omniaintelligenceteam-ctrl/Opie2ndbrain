@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { formatShortcut, SHORTCUTS, ViewId } from '../hooks/useKeyboardShortcuts';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -17,7 +18,29 @@ interface Command {
   icon: string;
   shortcut?: string[];
   action: () => void;
-  category: 'navigation' | 'action' | 'settings';
+  category: 'recent' | 'navigation' | 'action' | 'system' | 'settings';
+}
+
+const RECENT_COMMANDS_KEY = 'opie_recent_commands';
+const MAX_RECENT = 5;
+
+function getRecentCommandIds(): string[] {
+  try {
+    const stored = localStorage.getItem(RECENT_COMMANDS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentCommand(id: string) {
+  try {
+    const recent = getRecentCommandIds().filter(r => r !== id);
+    recent.unshift(id);
+    localStorage.setItem(RECENT_COMMANDS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+  } catch {
+    // localStorage not available
+  }
 }
 
 export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessage }: CommandPaletteProps) {
@@ -25,8 +48,9 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { themeName, toggleTheme } = useTheme();
 
-  const commands: Command[] = [
+  const allCommands: Command[] = [
     // Navigation — Home
     { id: 'dashboard', title: 'Go to Dashboard', icon: '🏠', shortcut: ['mod', '1'], action: () => onNavigate('dashboard'), category: 'navigation' },
     // Navigation — Agents group
@@ -50,20 +74,43 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
     { id: 'new-message', title: 'New Message to Opie', description: 'Start a conversation', icon: '💬', shortcut: ['mod', 'N'], action: onNewMessage, category: 'action' },
     { id: 'deploy-agent', title: 'Deploy New Agent', description: 'Launch an AI agent', icon: '🚀', action: () => onNavigate('agents'), category: 'action' },
     { id: 'create-cron', title: 'Create Scheduled Job', description: 'Set up automation', icon: '📅', action: () => onNavigate('crons'), category: 'action' },
+    { id: 'search-memory', title: 'Search Memory', description: 'Find in knowledge base', icon: '🔎', action: () => onNavigate('memory'), category: 'action' },
+    { id: 'view-activity', title: 'View Recent Activity', description: 'See latest agent actions', icon: '⚡', action: () => onNavigate('dashboard'), category: 'action' },
+
+    // System
+    { id: 'toggle-theme', title: `Switch to ${themeName === 'dark' ? 'Light' : 'Dark'} Mode`, description: 'Toggle color theme', icon: themeName === 'dark' ? '☀️' : '🌙', action: toggleTheme, category: 'system' },
+    { id: 'check-health', title: 'System Health', description: 'View connection and API status', icon: '🩺', action: () => onNavigate('settings'), category: 'system' },
   ];
 
-  const filteredCommands = commands.filter((cmd) => {
+  // Build filtered + recent-injected list
+  const recentIds = getRecentCommandIds();
+  const commandMap = new Map(allCommands.map(c => [c.id, c]));
+
+  const filteredCommands = allCommands.filter((cmd) => {
     if (!query) return true;
     const searchText = `${cmd.title} ${cmd.description || ''} ${cmd.category}`.toLowerCase();
     return searchText.includes(query.toLowerCase());
   });
 
+  // Build recent commands (only when no search query)
+  const recentCommands: Command[] = !query
+    ? recentIds
+        .map(id => commandMap.get(id))
+        .filter((cmd): cmd is Command => !!cmd)
+        .map(cmd => ({ ...cmd, category: 'recent' as const }))
+    : [];
+
   // Group by category
-  const grouped = filteredCommands.reduce((acc, cmd) => {
-    if (!acc[cmd.category]) acc[cmd.category] = [];
-    acc[cmd.category].push(cmd);
-    return acc;
-  }, {} as Record<string, Command[]>);
+  const grouped: Record<string, Command[]> = {};
+  if (recentCommands.length > 0) {
+    grouped['recent'] = recentCommands;
+  }
+  for (const cmd of filteredCommands) {
+    // Skip commands already shown in recent (when no query)
+    if (!query && recentIds.includes(cmd.id)) continue;
+    if (!grouped[cmd.category]) grouped[cmd.category] = [];
+    grouped[cmd.category].push(cmd);
+  }
 
   const flatList = Object.values(grouped).flat();
 
@@ -76,6 +123,12 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
     }
   }, [isOpen]);
 
+  const executeCommand = useCallback((cmd: Command) => {
+    saveRecentCommand(cmd.id);
+    cmd.action();
+    onClose();
+  }, [onClose]);
+
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -87,14 +140,13 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (flatList[selectedIndex]) {
-        flatList[selectedIndex].action();
-        onClose();
+        executeCommand(flatList[selectedIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onClose();
     }
-  }, [flatList, selectedIndex, onClose]);
+  }, [flatList, selectedIndex, onClose, executeCommand]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -109,8 +161,10 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
   if (!isOpen) return null;
 
   const categoryLabels: Record<string, string> = {
+    recent: 'Recent',
     navigation: 'Navigation',
     action: 'Actions',
+    system: 'System',
     settings: 'Settings',
   };
 
@@ -118,12 +172,12 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
     <>
       {/* Backdrop */}
       <div style={styles.backdrop} onClick={onClose} />
-      
+
       {/* Palette */}
-      <div style={styles.palette}>
+      <div style={styles.palette} role="dialog" aria-label="Command palette">
         {/* Search Input */}
         <div style={styles.inputWrapper}>
-          <span style={styles.searchIcon}>🔍</span>
+          <span style={styles.searchIcon} aria-hidden="true">🔍</span>
           <input
             ref={inputRef}
             type="text"
@@ -135,41 +189,45 @@ export default function CommandPalette({ isOpen, onClose, onNavigate, onNewMessa
             onKeyDown={handleKeyDown}
             placeholder="Type a command or search..."
             style={styles.input}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-list"
+            aria-activedescendant={flatList[selectedIndex] ? `cmd-${flatList[selectedIndex].id}` : undefined}
           />
           <kbd style={styles.escKey}>ESC</kbd>
         </div>
 
         {/* Commands List */}
-        <div ref={listRef} style={styles.list}>
+        <div ref={listRef} id="command-list" role="listbox" style={styles.list}>
           {flatList.length === 0 && (
             <div style={styles.empty}>
               <span style={styles.emptyIcon}>🔎</span>
               <span>No commands found</span>
             </div>
           )}
-          
+
           {Object.entries(grouped).map(([category, cmds]) => (
-            <div key={category}>
+            <div key={category} role="group" aria-label={categoryLabels[category]}>
               <div style={styles.categoryHeader}>{categoryLabels[category]}</div>
               {cmds.map((cmd) => {
                 const index = flatList.indexOf(cmd);
                 const isSelected = index === selectedIndex;
-                
+
                 return (
                   <button
                     key={cmd.id}
+                    id={`cmd-${cmd.id}`}
                     data-index={index}
-                    onClick={() => {
-                      cmd.action();
-                      onClose();
-                    }}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => executeCommand(cmd)}
                     onMouseEnter={() => setSelectedIndex(index)}
                     style={{
                       ...styles.command,
                       ...(isSelected ? styles.commandSelected : {}),
                     }}
                   >
-                    <span style={styles.commandIcon}>{cmd.icon}</span>
+                    <span style={styles.commandIcon} aria-hidden="true">{cmd.icon}</span>
                     <div style={styles.commandText}>
                       <span style={styles.commandTitle}>{cmd.title}</span>
                       {cmd.description && (
@@ -212,10 +270,10 @@ export function ShortcutsHelp({ isOpen, onClose }: { isOpen: boolean; onClose: (
   return (
     <>
       <div style={styles.backdrop} onClick={onClose} />
-      <div style={{ ...styles.palette, maxWidth: '400px' }}>
+      <div style={{ ...styles.palette, maxWidth: '400px' }} role="dialog" aria-label="Keyboard shortcuts">
         <div style={styles.helpHeader}>
           <h3 style={styles.helpTitle}>⌨️ Keyboard Shortcuts</h3>
-          <button onClick={onClose} style={styles.closeBtn}>✕</button>
+          <button onClick={onClose} style={styles.closeBtn} aria-label="Close keyboard shortcuts">✕</button>
         </div>
         <div style={styles.helpList}>
           {SHORTCUTS.map((shortcut, i) => (
@@ -372,7 +430,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '3px',
     fontSize: '0.7rem',
   },
-  
+
   // Help Modal styles
   helpHeader: {
     display: 'flex',

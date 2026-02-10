@@ -7,3 +7,7 @@ node_modules
 !.env.example
 journals/
 knowledge/MEMORY.md
+
+# Windows reserved device names
+nul
+NUL

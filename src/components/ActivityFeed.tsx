@@ -122,7 +122,7 @@ export default function ActivityFeed({
   }, [fetchActivity, pollInterval, enabled]);
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} aria-live="polite">
       <style>{animationCSS}</style>
       
       {/* Header */}

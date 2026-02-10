@@ -419,7 +419,7 @@ export default function MemoryPanel({ onFileSelect }: MemoryPanelProps) {
       {error && (
         <div style={styles.error}>
           ⚠️ {error}
-          <button onClick={() => setError(null)} style={styles.errorClose}>✕</button>
+          <button onClick={() => setError(null)} style={styles.errorClose} aria-label="Dismiss error">✕</button>
         </div>
       )}
     </div>

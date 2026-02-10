@@ -182,7 +182,7 @@ export const lightTheme: Theme = {
     textPrimary: '#1a1a2e',
     textSecondary: '#4a4a5c',
     textTertiary: '#6a6a7c',
-    textMuted: '#8a8a9c',
+    textMuted: '#6e6e82',
     
     // Borders
     border: 'rgba(0, 0, 0, 0.1)',

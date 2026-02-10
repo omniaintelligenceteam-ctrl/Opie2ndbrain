@@ -3,7 +3,7 @@
 import React from 'react';
 import { ViewId } from '../hooks/useKeyboardShortcuts';
 import { Task } from './ActiveTasksPanel';
-import { ChatMessage } from './FloatingChat';
+import { ChatMessage } from '@/types/chat';
 import { ErrorBoundary } from './ErrorBoundary';
 import { CollapsibleSection } from './BottomSheet';
 

@@ -261,6 +261,7 @@ export default function ParticleBackground({
     return (
       <div
         className={className}
+        aria-hidden="true"
         style={{
           position: 'absolute',
           top: 0,
@@ -279,6 +280,7 @@ export default function ParticleBackground({
     <canvas
       ref={canvasRef}
       className={className}
+      aria-hidden="true"
       style={{
         position: 'absolute',
         top: 0,

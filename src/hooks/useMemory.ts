@@ -4,7 +4,7 @@
 import { useRef, useCallback } from 'react';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from './useMemoryRefresh';
-import { ChatMessage } from '@/components/FloatingChat';
+import { ChatMessage } from '@/types/chat';
 
 export interface UseMemoryReturn {
   memoryContext: string;

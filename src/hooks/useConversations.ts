@@ -1,7 +1,7 @@
 // src/hooks/useConversations.ts
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChatMessage } from '@/components/FloatingChat';
+import { ChatMessage } from '@/types/chat';
 import { Conversation, ConversationStore, MAX_MESSAGES_PER_CONVERSATION } from '@/types/conversation';
 import {
   loadConversations,

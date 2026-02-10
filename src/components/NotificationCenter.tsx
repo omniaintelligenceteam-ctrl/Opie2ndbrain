@@ -26,7 +26,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   };
 
   return (
-    <div style={toastStyles.container}>
+    <div style={toastStyles.container} role="status" aria-live="polite">
       {toasts.map((toast, index) => {
         const typeStyles = getToastStyles(toast.type);
         return (
@@ -50,6 +50,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             <button
               onClick={() => onDismiss(toast.id)}
               style={toastStyles.closeBtn}
+              aria-label="Dismiss notification"
             >
               ✕
             </button>
