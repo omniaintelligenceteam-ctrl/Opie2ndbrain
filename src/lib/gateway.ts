@@ -5,7 +5,7 @@ export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_G
 
 // Check if we're likely in a production environment without local gateway
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
-export const GATEWAY_AVAILABLE = !IS_VERCEL || process.env.MOLTBOT_GATEWAY_URL?.startsWith('http');
+export const GATEWAY_AVAILABLE = !IS_VERCEL || (GATEWAY_URL && !GATEWAY_URL.includes('localhost'));
 
 export interface GatewayFetchOptions extends RequestInit {
   timeout?: number;
