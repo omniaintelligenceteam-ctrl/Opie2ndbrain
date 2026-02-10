@@ -1059,12 +1059,20 @@ export async function POST(req: NextRequest) {
         content: m.text || m.content || ''
       }));
 
+      // Build user message content - include image if present
+      const userContent: any = image 
+        ? [
+            { type: 'text', text: userMessage || 'What do you see in this image?' },
+            { type: 'image_url', image_url: { url: image } }
+          ]
+        : userMessage;
+
       const gatewayMessages: ChatMessage[] = [
         ...historyMessages.map((msg: any) => ({
           role: msg.role as 'system' | 'user' | 'assistant',
           content: msg.content,
         })),
-        { role: 'user', content: userMessage }
+        { role: 'user', content: userContent }
       ];
 
       try {
@@ -1101,19 +1109,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // PLAN MODE: Fast streaming via Ollama
-  // Build native message array (proper multi-turn format)
+  // PLAN MODE: Fast streaming via Ollama (with OpenClaw gateway routing)
   const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
     role: m.role as 'user' | 'assistant',
     content: m.text || m.content || ''
   }));
   
-  console.log('[Chat] Plan mode - native message array, history count:', historyMessages.length);
+  console.log('[Chat] Plan mode - history count:', historyMessages.length);
+
+  // Build user content with optional image
+  const planUserContent: any = image
+    ? [
+        { type: 'text', text: userMessage },
+        { type: 'image_url', image_url: { url: image } }
+      ]
+    : userMessage;
 
   const messages = [
     { role: 'system', content: systemPrompt },
     ...historyMessages,
-    { role: 'user', content: userMessage + '\n[MODE: Plan] Discuss ideas but do NOT execute actions.' }
+    { role: 'user', content: planUserContent }
   ];
   
   const generator = streamOllama(messages, MODELS.kimi.model);
