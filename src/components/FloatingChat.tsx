@@ -716,14 +716,7 @@ export default function FloatingChat({
             </div>
           </div>
           <div class="messages" id="messages"></div>
-          <div class="mode-toggle-container">
-            <button class="mode-btn" id="plan-btn" onclick="setMode('plan')">
-              <span>💭</span><span>Plan</span>
-            </button>
-            <button class="mode-btn" id="doit-btn" onclick="setMode('execute')">
-              <span>🔥</span><span>EXECUTE</span>
-            </button>
-          </div>
+          <!-- Mode toggle removed - unified mode -->
           <div class="input-area">
             <textarea class="text-input" id="input" placeholder="Type a message..." rows="1"></textarea>
             <button class="send-btn" id="send-btn">

@@ -2043,43 +2043,7 @@ export default function OpieKanban(): React.ReactElement {
                 </div>
               )}
 
-              {/* Plan / Execute mode toggle */}
-              <div style={{
-                padding: '6px 24px', borderTop: '1px solid rgba(255,255,255,0.06)',
-                display: 'flex', gap: 8,
-                background: 'rgba(0,0,0,0.15)', flexShrink: 0,
-              }}>
-                <button onClick={() => setInteractionMode('plan')} style={{
-                  flex: 1, padding: '8px 12px', borderRadius: 12,
-                  border: interactionMode === 'plan'
-                    ? '1px solid rgba(139,92,246,0.5)'
-                    : '1px solid rgba(255,255,255,0.1)',
-                  background: interactionMode === 'plan'
-                    ? 'linear-gradient(135deg, rgba(139,92,246,0.3) 0%, rgba(168,85,247,0.2) 100%)'
-                    : 'rgba(255,255,255,0.05)',
-                  color: interactionMode === 'plan' ? '#a78bfa' : 'rgba(255,255,255,0.6)',
-                  fontSize: '0.85rem', cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}>
-                  <span style={{ fontSize: '14px' }}>💭</span>
-                  <span>Plan</span>
-                </button>
-                <button onClick={() => setInteractionMode('execute')} style={{
-                  flex: 1, padding: '8px 12px', borderRadius: 12,
-                  border: interactionMode === 'execute'
-                    ? '1px solid rgba(249,115,22,0.5)'
-                    : '1px solid rgba(255,255,255,0.1)',
-                  background: interactionMode === 'execute'
-                    ? 'linear-gradient(135deg, rgba(249,115,22,0.3) 0%, rgba(239,68,68,0.2) 100%)'
-                    : 'rgba(255,255,255,0.05)',
-                  color: interactionMode === 'execute' ? '#fb923c' : 'rgba(255,255,255,0.6)',
-                  fontSize: '0.85rem', cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}>
-                  <span style={{ fontSize: '14px' }}>🔥</span>
-                  <span>EXECUTE</span>
-                </button>
-              </div>
+              {/* Mode toggle removed - unified mode */}
 
               {/* Input row with mic, camera, text, send */}
               <div style={{
@@ -2137,6 +2101,22 @@ export default function OpieKanban(): React.ReactElement {
                   ref={chatInputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
+                  onPaste={async (e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (let i = 0; i < items.length; i++) {
+                      const item = items[i];
+                      if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (!file) continue;
+                        const reader = new FileReader();
+                        reader.onload = () => setPendingImage(reader.result as string);
+                        reader.readAsDataURL(file);
+                        return;
+                      }
+                    }
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
