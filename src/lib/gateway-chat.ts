@@ -57,6 +57,9 @@ export class GatewayChatClient {
       throw new Error('Gateway not configured');
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+
     const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -67,7 +70,10 @@ export class GatewayChatClient {
         ...request,
         stream: true,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const error = await response.text();

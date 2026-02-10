@@ -883,15 +883,45 @@ export default function FloatingChat({
         return;
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('Image must be less than 5MB');
+      // Compress image to max 1MB for reliable delivery
+      const compressImage = (dataUrl: string): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            // Max dimension 1600px
+            const maxDim = 1600;
+            if (width > maxDim || height > maxDim) {
+              const ratio = Math.min(maxDim / width, maxDim / height);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            // JPEG at 70% quality for smaller size
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.onerror = () => resolve(dataUrl); // fallback to original
+          img.src = dataUrl;
+        });
+      };
+
+      // Validate file size (max 10MB raw, will compress)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Image must be less than 10MB');
         resolve(null);
         return;
       }
 
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = async () => {
+        const raw = reader.result as string;
+        const compressed = await compressImage(raw);
+        resolve(compressed);
+      };
       reader.onerror = () => {
         console.error('Failed to read image');
         resolve(null);
