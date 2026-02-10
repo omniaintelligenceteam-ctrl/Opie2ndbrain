@@ -1,5 +1,4 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
 
 type OrbStatus = 'idle' | 'thinking' | 'speaking' | 'listening' | 'error';
 
@@ -14,78 +13,38 @@ const STATUS_CONFIG = {
   idle: {
     color: '#22c55e',
     glowColor: 'rgba(34, 197, 94, 0.6)',
-    outerGlow: '0 0 30px rgba(34, 197, 94, 0.5), 0 0 60px rgba(34, 197, 94, 0.3)',
     label: 'Online',
-    pulseSpeed: 3000,
-    ringCount: 3,
+    animClass: 'status-orb--idle',
   },
   thinking: {
     color: '#a855f7',
     glowColor: 'rgba(168, 85, 247, 0.7)',
-    outerGlow: '0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(6, 182, 212, 0.3)',
     label: 'Thinking',
-    pulseSpeed: 800,
-    ringCount: 4,
+    animClass: 'status-orb--thinking',
   },
   speaking: {
     color: '#f97316',
     glowColor: 'rgba(249, 115, 22, 0.7)',
-    outerGlow: '0 0 30px rgba(249, 115, 22, 0.6), 0 0 60px rgba(236, 72, 153, 0.3)',
     label: 'Speaking',
-    pulseSpeed: 500,
-    ringCount: 4,
+    animClass: 'status-orb--speaking',
   },
   listening: {
     color: '#06b6d4',
     glowColor: 'rgba(6, 182, 212, 0.7)',
-    outerGlow: '0 0 30px rgba(6, 182, 212, 0.6), 0 0 60px rgba(168, 85, 247, 0.3)',
     label: 'Listening',
-    pulseSpeed: 1000,
-    ringCount: 4,
+    animClass: 'status-orb--listening',
   },
   error: {
     color: '#ef4444',
     glowColor: 'rgba(239, 68, 68, 0.7)',
-    outerGlow: '0 0 30px rgba(239, 68, 68, 0.6), 0 0 60px rgba(239, 68, 68, 0.3)',
     label: 'Error',
-    pulseSpeed: 400,
-    ringCount: 3,
+    animClass: 'status-orb--error',
   },
 };
 
 export default function StatusOrb({ status, size = 12, showLabel = false }: StatusOrbProps) {
   const config = STATUS_CONFIG[status];
-  const [phase, setPhase] = useState(0);
-  const frameRef = useRef<number>(0);
-
-  useEffect(() => {
-    const animate = () => {
-      setPhase(p => (p + 1) % 360);
-      frameRef.current = requestAnimationFrame(animate);
-    };
-    frameRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, []);
-
-  // Calculate dynamic effects based on status
-  const breatheScale = status === 'idle'
-    ? 1 + Math.sin(phase * 0.02) * 0.1
-    : status === 'thinking'
-    ? 1 + Math.sin(phase * 0.08) * 0.15
-    : status === 'speaking'
-    ? 1 + Math.sin(phase * 0.12) * 0.2
-    : status === 'listening'
-    ? 1 + Math.sin(phase * 0.06) * 0.12
-    : 1 + Math.random() * 0.1; // Error - glitchy
-
-  const glowIntensity = status === 'idle'
-    ? 0.3 + Math.sin(phase * 0.02) * 0.1
-    : status === 'error'
-    ? 0.5 + Math.random() * 0.3
-    : 0.5 + Math.sin(phase * 0.05) * 0.2;
-
-  // Rotation for thinking swirl
-  const rotation = status === 'thinking' ? phase * 2 : 0;
+  const ringCount = status === 'idle' || status === 'error' ? 3 : 4;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -100,40 +59,42 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
         }}
       >
         {/* Outer glow rings */}
-        {Array.from({ length: config.ringCount }).map((_, i) => (
+        {Array.from({ length: ringCount }).map((_, i) => (
           <div
             key={i}
+            className={`status-orb-ring ${config.animClass}-ring`}
             style={{
               position: 'absolute',
               width: size * (1.5 + i * 0.8),
               height: size * (1.5 + i * 0.8),
               borderRadius: '50%',
               border: `1px solid ${config.color}`,
-              opacity: (1 - i * 0.25) * glowIntensity * (status === 'speaking' ? (1 + Math.sin((phase + i * 60) * 0.1) * 0.5) : 1),
-              transform: `scale(${1 + (status === 'speaking' ? Math.sin((phase + i * 30) * 0.08) * 0.3 : 0)})`,
-              animation: status === 'speaking' ? `ring-expand-${i} ${config.pulseSpeed}ms ease-out infinite` : undefined,
+              opacity: (1 - i * 0.25) * 0.4,
               transition: 'opacity 0.3s ease',
+              ['--ring-index' as string]: i,
             }}
           />
         ))}
 
-        {/* Inner swirl for thinking */}
+        {/* Inner swirl for thinking - pure CSS rotation */}
         {status === 'thinking' && (
           <div
+            className="status-orb-swirl"
             style={{
               position: 'absolute',
               width: size * 1.2,
               height: size * 1.2,
               borderRadius: '50%',
-              background: `conic-gradient(from ${rotation}deg, transparent, ${config.color}, transparent)`,
+              background: `conic-gradient(from 0deg, transparent, ${config.color}, transparent)`,
               opacity: 0.6,
               filter: 'blur(2px)',
             }}
           />
         )}
 
-        {/* Core orb - Enhanced Neon */}
+        {/* Core orb */}
         <div
+          className={`status-orb-core ${config.animClass}`}
           style={{
             width: size,
             height: size,
@@ -142,13 +103,11 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
               ? `radial-gradient(circle, ${config.color}, #991b1b)`
               : `radial-gradient(circle at 30% 30%, #fff, ${config.color} 40%, ${config.color}88)`,
             boxShadow: `
-              0 0 ${size * glowIntensity * 1.5}px ${config.glowColor},
-              0 0 ${size * glowIntensity * 3}px ${config.glowColor},
-              0 0 ${size * glowIntensity * 5}px ${config.glowColor}44,
+              0 0 ${size * 0.5}px ${config.glowColor},
+              0 0 ${size * 1.2}px ${config.glowColor},
+              0 0 ${size * 2}px ${config.glowColor}44,
               inset 0 0 ${size * 0.4}px rgba(255,255,255,0.5)
             `,
-            transform: `scale(${breatheScale}) ${status === 'error' ? `translate(${Math.random() * 2 - 1}px, ${Math.random() * 2 - 1}px)` : ''}`,
-            transition: status === 'error' ? 'none' : 'transform 0.1s ease-out',
             border: `1px solid ${config.color}88`,
           }}
         />
@@ -165,6 +124,7 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
             left: '30%',
             transform: 'translate(-50%, -50%)',
             filter: 'blur(1px)',
+            pointerEvents: 'none',
           }}
         />
       </div>
@@ -182,23 +142,91 @@ export default function StatusOrb({ status, size = 12, showLabel = false }: Stat
         </span>
       )}
 
-      {/* Keyframe styles */}
+      {/* All animations via CSS - zero React re-renders */}
       <style>{`
-        @keyframes ring-expand-0 {
-          0%, 100% { transform: scale(1); opacity: 0.6; }
-          50% { transform: scale(1.3); opacity: 0.2; }
+        /* Breathing animations per status */
+        .status-orb--idle {
+          animation: orb-breathe-idle 3s ease-in-out infinite;
         }
-        @keyframes ring-expand-1 {
+        .status-orb--thinking {
+          animation: orb-breathe-thinking 0.8s ease-in-out infinite;
+        }
+        .status-orb--speaking {
+          animation: orb-breathe-speaking 0.5s ease-in-out infinite;
+        }
+        .status-orb--listening {
+          animation: orb-breathe-listening 1s ease-in-out infinite;
+        }
+        .status-orb--error {
+          animation: orb-glitch 0.4s steps(2) infinite;
+        }
+
+        /* Ring pulse animations per status */
+        .status-orb--idle-ring {
+          animation: orb-ring-pulse 3s ease-in-out infinite;
+        }
+        .status-orb--thinking-ring {
+          animation: orb-ring-pulse 0.8s ease-in-out infinite;
+        }
+        .status-orb--speaking-ring {
+          animation: orb-ring-expand 0.5s ease-out infinite;
+        }
+        .status-orb--listening-ring {
+          animation: orb-ring-pulse 1s ease-in-out infinite;
+        }
+        .status-orb--error-ring {
+          animation: orb-ring-pulse 0.4s ease-in-out infinite;
+        }
+
+        /* Thinking swirl rotation */
+        .status-orb-swirl {
+          animation: orb-swirl 0.5s linear infinite;
+        }
+
+        /* Keyframes */
+        @keyframes orb-breathe-idle {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+        }
+        @keyframes orb-breathe-thinking {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.15); }
+        }
+        @keyframes orb-breathe-speaking {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.2); }
+        }
+        @keyframes orb-breathe-listening {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.12); }
+        }
+        @keyframes orb-glitch {
+          0% { transform: scale(1) translate(0, 0); }
+          25% { transform: scale(1.05) translate(1px, -1px); }
+          50% { transform: scale(0.95) translate(-1px, 1px); }
+          75% { transform: scale(1.08) translate(1px, 1px); }
+          100% { transform: scale(1) translate(0, 0); }
+        }
+        @keyframes orb-ring-pulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 0.15; transform: scale(1.1); }
+        }
+        @keyframes orb-ring-expand {
           0%, 100% { transform: scale(1); opacity: 0.4; }
-          50% { transform: scale(1.4); opacity: 0.1; }
+          50% { transform: scale(1.3); opacity: 0.1; }
         }
-        @keyframes ring-expand-2 {
-          0%, 100% { transform: scale(1); opacity: 0.3; }
-          50% { transform: scale(1.5); opacity: 0.05; }
+        @keyframes orb-swirl {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
-        @keyframes ring-expand-3 {
-          0%, 100% { transform: scale(1); opacity: 0.2; }
-          50% { transform: scale(1.6); opacity: 0; }
+
+        /* Respect reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+          .status-orb-core,
+          .status-orb-ring,
+          .status-orb-swirl {
+            animation: none !important;
+          }
         }
       `}</style>
     </div>

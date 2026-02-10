@@ -1,11 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  useSystemStatus, 
+import {
   useSmartGreeting,
   useRecentMemories,
-  useConnectionStatus,
 } from '../hooks/useRealTimeData';
+import { useSystemStatus, useConnectionStatus } from '../contexts/SystemStatusContext';
+import { SkeletonMetricCard } from './ui/Skeleton';
 
 interface SmartDashboardHomeProps {
   userName?: string;
@@ -226,10 +226,8 @@ export default function SmartDashboardHome({
   onQuickAction,
 }: SmartDashboardHomeProps) {
   const { greeting, suggestion } = useSmartGreeting(userName);
-  // Poll status more frequently for live updates (every 1.5 seconds)
-  const { status, loading: statusLoading } = useSystemStatus(1500);
+  const { status, loading: statusLoading } = useSystemStatus();
   const { memories, loading: memoriesLoading } = useRecentMemories(5);
-  // Poll connection more frequently for real latency (every 3 seconds)
   const { isOnline, latency } = useConnectionStatus();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
@@ -293,22 +291,31 @@ export default function SmartDashboardHome({
 
       {/* Metrics Grid - Real data only */}
       <div style={styles.metricsGrid}>
-        <MetricCard
-          icon="🤖"
-          label="Active Agents"
-          value={status?.agents?.active ?? 0}
-          subtext={`${status?.agents?.total ?? 0} total sessions`}
-          color="#22c55e"
-          onClick={() => onNavigate?.('agents')}
-        />
-        <MetricCard
-          icon="⚡"
-          label="Running Tasks"
-          value={status?.tasks?.running ?? 0}
-          subtext={status?.tasks?.pending ? `${status.tasks.pending} pending` : 'No pending tasks'}
-          color="#f59e0b"
-          onClick={() => onNavigate?.('tasks')}
-        />
+        {statusLoading ? (
+          <>
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+          </>
+        ) : (
+          <>
+            <MetricCard
+              icon="🤖"
+              label="Active Agents"
+              value={status?.agents?.active ?? 0}
+              subtext={`${status?.agents?.total ?? 0} total sessions`}
+              color="#22c55e"
+              onClick={() => onNavigate?.('agents')}
+            />
+            <MetricCard
+              icon="⚡"
+              label="Running Tasks"
+              value={status?.tasks?.running ?? 0}
+              subtext={status?.tasks?.pending ? `${status.tasks.pending} pending` : 'No pending tasks'}
+              color="#f59e0b"
+              onClick={() => onNavigate?.('tasks')}
+            />
+          </>
+        )}
       </div>
 
       {/* Removed: Quick Actions and Recent Memory sections */}

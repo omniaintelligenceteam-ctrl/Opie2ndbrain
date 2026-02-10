@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useSystemStatus, useConnectionStatus } from '../hooks/useRealTimeData';
+import { useSystemStatus, useConnectionStatus } from '../contexts/SystemStatusContext';
 import { useSidebarStats } from '../hooks/useSidebarData';
 
 // =============================================================================
@@ -12,7 +12,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ showDetails = false }: StatusBarProps) {
-  const { status, loading } = useSystemStatus(5000);
+  const { status, loading } = useSystemStatus();
   const { isOnline, latency } = useConnectionStatus();
 
   const getStatusConfig = () => {
@@ -150,7 +150,7 @@ const barStyles: { [key: string]: React.CSSProperties } = {
 // =============================================================================
 
 export function SystemHealthPanel() {
-  const { status, loading, error, refresh } = useSystemStatus(5000);
+  const { status, loading, error, refresh } = useSystemStatus();
   const { isOnline, latency, lastPing } = useConnectionStatus();
   const [mounted, setMounted] = useState(false);
 

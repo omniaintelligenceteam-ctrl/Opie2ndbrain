@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useSidebarTasks, Task as SidebarTask } from '@/hooks/useSidebarData';
+import { EmptyState } from './ui/EmptyState';
 
 export interface Task {
   id: string;
@@ -335,11 +336,11 @@ export default function ActiveTasksPanel({ tasks: propTasks, onTaskClick }: Acti
 
       <div style={styles.taskList}>
         {tasks.length === 0 ? (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>😴</span>
-            <h3>No active tasks</h3>
-            <p>Deploy an agent to get started</p>
-          </div>
+          <EmptyState
+            icon="📋"
+            title="No active tasks"
+            description="Deploy an agent or ask Opie to do something. Tasks will appear here as they run."
+          />
         ) : (
           <>
             {runningTasks.length > 0 && (

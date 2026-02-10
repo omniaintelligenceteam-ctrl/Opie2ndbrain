@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Calendar, Mail, Activity } from 'lucide-react';
-import { useSystemStatus, useConnectionStatus } from '../hooks/useRealTimeData';
+import { useSystemStatus, useConnectionStatus } from '../contexts/SystemStatusContext';
 
 // =============================================================================
 // CollapsibleSidebarSection - Reusable collapsible wrapper
@@ -464,7 +464,7 @@ const emailStyles: { [key: string]: React.CSSProperties } = {
 // SidebarSystemHealth - Compact system health for sidebar
 // =============================================================================
 export function SidebarSystemHealth() {
-  const { status, loading } = useSystemStatus(5000);
+  const { status, loading } = useSystemStatus();
   const { isOnline, latency } = useConnectionStatus();
 
   const services = [

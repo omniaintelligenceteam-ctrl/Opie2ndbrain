@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSidebarCrons, CronJob as SidebarCronJob } from '@/hooks/useSidebarData';
 import { apiFetch } from '@/lib/api';
+import { SkeletonCard } from './ui/Skeleton';
 
 interface CronJob {
   id: string;
@@ -577,7 +578,13 @@ export default function CronsPanel({
 
       {/* Cron List */}
       <div style={styles.cronList}>
-        {filteredCrons.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <SkeletonCard bodyLines={2} />
+            <SkeletonCard bodyLines={2} />
+            <SkeletonCard bodyLines={2} />
+          </div>
+        ) : filteredCrons.length === 0 ? (
           <div style={styles.empty}>
             <span style={styles.emptyIcon}>⏰</span>
             <h3>No Cron Jobs</h3>

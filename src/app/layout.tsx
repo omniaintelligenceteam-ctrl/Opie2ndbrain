@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { AgentPersonalityProvider } from '../contexts/AgentPersonalityContext'
 import { AgentPerformanceProvider } from '../contexts/AgentPerformanceContext'
+import { SystemStatusProvider } from '../contexts/SystemStatusContext'
 import GlobalStyles from '../components/GlobalStyles'
 
 export const metadata: Metadata = {
@@ -68,12 +69,14 @@ export default function RootLayout({
       </head>
       <body>
         <ThemeProvider>
-          <AgentPersonalityProvider>
-            <AgentPerformanceProvider>
-              <GlobalStyles />
-              {children}
-            </AgentPerformanceProvider>
-          </AgentPersonalityProvider>
+          <SystemStatusProvider>
+            <AgentPersonalityProvider>
+              <AgentPerformanceProvider>
+                <GlobalStyles />
+                {children}
+              </AgentPerformanceProvider>
+            </AgentPersonalityProvider>
+          </SystemStatusProvider>
         </ThemeProvider>
       </body>
     </html>

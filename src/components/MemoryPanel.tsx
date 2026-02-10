@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useVisibilityRefresh } from '@/hooks/useRealTimeData';
+import { SkeletonList } from './ui/Skeleton';
+import { EmptyState } from './ui/EmptyState';
 
 interface MemoryFile {
   name: string;
@@ -300,24 +302,36 @@ export default function MemoryPanel({ onFileSelect }: MemoryPanelProps) {
             </button>
           )}
           
-          {isLoading && <div style={styles.loading}>Loading...</div>}
+          {isLoading && (
+            <div style={{ padding: '8px 0' }}>
+              <SkeletonList count={6} rowHeight={36} gap={8} />
+            </div>
+          )}
           
           <div style={styles.fileList}>
-            {files.map((file, i) => (
-              <div
-                key={i}
-                onClick={() => handleFileClick(file)}
-                style={styles.fileItem}
-              >
-                <span style={styles.fileIcon}>
-                  {file.type === 'directory' ? '📁' : getCategoryIcon(file.category)}
-                </span>
-                <span style={styles.fileName}>{file.name}</span>
-                <span style={styles.fileMeta}>
-                  {file.type === 'file' && formatFileSize(file.size)}
-                </span>
-              </div>
-            ))}
+            {!isLoading && files.length === 0 ? (
+              <EmptyState
+                icon="🧠"
+                title="Your knowledge base is empty"
+                description="Start chatting with Opie and important facts, preferences, and decisions will be saved here automatically."
+              />
+            ) : (
+              files.map((file, i) => (
+                <div
+                  key={i}
+                  onClick={() => handleFileClick(file)}
+                  style={styles.fileItem}
+                >
+                  <span style={styles.fileIcon}>
+                    {file.type === 'directory' ? '📁' : getCategoryIcon(file.category)}
+                  </span>
+                  <span style={styles.fileName}>{file.name}</span>
+                  <span style={styles.fileMeta}>
+                    {file.type === 'file' && formatFileSize(file.size)}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

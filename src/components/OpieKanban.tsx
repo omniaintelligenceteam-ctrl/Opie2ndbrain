@@ -7,7 +7,8 @@ import { useSounds } from '../hooks/useSounds';
 import { useBottomNav, useResponsive, useHaptic, useLazyLoad } from '../hooks/useMobileGestures';
 import { useConversations } from '@/hooks/useConversations';
 import { Conversation } from '@/types/conversation';
-import { useNotifications, useToast, useSystemStatus } from '../hooks/useRealTimeData';
+import { useNotifications, useToast } from '../hooks/useRealTimeData';
+import { useSystemStatus } from '../contexts/SystemStatusContext';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
 import { useActiveAgents } from '../hooks/useAgentSessions';
@@ -1381,7 +1382,7 @@ export default function OpieKanban(): React.ReactElement {
   const runningTasksCount = tasks.filter(t => t.status === 'running').length;
 
   // Get live status from the hook (poll every 3 seconds for real-time updates)
-  const { status: liveStatus, loading: statusLoading } = useSystemStatus(3000);
+  const { status: liveStatus, loading: statusLoading } = useSystemStatus();
   
   // Mobile Header - enhanced with live status
   const MobileHeaderComponent = () => {

@@ -2,7 +2,7 @@
 // Consolidated gateway status hook — replaces competing polls in OpieKanban
 'use client';
 import { useCallback } from 'react';
-import { useSystemStatus } from './useRealTimeData';
+import { useSystemStatus } from '../contexts/SystemStatusContext';
 import { useActiveAgents } from './useAgentSessions';
 
 export interface GatewayStatusResult {
@@ -24,7 +24,7 @@ export function useGatewayStatus(
   statusIntervalMs = 3000,
   agentIntervalMs = 5000
 ): GatewayStatusResult {
-  const { status: liveStatus, loading: statusLoading } = useSystemStatus(statusIntervalMs);
+  const { status: liveStatus, loading: statusLoading } = useSystemStatus();
   const {
     activeAgents: realActiveAgents,
     activeCount: realActiveCount,

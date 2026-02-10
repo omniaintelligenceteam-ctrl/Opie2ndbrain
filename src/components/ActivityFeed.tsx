@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
+import { SkeletonList } from './ui/Skeleton';
+import { EmptyState } from './ui/EmptyState';
 
 interface ActivityItem {
   id: string;
@@ -142,22 +144,21 @@ export default function ActivityFeed({
       {/* Feed */}
       <div ref={feedRef} style={styles.feed}>
         {loading && activity.length === 0 ? (
-          <div style={styles.loadingState}>
-            <div style={styles.spinner} />
-            <span>Loading activity...</span>
+          <div style={{ padding: '16px' }}>
+            <SkeletonList count={5} rowHeight={40} gap={12} />
           </div>
         ) : error && activity.length === 0 ? (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>📭</span>
-            <p>No recent activity</p>
-            <p style={styles.emptySubtext}>Activity will appear here as you interact with Opie</p>
-          </div>
+          <EmptyState
+            icon="📭"
+            title="Unable to load activity"
+            description="Check your connection and try again. Activity will appear here as you interact with Opie."
+          />
         ) : activity.length === 0 ? (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>🌟</span>
-            <p>All quiet</p>
-            <p style={styles.emptySubtext}>Start a conversation or run a task to see activity</p>
-          </div>
+          <EmptyState
+            icon="🌟"
+            title="All quiet"
+            description="Start a conversation or deploy an agent to see activity here. Everything Opie does will show up in real-time."
+          />
         ) : (
           <div style={styles.timeline}>
             {activity.map((item, index) => (
