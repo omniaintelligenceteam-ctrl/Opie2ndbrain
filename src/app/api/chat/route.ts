@@ -1047,77 +1047,48 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? EXECUTE_PROMPT : PLAN_PROMPT;
 
-  // EXECUTE MODE: Generate execution plan (approval gate)
+  // EXECUTE MODE: Route directly through OpenClaw for tool execution
   console.log('[Chat] EXECUTE mode entered, interactionMode:', interactionMode);
   if (interactionMode === 'execute') {
-    // Option A: Generate execution plan for approval (new approval gate system) - default
-    const useApprovalGate = process.env.EXECUTE_APPROVAL_GATE !== 'false';
-
-    if (useApprovalGate) {
-      console.log('[Chat] EXECUTE mode: Generating execution plan for approval');
+    // Route through OpenClaw gateway (handles tools natively)
+    if (shouldUseGateway()) {
+      console.log('[Chat] EXECUTE mode: Using OpenClaw gateway directly');
       
-      // Build native message array (proper multi-turn format)
       const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
         role: m.role as 'user' | 'assistant',
         content: m.text || m.content || ''
       }));
-      
-      console.log('[Chat] Native message array - history count:', historyMessages.length);
 
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        ...historyMessages,
+      const gatewayMessages: ChatMessage[] = [
+        ...historyMessages.map((msg: any) => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content,
+        })),
         { role: 'user', content: userMessage }
       ];
 
-      // Generate execution plan
-      const planResult = await generateExecutionPlan(messages, sessionId);
-      
-      if (!planResult.success) {
-        console.error('[Chat] Failed to generate execution plan:', planResult.error);
-        return Response.json({ 
-          error: 'Failed to generate execution plan', 
-          details: planResult.error 
-        }, { status: 500 });
+      try {
+        const stream = await gatewayChatClient.createStreamingCompletion({
+          messages: gatewayMessages,
+          model: "openclaw:main",
+          stream: true,
+          max_tokens: 4096,
+        });
+
+        return createStreamResponse(stream);
+      } catch (error) {
+        console.error('[Chat] OpenClaw gateway failed:', error);
+        // Fall through to local execution below
       }
-
-      // Store the plan
-      const executionPlan = ExecutionPlanStore.create({
-        sessionId,
-        message: planResult.plan!.message,
-        plannedActions: planResult.plan!.plannedActions,
-        toolCalls: planResult.plan!.toolCalls,
-      });
-
-      console.log(`[Chat] Created execution plan ${executionPlan.id} with ${executionPlan.toolCalls.length} tool calls`);
-
-      // Return plan for approval
-      return Response.json({
-        pendingPlan: {
-          id: executionPlan.id,
-          message: executionPlan.message,
-          plannedActions: executionPlan.plannedActions,
-          status: executionPlan.status,
-          createdAt: executionPlan.createdAt,
-          requiresApproval: true,
-          toolCallCount: executionPlan.toolCalls.length,
-        }
-      });
     }
-    
-    // Option B: Direct execution without approval (fallback when EXECUTE_APPROVAL_GATE=false)
-    const useLocalExecution = true; // Keep the existing direct execution as fallback
 
-    if (useLocalExecution) {
-      console.log('[Chat] EXECUTE mode: Using direct tool execution (no approval)');
-      
-      // Build native message array (proper multi-turn format)
+    // Fallback: Local execution with tools
+    console.log('[Chat] EXECUTE mode: Using local tool execution');
+    {
       const historyMessages = (conversationHistory || []).slice(-10).map((m: any) => ({
         role: m.role as 'user' | 'assistant',
         content: m.text || m.content || ''
       }));
-      
-      console.log('[Chat] Native message array - history count:', historyMessages.length);
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -1127,82 +1098,6 @@ export async function POST(req: NextRequest) {
 
       const generator = streamOllamaWithTools(messages, MODELS.kimi.model);
       return createStreamResponse(generator);
-    }
-
-    // Option B: Remote execution via OpenClaw (fallback when EXECUTE_LOCAL=false)
-    console.log('[Chat] EXECUTE mode: Using OpenClaw delegation');
-    const requestId = crypto.randomUUID();
-
-    // Check if Supabase is configured
-    if (!supabaseAdmin) {
-      return Response.json({ error: 'Supabase not configured for EXECUTE mode' }, { status: 503 });
-    }
-
-    try {
-      // 1. Write pending task to Supabase
-      await supabaseAdmin.from('opie_requests').insert({
-        request_id: requestId,
-        user_message: message,
-        status: 'pending',
-        source: 'web_app',
-        created_at: new Date().toISOString(),
-      });
-
-      // 2. Build task with conversation context
-      let taskMessage = `[WEB APP REQUEST] User says: "${message}"`;
-
-      if (conversationHistory && conversationHistory.length > 0) {
-        const context = conversationHistory
-          .slice(-5) // Last 5 messages
-          .map((m: { role: string; text?: string; content?: string }) => `${m.role}: ${m.text || m.content || ''}`)
-          .join('\n');
-        taskMessage += `\n\nCONVERSATION CONTEXT:\n${context}`;
-      }
-
-      taskMessage += `\n\nExecute with full tools. Write final response to Supabase request_id: ${requestId}`;
-
-      // Spawn task to me (agent:main)
-      const spawnRes = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-        },
-        body: JSON.stringify({
-          tool: 'sessions_spawn',
-          args: {
-            task: taskMessage,
-            label: `webapp:${requestId}`,
-            timeoutSeconds: 180,
-            cleanup: 'keep',
-          },
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-
-      const spawnData = await spawnRes.json();
-
-      // 3. Update with session info
-      if (spawnData.ok && spawnData.result?.sessionKey) {
-        await supabaseAdmin.from('opie_requests').update({
-          session_id: spawnData.result.sessionKey,
-        }).eq('request_id', requestId);
-      }
-
-      // 4. Return async response for polling
-      return Response.json({
-        mode: 'async',
-        request_id: requestId,
-        poll_url: `/api/chat/poll?request_id=${requestId}`,
-        message: 'Task sent to G - checking for result...',
-      });
-
-    } catch (error) {
-      console.error('[Chat] EXECUTE spawn error:', error);
-      return Response.json({
-        error: 'Failed to spawn task',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 });
     }
   }
 
