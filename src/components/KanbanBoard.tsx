@@ -5,6 +5,10 @@ import React, { useState, useEffect } from 'react';
 interface KanbanTask {
   id: string;
   text: string;
+  column_id: 'todo' | 'progress' | 'done';
+  position: number;
+  created_at: string;
+  updated_at: string;
 }
 
 interface KanbanColumn {
@@ -21,12 +25,13 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>, columnId: string) => void;
   onDeleteTask: (columnId: string, taskId: string) => void;
+  onAddTask: (columnId: string, text: string) => void;
 }
 
 const MAX_VISIBLE_ITEMS = 8;
 
 /**
- * Individual Kanban column with drag-drop and delete functionality
+ * Individual Kanban column with drag-drop, delete, and add functionality
  */
 function KanbanColumnComponent({ 
   column, 
@@ -35,10 +40,13 @@ function KanbanColumnComponent({
   onDragOver,
   onDrop,
   onDeleteTask,
+  onAddTask,
 }: KanbanColumnProps): React.ReactElement {
   const [showAll, setShowAll] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [isAddingTask, setIsAddingTask] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -58,10 +66,10 @@ function KanbanColumnComponent({
     }
   };
 
-  const getTimestamp = (index: number): string => {
+  const getTimestamp = (task: KanbanTask): string => {
     if (!mounted) return '...';
-    const now = Date.now();
-    const date = new Date(now - (visibleTasks.length - index) * 86400000 * (column.id === 'done' ? 2 : column.id === 'progress' ? 1 : 0.5));
+    
+    const date = new Date(task.created_at);
     const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
     if (column.id === 'done') return `Completed ${formatted}`;
@@ -82,6 +90,25 @@ function KanbanColumnComponent({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     setIsDragOver(false);
     onDrop(e, column.id);
+  };
+
+  const handleAddTask = async () => {
+    if (newTaskText.trim()) {
+      setIsAddingTask(true);
+      try {
+        await onAddTask(column.id, newTaskText.trim());
+        setNewTaskText('');
+      } finally {
+        setIsAddingTask(false);
+      }
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddTask();
+    }
   };
 
   return (
@@ -116,6 +143,36 @@ function KanbanColumnComponent({
         }}>
           {column.tasks.length}
         </span>
+      </div>
+
+      {/* Add Task Input */}
+      <div style={styles.addTaskContainer}>
+        <input
+          type="text"
+          placeholder={`Add task to ${column.title.toLowerCase()}...`}
+          value={newTaskText}
+          onChange={(e) => setNewTaskText(e.target.value)}
+          onKeyPress={handleKeyPress}
+          disabled={isAddingTask}
+          style={{
+            ...styles.addTaskInput,
+            borderColor: `${column.color}40`,
+          }}
+          className="add-task-input"
+        />
+        {newTaskText.trim() && (
+          <button
+            onClick={handleAddTask}
+            disabled={isAddingTask}
+            style={{
+              ...styles.addTaskButton,
+              background: column.color,
+            }}
+            className="add-task-button"
+          >
+            {isAddingTask ? '⏳' : '➕'}
+          </button>
+        )}
       </div>
       
       {hiddenCount > 0 && !showAll && (
@@ -173,7 +230,7 @@ function KanbanColumnComponent({
             </button>
             <span style={styles.kanbanTaskText}>{task.text}</span>
             <span style={styles.taskTimestamp}>
-              {getTimestamp(index)}
+              {getTimestamp(task)}
             </span>
             <div style={styles.dragHandle}>⋮⋮</div>
           </div>
@@ -206,71 +263,90 @@ export interface KanbanBoardProps {
   isMobile?: boolean;
 }
 
-// Generate unique IDs for tasks
-const generateId = () => `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-// Default columns with IDs
-const createDefaultColumns = (): KanbanColumn[] => [
-  { 
-    id: 'todo', 
-    title: 'To Do', 
-    color: '#f59e0b', 
-    tasks: [
-      { id: generateId(), text: 'Memory Integration with Vector DB' },
-      { id: generateId(), text: 'HeyGen Avatar Integration' },
-      { id: generateId(), text: 'Email Automation Pipeline' },
-      { id: generateId(), text: 'Voice Recognition Improvements' },
-      { id: generateId(), text: 'Mobile PWA Optimization' },
-      { id: generateId(), text: 'Agent Performance Analytics' },
-      { id: generateId(), text: 'Security Audit & Compliance' },
-    ]
-  },
-  { 
-    id: 'progress', 
-    title: 'In Progress', 
-    color: '#667eea', 
-    tasks: [
-      { id: generateId(), text: 'Voice Chat Enhancement' },
-      { id: generateId(), text: 'Agent Dashboard Redesign' },
-      { id: generateId(), text: 'Real-time Orchestration View' },
-      { id: generateId(), text: 'Kanban Board Implementation' },
-    ]
-  },
-  { 
-    id: 'done', 
-    title: 'Done', 
-    color: '#22c55e', 
-    tasks: [
-      { id: generateId(), text: 'Dashboard UI Design System' },
-      { id: generateId(), text: 'Chat API Integration' },
-      { id: generateId(), text: 'TTS Integration with ElevenLabs' },
-      { id: generateId(), text: 'Skill Catalog Architecture' },
-      { id: generateId(), text: 'Authentication System' },
-      { id: generateId(), text: 'Database Schema Design' },
-      { id: generateId(), text: 'Docker Containerization' },
-      { id: generateId(), text: 'CI/CD Pipeline Setup' },
-      { id: generateId(), text: 'Initial Agent Framework' },
-      { id: generateId(), text: 'Basic Voice Commands' },
-      { id: generateId(), text: 'Settings Panel' },
-      { id: generateId(), text: 'Navigation System' },
-      { id: generateId(), text: 'Theme System Implementation' },
-      { id: generateId(), text: 'Mobile Responsive Design' },
-      { id: generateId(), text: 'Error Handling Framework' },
-    ]
-  }
-];
-
 /**
- * Kanban board component with drag-drop and delete functionality
+ * Kanban board component with drag-drop, delete, add, and persistence
  */
 export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.ReactElement {
-  const [columns, setColumns] = useState<KanbanColumn[]>(createDefaultColumns);
+  const [columns, setColumns] = useState<KanbanColumn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [draggedTask, setDraggedTask] = useState<{ taskId: string; fromColumn: string } | null>(null);
 
+  // API call functions
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/kanban');
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch tasks');
+      }
+      
+      setColumns(data.columns);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+      console.error('Error fetching tasks:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addTask = async (columnId: string, text: string): Promise<KanbanTask> => {
+    const response = await fetch('/api/kanban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, column_id: columnId }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to add task');
+    }
+    
+    return data.task;
+  };
+
+  const updateTask = async (taskId: string, updates: Partial<KanbanTask>): Promise<KanbanTask> => {
+    const response = await fetch('/api/kanban', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId, ...updates }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update task');
+    }
+    
+    return data.task;
+  };
+
+  const deleteTask = async (taskId: string): Promise<void> => {
+    const response = await fetch(`/api/kanban?id=${taskId}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to delete task');
+    }
+  };
+
+  // Load tasks on mount
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  // Event handlers
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string, columnId: string) => {
     setDraggedTask({ taskId, fromColumn: columnId });
     e.dataTransfer.effectAllowed = 'move';
-    // Add visual feedback
     const target = e.target as HTMLElement;
     target.style.opacity = '0.5';
   };
@@ -280,62 +356,133 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, toColumnId: string) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, toColumnId: string) => {
     e.preventDefault();
     
-    if (!draggedTask) return;
-    
-    const { taskId, fromColumn } = draggedTask;
-    
-    if (fromColumn === toColumnId) {
+    if (!draggedTask || draggedTask.fromColumn === toColumnId) {
       setDraggedTask(null);
       return;
     }
 
-    setColumns(prevColumns => {
-      const newColumns = [...prevColumns];
-      
-      // Find source and destination columns
-      const sourceColIndex = newColumns.findIndex(c => c.id === fromColumn);
-      const destColIndex = newColumns.findIndex(c => c.id === toColumnId);
-      
-      if (sourceColIndex === -1 || destColIndex === -1) return prevColumns;
-      
-      // Find and remove task from source
-      const taskIndex = newColumns[sourceColIndex].tasks.findIndex(t => t.id === taskId);
-      if (taskIndex === -1) return prevColumns;
-      
-      const [task] = newColumns[sourceColIndex].tasks.splice(taskIndex, 1);
-      
-      // Add task to destination
-      newColumns[destColIndex].tasks.push(task);
-      
-      return newColumns;
-    });
+    const { taskId, fromColumn } = draggedTask;
+
+    // Optimistic UI update
+    const sourceColIndex = columns.findIndex(c => c.id === fromColumn);
+    const destColIndex = columns.findIndex(c => c.id === toColumnId);
     
+    if (sourceColIndex === -1 || destColIndex === -1) {
+      setDraggedTask(null);
+      return;
+    }
+
+    const newColumns = [...columns];
+    const taskIndex = newColumns[sourceColIndex].tasks.findIndex(t => t.id === taskId);
+    
+    if (taskIndex === -1) {
+      setDraggedTask(null);
+      return;
+    }
+
+    const [task] = newColumns[sourceColIndex].tasks.splice(taskIndex, 1);
+    const updatedTask = { ...task, column_id: toColumnId as 'todo' | 'progress' | 'done' };
+    newColumns[destColIndex].tasks.push(updatedTask);
+    
+    // Update UI immediately
+    setColumns(newColumns);
     setDraggedTask(null);
+
+    // Sync with backend
+    try {
+      await updateTask(taskId, { 
+        column_id: toColumnId as 'todo' | 'progress' | 'done',
+        position: newColumns[destColIndex].tasks.length 
+      });
+    } catch (err) {
+      console.error('Error moving task:', err);
+      // Revert optimistic update on error
+      fetchTasks();
+    }
   };
 
-  const handleDeleteTask = (columnId: string, taskId: string) => {
-    setColumns(prevColumns => {
-      return prevColumns.map(column => {
+  const handleDeleteTask = async (columnId: string, taskId: string) => {
+    // Optimistic UI update
+    const newColumns = columns.map(column => {
+      if (column.id === columnId) {
+        return {
+          ...column,
+          tasks: column.tasks.filter(task => task.id !== taskId),
+        };
+      }
+      return column;
+    });
+    
+    setColumns(newColumns);
+
+    // Sync with backend
+    try {
+      await deleteTask(taskId);
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      // Revert optimistic update on error
+      fetchTasks();
+    }
+  };
+
+  const handleAddTask = async (columnId: string, text: string) => {
+    try {
+      const newTask = await addTask(columnId, text);
+      
+      // Update UI with the new task
+      const newColumns = columns.map(column => {
         if (column.id === columnId) {
           return {
             ...column,
-            tasks: column.tasks.filter(task => task.id !== taskId),
+            tasks: [...column.tasks, newTask],
           };
         }
         return column;
       });
-    });
+      
+      setColumns(newColumns);
+    } catch (err) {
+      console.error('Error adding task:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add task');
+    }
   };
+
+  if (loading) {
+    return (
+      <div style={styles.kanbanSection}>
+        <h2 style={styles.kanbanTitle}>📋 Project Board</h2>
+        <div style={styles.loadingContainer}>
+          <div style={styles.loadingSpinner}>⏳</div>
+          <span style={styles.loadingText}>Loading tasks...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.kanbanSection}>
+        <h2 style={styles.kanbanTitle}>📋 Project Board</h2>
+        <div style={styles.errorContainer}>
+          <div style={styles.errorIcon}>⚠️</div>
+          <span style={styles.errorText}>Error: {error}</span>
+          <button onClick={fetchTasks} style={styles.retryButton}>
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.kanbanSection}>
       <h2 style={styles.kanbanTitle}>
         📋 Project Board
       </h2>
-      <p style={styles.kanbanSubtitle}>Drag tasks between columns • Click × to delete</p>
+      <p style={styles.kanbanSubtitle}>Drag tasks between columns • Click × to delete • Add new tasks in each column</p>
       <div style={styles.kanbanBoard}>
         {columns.map((column) => (
           <KanbanColumnComponent
@@ -346,6 +493,7 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onDeleteTask={handleDeleteTask}
+            onAddTask={handleAddTask}
           />
         ))}
       </div>
@@ -372,6 +520,18 @@ export function KanbanBoard({ isMobile = false }: KanbanBoardProps): React.React
         .delete-button-hover:hover {
           background: #ef4444 !important;
           color: white !important;
+        }
+        .add-task-input {
+          border: 1px solid rgba(255,255,255,0.1);
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .add-task-input:focus {
+          border-color: rgba(255,255,255,0.3);
+          box-shadow: 0 0 0 2px rgba(255,255,255,0.1);
+          outline: none;
+        }
+        .add-task-button:hover {
+          transform: scale(1.1);
         }
       `}</style>
     </div>
@@ -427,6 +587,36 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '0.75rem',
     fontWeight: 700,
     border: '1px solid rgba(255,255,255,0.1)',
+  },
+  addTaskContainer: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '16px',
+    alignItems: 'flex-start',
+  },
+  addTaskInput: {
+    flex: 1,
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '0.85rem',
+    fontFamily: 'inherit',
+  },
+  addTaskButton: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    border: 'none',
+    color: 'white',
+    fontSize: '14px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'transform 0.2s ease',
+    flexShrink: 0,
   },
   kanbanTasks: {
     display: 'flex',
@@ -551,6 +741,48 @@ const styles: { [key: string]: React.CSSProperties } = {
   collapseIcon: {
     fontSize: '0.7rem',
     color: '#22c55e',
+  },
+  loadingContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    gap: '12px',
+  },
+  loadingSpinner: {
+    fontSize: '1.5rem',
+    animation: 'pulse 2s infinite',
+  },
+  loadingText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: '0.9rem',
+  },
+  errorContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    gap: '12px',
+    flexDirection: 'column',
+  },
+  errorIcon: {
+    fontSize: '2rem',
+  },
+  errorText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '0.9rem',
+    textAlign: 'center',
+  },
+  retryButton: {
+    background: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px 16px',
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+    marginTop: '8px',
+    transition: 'background 0.2s ease',
   },
 };
 

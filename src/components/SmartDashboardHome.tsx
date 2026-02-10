@@ -5,7 +5,6 @@ import {
   useRecentMemories,
 } from '../hooks/useRealTimeData';
 import { useSystemStatus, useConnectionStatus } from '../contexts/SystemStatusContext';
-import { SkeletonMetricCard } from './ui/Skeleton';
 
 interface SmartDashboardHomeProps {
   userName?: string;
@@ -289,36 +288,7 @@ export default function SmartDashboardHome({
         <ConnectionPill label="Network" connected={isOnline} />
       </div>
 
-      {/* Metrics Grid - Real data only */}
-      <div style={styles.metricsGrid}>
-        {statusLoading ? (
-          <>
-            <SkeletonMetricCard />
-            <SkeletonMetricCard />
-          </>
-        ) : (
-          <>
-            <MetricCard
-              icon="🤖"
-              label="Active Agents"
-              value={status?.agents?.active ?? 0}
-              subtext={`${status?.agents?.total ?? 0} total sessions`}
-              color="#22c55e"
-              onClick={() => onNavigate?.('agents')}
-            />
-            <MetricCard
-              icon="⚡"
-              label="Running Tasks"
-              value={status?.tasks?.running ?? 0}
-              subtext={status?.tasks?.pending ? `${status.tasks.pending} pending` : 'No pending tasks'}
-              color="#f59e0b"
-              onClick={() => onNavigate?.('tasks')}
-            />
-          </>
-        )}
-      </div>
-
-      {/* Removed: Quick Actions and Recent Memory sections */}
+      {/* Removed: Metric cards moved to Agent Stats panel in dashboard right column */}
 
     </div>
   );

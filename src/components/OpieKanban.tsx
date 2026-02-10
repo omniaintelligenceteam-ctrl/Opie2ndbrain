@@ -11,15 +11,20 @@ import { useNotifications, useToast } from '../hooks/useRealTimeData';
 import { useSystemStatus } from '../contexts/SystemStatusContext';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
-import { useActiveAgents } from '../hooks/useAgentSessions';
+import { useActiveAgents, useAgentSessions } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
+import { useVoiceEngine } from '../hooks/useVoiceEngine';
+import { KanbanBoard } from './KanbanBoard';
 
 // ─── Always-visible / critical-path components (loaded eagerly) ──────────────
 import CommandPalette, { ShortcutsHelp } from './CommandPalette';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import BottomSheet, { FloatingActionButton, CollapsibleSection, MobileCard } from './BottomSheet';
-import FloatingChat, { ChatMessage, InteractionMode, AIModel, AI_MODELS } from './FloatingChat';
+import { ChatMessage, InteractionMode, AIModel, PendingExecutionPlan } from '@/types/chat';
+import ConversationSidebar, { sidebarAnimationStyles } from './ConversationSidebar';
+import OpieAvatar from './OpieAvatar';
+import { Camera, Mic } from 'lucide-react';
 import { NotificationBell, NotificationProvider } from './NotificationCenter';
 import { StatusBar, SystemHealthPanel, LiveAgentCount, LiveTaskCount } from './StatusIndicators';
 import StatusOrb from './StatusOrb';
@@ -28,7 +33,7 @@ import StatusOrb from './StatusOrb';
 const AgentsPanel = lazy(() => import('./AgentsPanel'));
 const SkillsPanel = lazy(() => import('./SkillsPanel'));
 const ActiveTasksPanel = lazy(() => import('./ActiveTasksPanel'));
-const OrchestrationStatus = lazy(() => import('./OrchestrationStatus'));
+const AgentCommandCenter = lazy(() => import('./AgentCommandCenter'));
 const CronsPanel = lazy(() => import('./CronsPanel'));
 const ActivityFeed = lazy(() => import('./ActivityFeed'));
 const MemoryPanel = lazy(() => import('./MemoryPanel'));
@@ -38,6 +43,8 @@ const SmartDashboardHome = lazy(() => import('./SmartDashboardHome'));
 const OpieStatusWidget = lazy(() => import('./OpieStatusWidget'));
 const SidebarWidgets = lazy(() => import('./SidebarWidgets'));
 const AgentLeaderboard = lazy(() => import('./AgentLeaderboard'));
+const OrganizationChart = lazy(() => import('./OrganizationChart'));
+const ModelCounsel = lazy(() => import('./ModelCounsel'));
 const ContextWindowVisualizer = lazy(() => import('./ContextWindowVisualizer'));
 const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
 const ParticleBackground = lazy(() => import('./ParticleBackground'));
@@ -81,6 +88,68 @@ function saveSidebarState(expanded: boolean): void {
   }
 }
 
+// AI model options (was in FloatingChat, now here since we removed that import)
+const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
+  { id: 'kimi', name: 'Kimi K2', description: 'Default - fast and capable' },
+  { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
+  { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
+  { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
+];
+
+// Daily motivational quotes (rotates by day of year)
+const DAILY_QUOTES = [
+  { text: 'The best way to predict the future is to create it.', author: 'Peter Drucker' },
+  { text: 'Done is better than perfect.', author: 'Sheryl Sandberg' },
+  { text: 'Move fast and break things.', author: 'Mark Zuckerberg' },
+  { text: 'Stay hungry, stay foolish.', author: 'Steve Jobs' },
+  { text: 'Simplicity is the ultimate sophistication.', author: 'Leonardo da Vinci' },
+  { text: 'Ship it.', author: 'Reid Hoffman' },
+  { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
+  { text: 'Think big, start small, act fast.', author: 'Anon' },
+  { text: 'Execution eats strategy for breakfast.', author: 'Peter Drucker' },
+  { text: 'Build something people want.', author: 'Y Combinator' },
+  { text: 'Your margin is my opportunity.', author: 'Jeff Bezos' },
+  { text: 'Be so good they can\'t ignore you.', author: 'Steve Martin' },
+  { text: 'Ideas are easy. Implementation is hard.', author: 'Guy Kawasaki' },
+  { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
+  { text: 'What gets measured gets managed.', author: 'Peter Drucker' },
+  { text: 'Doubt kills more dreams than failure ever will.', author: 'Suzy Kassem' },
+  { text: 'Every expert was once a beginner.', author: 'Helen Hayes' },
+  { text: 'Winners are not afraid of losing.', author: 'Robert Kiyosaki' },
+  { text: 'Make each day your masterpiece.', author: 'John Wooden' },
+  { text: 'Hustle beats talent when talent doesn\'t hustle.', author: 'Ross Simmonds' },
+  { text: 'Fortune favors the bold.', author: 'Virgil' },
+  { text: 'Work hard in silence, let success be your noise.', author: 'Frank Ocean' },
+  { text: 'Dream big. Start small. Act now.', author: 'Robin Sharma' },
+  { text: 'The harder I work, the luckier I get.', author: 'Gary Player' },
+  { text: 'Success is not final, failure is not fatal.', author: 'Winston Churchill' },
+  { text: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { text: 'Action is the foundational key to all success.', author: 'Pablo Picasso' },
+  { text: 'Innovation distinguishes between a leader and a follower.', author: 'Steve Jobs' },
+  { text: 'Strive not to be a success, but to be of value.', author: 'Albert Einstein' },
+  { text: 'It always seems impossible until it\'s done.', author: 'Nelson Mandela' },
+  { text: 'The best time to plant a tree was 20 years ago. The second best time is now.', author: 'Chinese Proverb' },
+];
+
+function getDailyQuote() {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  return DAILY_QUOTES[dayOfYear % DAILY_QUOTES.length];
+}
+
+// Weather code to emoji/description mapping
+function getWeatherInfo(code: number): { emoji: string; desc: string } {
+  if (code === 0) return { emoji: '☀️', desc: 'Clear' };
+  if (code <= 3) return { emoji: '⛅', desc: 'Partly Cloudy' };
+  if (code <= 48) return { emoji: '🌫️', desc: 'Foggy' };
+  if (code <= 57) return { emoji: '🌦️', desc: 'Drizzle' };
+  if (code <= 67) return { emoji: '🌧️', desc: 'Rain' };
+  if (code <= 77) return { emoji: '🌨️', desc: 'Snow' };
+  if (code <= 82) return { emoji: '🌧️', desc: 'Showers' };
+  if (code <= 86) return { emoji: '🌨️', desc: 'Snow Showers' };
+  if (code >= 95) return { emoji: '⛈️', desc: 'Thunderstorm' };
+  return { emoji: '🌤️', desc: 'Fair' };
+}
+
 // ViewId is now imported from useKeyboardShortcuts
 
 interface NavItem {
@@ -91,12 +160,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'dashboard', label: 'Dashboard', icon: '💬' },
+  { id: 'board', label: 'Project Board', icon: '📋' },
   { id: 'agents', label: 'Agents', icon: '🤖', showCount: true },
+  { id: 'organization', label: 'Organization', icon: '🏛️' },
   { id: 'skills', label: 'Skills', icon: '🛠️' },
-  { id: 'tasks', label: 'Tasks', icon: '📋', showCount: true },
+  { id: 'tasks', label: 'Tasks', icon: '✅', showCount: true },
   { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
   { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { id: 'model-counsel', label: 'Model Counsel', icon: '🎯' },
   { id: 'context', label: 'Context', icon: '🧠' },
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '📁' },
@@ -349,14 +421,14 @@ function KanbanColumn({
 export default function OpieKanban(): React.ReactElement {
   // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
-  const [micOn, setMicOn] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('kimi');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  
+  // Pending execution plan state
+  const [pendingPlan, setPendingPlan] = useState<PendingExecutionPlan | null>(null);
 
   // Handle model switching
   const handleModelChange = async (model: AIModel) => {
@@ -395,6 +467,7 @@ export default function OpieKanban(): React.ReactElement {
   // Use real-time agent data from gateway (poll every 5 seconds, only when on agents/dashboard view)
   const shouldPollAgents = activeView === 'agents' || activeView === 'dashboard';
   const { activeAgents: realActiveAgents, activeCount: realActiveCount, refresh: refreshAgents } = useActiveAgents(5000, shouldPollAgents);
+  const { nodes: agentNodes } = useAgentSessions(5000, shouldPollAgents);
   // Local state for agents deployed from this UI (merged with real data)
   const [localActiveAgents, setLocalActiveAgents] = useState<string[]>([]);
   // Merge real and local active agents (deduplicated)
@@ -425,10 +498,6 @@ export default function OpieKanban(): React.ReactElement {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   
-  const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const micOnRef = useRef(false);
-  const recognitionRestartingRef = useRef(false);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
   
@@ -460,6 +529,41 @@ export default function OpieKanban(): React.ReactElement {
   // State for secondary chat windows (interactive pinned chats)
   const [pinnedInputs, setPinnedInputs] = useState<Record<string, string>>({});
   const [pinnedLoading, setPinnedLoading] = useState<Record<string, boolean>>({});
+
+  // Dashboard chat: conversation sidebar, image upload, resizable panel
+  const [showDashboardSidebar, setShowDashboardSidebar] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [rightPanelWidth, setRightPanelWidth] = useState(isTablet ? 340 : 420);
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
+  const dashboardFileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUp = useRef(false);
+
+  // Smart auto-scroll: scroll to bottom on new messages unless user scrolled up
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // Consider "at bottom" if within 80px of the bottom
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    isUserScrolledUp.current = !atBottom;
+  }, []);
+
+  // Command center header: weather + daily quote
+  const [weather, setWeather] = useState<{ temp: number; emoji: string; desc: string } | null>(null);
+  const dailyQuote = useMemo(() => getDailyQuote(), []);
+
+  useEffect(() => {
+    // Fetch Scottsdale, AZ weather from Open-Meteo (free, no API key)
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=33.49&longitude=-111.93&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=America%2FPhoenix')
+      .then(res => res.json())
+      .then(data => {
+        if (data.current) {
+          const info = getWeatherInfo(data.current.weather_code);
+          setWeather({ temp: Math.round(data.current.temperature_2m), ...info });
+        }
+      })
+      .catch(() => {}); // Silently fail if offline
+  }, []);
 
   // Use conversation messages instead of local state
   const messages = activeConversation?.messages || [];
@@ -542,285 +646,289 @@ export default function OpieKanban(): React.ReactElement {
     saveSidebarState(newState);
   };
 
-  const isSpeakingRef = useRef(false);
-  const isLoadingRef = useRef(false);
-  
-  // Silence detection refs - send after 3.5s of silence (increased for natural conversation)
-  const SILENCE_TIMEOUT_MS = 3000;
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingTranscriptRef = useRef('');
-  const accumulatedTranscriptRef = useRef('');  // Accumulate finals instead of sending immediately
   const abortControllerRef = useRef<AbortController | null>(null);  // Cancel pending API requests
-  
-  useEffect(() => { micOnRef.current = micOn; }, [micOn]);
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
-  useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+
   useEffect(() => { setSessionId(getSessionId()); }, []);
 
-  // Function to stop TTS playback (for barge-in/interrupt)
-  const stopSpeaking = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+  // ─── Voice Grammar Cleanup ─────────────────────────────────────
+  // Cleans up raw speech-to-text: capitalizes sentences, adds punctuation,
+  // fixes common STT artifacts — all client-side, zero latency.
+  const cleanVoiceGrammar = useCallback((raw: string): string => {
+    let text = raw.trim();
+    if (!text) return text;
+
+    // Collapse multiple spaces
+    text = text.replace(/\s{2,}/g, ' ');
+
+    // Capitalize first letter
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+
+    // Capitalize after sentence-ending punctuation
+    text = text.replace(/([.!?])\s+([a-z])/g, (_, p, c) => p + ' ' + c.toUpperCase());
+
+    // Capitalize "I" when standalone
+    text = text.replace(/\bi\b/g, 'I');
+
+    // Fix "i'm" → "I'm", "i'll" → "I'll", "i've" → "I've", "i'd" → "I'd"
+    text = text.replace(/\bI('m|'ll|'ve|'d)\b/gi, (_, s) => 'I' + s.toLowerCase());
+
+    // Add period at end if no punctuation
+    if (!/[.!?]$/.test(text)) {
+      text += '.';
     }
-    setIsSpeaking(false);
+
+    return text;
   }, []);
 
-  // Function to cancel pending API request (for interrupt while thinking)
-  const cancelPendingRequest = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsLoading(false);
-  }, []);
+  // ─── Voice Engine (new unified system) ─────────────────────────
+  // The voice engine handles: mic input → STT → silence detection → send → TTS → playback
+  // with proper state machine, barge-in, cleanup, and browser compat.
+  const handleVoiceSend = useCallback(async (text: string): Promise<string | void> => {
+    // This is called by the voice engine when silence is detected.
+    // Clean up grammar before sending to chat.
+    const cleaned = cleanVoiceGrammar(text);
+    // handleSend is defined below, so we use the ref pattern.
+    return handleSendRef.current(cleaned);
+  }, [cleanVoiceGrammar]);
 
-  const startRecognition = useCallback(() => {
-    if (recognitionRef.current && micOnRef.current) {
-      try { recognitionRef.current.start(); } catch(e) {}
-    }
-  }, []);
+  const voiceEngine = useVoiceEngine({
+    onSend: handleVoiceSend,
+    autoSpeak: true,
+  });
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    audioRef.current = new Audio();
-    audioRef.current.onended = () => {
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
-    };
-    audioRef.current.onerror = (e) => {
-      console.error('[Audio] Playback error:', e);
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
-    };
-  }, [startRecognition]);
-  
-  // Clear timers and abort pending requests on unmount
-  useEffect(() => {
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      // Abort controller cleanup handled in finally block
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!('webkitSpeechRecognition' in window)) {
-      console.error('[Voice] webkitSpeechRecognition not available in this browser');
-      return;
-    }
-    const SR = (window as any).webkitSpeechRecognition;
-    const recognition = new SR();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (e: any) => {
-      // BARGE-IN: If AI is speaking and user starts talking, interrupt it immediately
-      // Don't clear transcript - let user finish their thought
-      if (isSpeakingRef.current) {
-        stopSpeaking();
-      }
-
-      // INTERRUPT THINKING: If AI is thinking and user starts talking, cancel the request
-      // This lets user add more context or correct themselves before getting an answer
-      if (isLoadingRef.current) {
-        cancelPendingRequest();
-      }
-
-      // Build complete transcript from ALL results (not just from resultIndex)
-      let finalText = '';
-      let interimText = '';
-      
-      for (let i = 0; i < e.results.length; i++) {
-        const result = e.results[i];
-        if (result.isFinal) {
-          finalText += result[0].transcript + ' ';
-        } else {
-          interimText += result[0].transcript;
-        }
-      }
-      
-      // Store accumulated finals (DON'T send yet - wait for silence!)
-      if (finalText.trim()) {
-        accumulatedTranscriptRef.current = finalText.trim();
-      }
-      
-      // Display current state: accumulated + interim
-      const displayText = (accumulatedTranscriptRef.current + ' ' + interimText).trim();
-      setTranscript(displayText);
-      pendingTranscriptRef.current = displayText;
-      
-      // SILENCE DETECTION: Reset timer on ANY activity
-      // This is the ONLY thing that triggers a send
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      
-      silenceTimerRef.current = setTimeout(() => {
-        const textToSend = accumulatedTranscriptRef.current.trim() || pendingTranscriptRef.current.trim();
-        if (textToSend && !isLoadingRef.current && !isSpeakingRef.current) {
-          accumulatedTranscriptRef.current = '';
-          pendingTranscriptRef.current = '';
-          setTranscript('');
-          handleSend(textToSend);
-        }
-      }, SILENCE_TIMEOUT_MS);
-    };
-    recognition.onend = () => {
-      // Restart if mic should still be on
-      if (micOnRef.current && !recognitionRestartingRef.current) {
-        recognitionRestartingRef.current = true;
-        setTimeout(() => { 
-          recognitionRestartingRef.current = false;
-          try { recognition.start(); } catch(e) { /* ignore */ }
-        }, 150);
-      }
-    };
-    recognition.onerror = (e: any) => {
-      // 'no-speech' is common - user didn't speak yet. Just restart.
-      if (e.error === 'no-speech') {
-        if (micOnRef.current && !recognitionRestartingRef.current) {
-          recognitionRestartingRef.current = true;
-          setTimeout(() => {
-            recognitionRestartingRef.current = false;
-            try { recognition.start(); } catch(e) {}
-          }, 300);
-        }
-        return;
-      }
-      
-      // 'aborted' happens when we stop/start quickly - ignore
-      if (e.error === 'aborted') {
-        return;
-      }
-      
-      console.error('[Voice] Speech recognition error:', e.error);
-      
-      // Only turn off mic for permission errors, not transient ones
-      if (e.error === 'not-allowed') {
-        console.error('[Voice] Mic permission denied');
-        setMicOn(false);
-      } else if (e.error === 'audio-capture') {
-        console.error('[Voice] No microphone found');
-        setMicOn(false);
-      } else if (e.error === 'network') {
-        console.error('[Voice] Network error - speech service unavailable');
-      } else if (micOnRef.current && !recognitionRestartingRef.current) {
-        // For other errors, try to restart
-        recognitionRestartingRef.current = true;
-        setTimeout(() => {
-          recognitionRestartingRef.current = false;
-          try { recognition.start(); } catch(e) {}
-        }, 500);
-      }
-    };
-    recognitionRef.current = recognition;
-  }, [stopSpeaking]);
-
-  const toggleMic = () => {
-    if (!micOn) {
-      // Check if speech recognition is available
-      if (!recognitionRef.current) {
-        console.error('[Voice] Speech recognition not initialized. Browser may not support it.');
-        alert('Voice input not available. This browser may not support speech recognition. Try Chrome or Edge.');
-        return;
-      }
-      setMicOn(true);
-      // Stop first to ensure clean state, then start
-      try { recognitionRef.current?.stop(); } catch(e) {}
-      setTimeout(() => {
-        try { 
-          recognitionRef.current?.start(); 
-          console.log('[Voice] Recognition started');
-        } catch(e) { 
-          console.error('[Voice] Start error:', e); 
-          setMicOn(false);
-        }
-      }, 100);
-    } else {
-      setMicOn(false);
-      try { recognitionRef.current?.stop(); } catch(e) {}
-      setTranscript('');
-      // Clear pending transcript and silence timer
-      pendingTranscriptRef.current = '';
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    }
-  };
-
-  const speak = async (text: string) => {
-    setIsSpeaking(true);
-    // DON'T stop recognition - keep it running for barge-in capability
-    // This lets user interrupt AI mid-speech
-
-    // Strip code blocks and error-like content before TTS
-    let ttsText = text
-      .replace(/```[\s\S]*?```/g, ' (code block omitted) ')  // Remove fenced code blocks
-      .replace(/`[^`]+`/g, '')  // Remove inline code
-      .replace(/^\s*(?:Error|TypeError|SyntaxError|ReferenceError):.*$/gm, '')  // Remove error lines
-      .replace(/https?:\/\/\S+/g, '')  // Remove URLs
-      .replace(/\n{3,}/g, '\n\n')  // Collapse excessive newlines
-      .trim();
-
-    if (!ttsText) {
-      setIsSpeaking(false);
+  // ─── Plan Approval Handlers ────────────────────────────────────
+  const handleExecutePlan = useCallback(async (planId: string) => {
+    if (!pendingPlan || pendingPlan.id !== planId) {
+      console.error('[Plan] Cannot execute: plan not found or mismatch');
       return;
     }
 
     try {
-      const res = await apiFetch('/api/tts', {
+      setIsLoading(true);
+      setPendingPlan(null); // Clear the pending plan immediately
+
+      // Call the approval API
+      const res = await fetch('/api/chat/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: ttsText }),
+        body: JSON.stringify({ planId, action: 'approve' }),
       });
-      
-      // Check if response is OK
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        console.error('[TTS] API error:', res.status, errorData);
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
+        throw new Error(`Failed to approve plan: ${res.status}`);
       }
-      
-      // Check content type to ensure we got audio
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('audio')) {
-        console.error('[TTS] Invalid content type:', contentType);
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
-      }
-      
-      const blob = await res.blob();
-      
-      // Validate blob size (audio should be more than a few hundred bytes)
-      if (blob.size < 1000) {
-        console.error('[TTS] Audio blob too small:', blob.size, 'bytes');
-        setIsSpeaking(false);
-        setTimeout(() => startRecognition(), 300);
-        return;
-      }
-      
-      console.log('[TTS] Received audio:', blob.size, 'bytes');
-      const url = URL.createObjectURL(blob);
-      
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        try {
-          await audioRef.current.play();
-          console.log('[Audio] Playback started');
-        } catch (playError) {
-          console.error('[Audio] Play failed (autoplay policy?):', playError);
-          setIsSpeaking(false);
-          setTimeout(() => startRecognition(), 300);
-          // Clean up the URL
-          URL.revokeObjectURL(url);
+
+      // Check if response is streaming execution
+      const contentType = res.headers.get('content-type') || '';
+      const isStreaming = contentType.includes('text/event-stream');
+
+      const assistantMsgId = generateMessageId();
+
+      if (isStreaming && res.body) {
+        // Handle streaming execution response
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Read the execution stream
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.choices?.[0]?.delta?.content) {
+                  fullText += parsed.choices[0].delta.content;
+                  setMessages(prev => prev.map(m => 
+                    m.id === assistantMsgId ? { ...m, text: fullText } : m
+                  ));
+                }
+              } catch {
+                // Ignore parse errors
+              }
+            }
+          }
         }
+      } else {
+        // Handle JSON response
+        const data = await res.json();
+        
+        const assistantMessage: ChatMessage = {
+          id: assistantMsgId,
+          role: 'assistant',
+          text: data.message || 'Plan executed successfully.',
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
       }
-    } catch (err) {
-      console.error('[TTS] Fetch error:', err);
-      setIsSpeaking(false);
-      setTimeout(() => startRecognition(), 300);
+
+    } catch (error) {
+      console.error('[Plan] Execution error:', error);
+      
+      // Add error message to chat
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: `Sorry, failed to execute the plan: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pendingPlan, setMessages]);
+
+  const handleRejectPlan = useCallback(async (planId: string) => {
+    if (!pendingPlan || pendingPlan.id !== planId) {
+      console.error('[Plan] Cannot reject: plan not found or mismatch');
+      return;
+    }
+
+    try {
+      // Call the approval API to reject
+      const res = await fetch('/api/chat/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, action: 'reject' }),
+      });
+
+      if (!res.ok) {
+        console.error('[Plan] Failed to reject plan:', res.status);
+      }
+
+      // Clear the pending plan
+      setPendingPlan(null);
+
+      // Add a message to the chat indicating the plan was cancelled
+      const cancelMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        text: 'Plan cancelled. Let me know if you\'d like to try a different approach.',
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, cancelMessage]);
+
+    } catch (error) {
+      console.error('[Plan] Rejection error:', error);
+      setPendingPlan(null); // Clear anyway
+    }
+  }, [pendingPlan, setMessages]);
+
+  const {
+    micOn,
+    transcript,
+    isSpeaking,
+    voiceState,
+    toggleMic,
+    stopSpeaking,
+    cancelProcessing: cancelVoiceProcessing,
+    speak,
+    notifyResponse,
+    audioRef,
+    browserSupport: voiceBrowserSupport,
+  } = voiceEngine;
+
+  // Computed voice status for dashboard chat header
+  const dashboardStatusText = useMemo(() => {
+    switch (voiceState) {
+      case 'listening': return '🎤 Listening...';
+      case 'processing': return '✨ Thinking...';
+      case 'speaking': return '🔊 Speaking...';
+      default: return '● Online';
+    }
+  }, [voiceState]);
+
+  // Smart auto-scroll: scroll to bottom on new messages unless user scrolled up
+  useEffect(() => {
+    if (isUserScrolledUp.current) return;
+    const el = chatContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, isLoading, transcript]);
+
+  // Image upload helpers for dashboard chat
+  const fileToBase64 = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) { resolve(null); return; }
+      if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDashboardImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const base64 = await fileToBase64(file);
+    if (base64) setPendingImage(base64);
+    if (dashboardFileInputRef.current) dashboardFileInputRef.current.value = '';
+  };
+
+  const handleDashboardPaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const base64 = await fileToBase64(file);
+        if (base64) setPendingImage(base64);
+        return;
+      }
     }
   };
+
+  // Resizable panel divider handlers
+  const handlePanelResizeMove = useCallback((e: MouseEvent) => {
+    if (!isResizingPanel) return;
+    setRightPanelWidth(prev => Math.max(280, Math.min(600, prev - e.movementX)));
+  }, [isResizingPanel]);
+
+  useEffect(() => {
+    if (isResizingPanel) {
+      const handleMouseUp = () => setIsResizingPanel(false);
+      window.addEventListener('mousemove', handlePanelResizeMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      return () => {
+        window.removeEventListener('mousemove', handlePanelResizeMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizingPanel, handlePanelResizeMove]);
+
+  // Ref for handleSend to avoid circular dependency with voice engine
+  const handleSendRef = useRef<(text: string) => Promise<string | void>>(async () => {});
 
   const handleSummarizeAndContinue = async () => {
     if (!activeConversation || activeConversation.messages.length === 0) return;
@@ -842,7 +950,7 @@ export default function OpieKanban(): React.ReactElement {
     }
   };
 
-  const handleSend = async (text?: string, image?: string) => {
+  const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
     
@@ -855,10 +963,6 @@ export default function OpieKanban(): React.ReactElement {
     }
     
     const userMsg = messageText.trim();
-    
-    // Clear any pending silence timer
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    pendingTranscriptRef.current = '';
     
     // Create user message with proper structure
     const userMessage: ChatMessage = {
@@ -903,6 +1007,7 @@ export default function OpieKanban(): React.ReactElement {
           image: image, // Include image in API call
           interactionMode, // Pass current interaction mode
           memoryContext: interactionMode === 'execute' ? memoryContext : undefined, // Include memory in EXECUTE mode
+          pendingPlanId: pendingPlan?.id, // Pass pending plan ID for approval responses
         }),
         signal: abortController.signal,
       });
@@ -1002,9 +1107,9 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // TTS for streamed response
+        // Voice engine handles TTS — notify it of the response
         if (reply && reply !== 'No response received') {
-          await speak(reply);
+          notifyResponse(reply);
         }
 
         // Auto-extract memory every 10 messages
@@ -1019,6 +1124,24 @@ export default function OpieKanban(): React.ReactElement {
       } else {
         // Regular JSON response
         const data = await res.json();
+
+        // Check for pending execution plan
+        if (data.pendingPlan && data.pendingPlan.requiresApproval) {
+          console.log('[Chat] Received pending plan:', data.pendingPlan);
+          setPendingPlan({
+            id: data.pendingPlan.id,
+            message: data.pendingPlan.message,
+            plannedActions: data.pendingPlan.plannedActions,
+            status: data.pendingPlan.status as 'pending' | 'approved' | 'rejected' | 'executing' | 'completed' | 'error',
+            createdAt: new Date(data.pendingPlan.createdAt),
+            requiresApproval: data.pendingPlan.requiresApproval,
+            toolCallCount: data.pendingPlan.toolCallCount,
+          });
+          
+          // Don't continue with normal response handling - the plan UI will take over
+          setIsLoading(false);
+          return;
+        }
 
         // Check for async mode (EXECUTE)
         if (data.mode === 'async' && data.poll_url) {
@@ -1067,11 +1190,13 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // Only call TTS if we have a valid, non-error reply
+        // Voice engine handles TTS — notify it of the response
         if (reply && !data.error) {
-          await speak(reply);
+          notifyResponse(reply);
         }
       }
+
+      return reply || undefined;
     } catch (err: any) {
       clearTimeout(timeoutId);
 
@@ -1119,8 +1244,12 @@ export default function OpieKanban(): React.ReactElement {
 
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
-      setTimeout(() => startRecognition(), 500);
     }
+  };
+
+  // Connect handleSend to the voice engine via ref (avoids circular dependency)
+  handleSendRef.current = async (text: string): Promise<string | void> => {
+    return handleSend(text);
   };
 
   // Handle send for secondary/pinned chat windows
@@ -1601,19 +1730,17 @@ export default function OpieKanban(): React.ReactElement {
         </Suspense>
 
         {/* Immersive voice mode overlay */}
-        <Suspense fallback={null}>
-          <ImmersiveVoiceMode
-            isActive={activeView === 'voice' && micOn && !isMobile}
-            isSpeaking={isSpeaking}
-            isListening={micOn && !isLoading && !isSpeaking}
-            isLoading={isLoading}
-            transcript={transcript}
-            lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
-            onClose={() => setMicOn(false)}
-            onMicToggle={() => setMicOn(!micOn)}
-            micOn={micOn}
-          />
-        </Suspense>
+        <ImmersiveVoiceMode
+          isActive={activeView === 'voice' && micOn && !isMobile}
+          isSpeaking={isSpeaking}
+          isListening={micOn && !isLoading && !isSpeaking}
+          isLoading={isLoading}
+          transcript={transcript}
+          lastResponse={messages[messages.length - 1]?.role === 'assistant' ? messages[messages.length - 1].text : ''}
+          onClose={() => { if (micOn) toggleMic(); }}
+          onMicToggle={toggleMic}
+          micOn={micOn}
+        />
 
         {isMobile && activeView !== 'voice' && <MobileHeaderComponent />}
         {isMobile && <MobileOverlay />}
@@ -1627,125 +1754,637 @@ export default function OpieKanban(): React.ReactElement {
         minHeight: isMobile ? '100dvh' : '100vh',
       }}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>Loading…</div>}>
-        {/* Dashboard View - Smart Real-Time Dashboard */}
+        {/* Dashboard View - Chat-First Layout */}
         {activeView === 'dashboard' && (
+          <div style={{
+            ...styles.viewContainer,
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: 0,
+            padding: 0,
+            height: isMobile ? 'auto' : '100vh',
+            minHeight: isMobile ? '100dvh' : undefined,
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            {/* Left/Center: Full-Featured Chat */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              height: isMobile ? 'auto' : '100vh',
+              minHeight: isMobile ? '60vh' : undefined,
+              background: 'linear-gradient(180deg, #0a0a14 0%, #0d0d18 100%)',
+            }}>
+              {/* Command Center header */}
+              <div style={{ flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                {/* Top row: nav + title + weather + avatar + controls */}
+                <div style={{
+                  padding: isMobile ? '10px 16px' : '10px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Hamburger menu for conversation history */}
+                    <button
+                      onClick={() => setShowDashboardSidebar(true)}
+                      style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        border: 'none', background: 'rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.6)', fontSize: '18px',
+                        cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="Conversation history"
+                    >
+                      ☰
+                    </button>
+                    <OpieAvatar size={36} state={
+                      voiceState === 'listening' ? 'listening' :
+                      voiceState === 'processing' ? 'thinking' :
+                      voiceState === 'speaking' ? 'speaking' : 'idle'
+                    } />
+                    <div style={{ display: 'flex', flexDirection: 'column' as const }}>
+                      <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem', letterSpacing: '0.02em' }}>
+                        Command Center
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 500,
+                        color: voiceState !== 'idle' ? (
+                          voiceState === 'listening' ? '#22c55e' :
+                          voiceState === 'processing' ? '#667eea' : '#f59e0b'
+                        ) : 'rgba(255,255,255,0.4)',
+                      }}>
+                        {dashboardStatusText}
+                      </span>
+                    </div>
+                    {/* Scottsdale weather */}
+                    {weather && !isMobile && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '4px 10px', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        marginLeft: '6px',
+                      }}>
+                        <span style={{ fontSize: '16px' }}>{weather.emoji}</span>
+                        <span style={{ color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>{weather.temp}°F</span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>Scottsdale</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* New conversation button */}
+                    <button
+                      onClick={() => createConversation()}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        border: '1px solid rgba(168,85,247,0.3)',
+                        background: 'rgba(168,85,247,0.1)',
+                        color: '#a855f7', fontSize: '18px', fontWeight: 300,
+                        cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title="New conversation"
+                    >
+                      +
+                    </button>
+                    {/* Model selector */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setShowModelDropdown(!showModelDropdown)}
+                        style={{
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          color: 'rgba(255,255,255,0.7)',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>🤖</span>
+                        <span>{AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}</span>
+                        <span style={{ fontSize: '0.6rem' }}>{showModelDropdown ? '▲' : '▼'}</span>
+                      </button>
+                      {showModelDropdown && (
+                        <div style={{
+                          ...styles.modelDropdownMenu,
+                          top: '100%',
+                          right: 0,
+                          left: 'auto',
+                          marginTop: '4px',
+                        }}>
+                          {AI_MODELS.map(model => (
+                            <button
+                              key={model.id}
+                              onClick={() => handleModelChange(model.id)}
+                              style={{
+                                ...styles.modelDropdownItem,
+                                ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
+                              }}
+                            >
+                              <span style={styles.modelDropdownName}>{model.name}</span>
+                              <span style={styles.modelDropdownDesc}>{model.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Quote of the day bar */}
+                <div style={{
+                  padding: '6px 24px',
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(139,92,246,0.04)',
+                }}>
+                  <span style={{ fontSize: '12px', flexShrink: 0 }}>💡</span>
+                  <span style={{
+                    color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem', fontStyle: 'italic',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    &ldquo;{dailyQuote.text}&rdquo;
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem', flexShrink: 0 }}>
+                    — {dailyQuote.author}
+                  </span>
+                  {/* Mobile weather (shown here since header is tight) */}
+                  {weather && isMobile && (
+                    <span style={{
+                      marginLeft: 'auto', color: 'rgba(255,255,255,0.5)', fontSize: '0.72rem',
+                      display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                    }}>
+                      {weather.emoji} {weather.temp}°F
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Execution plan approval gate */}
+              {pendingPlan && pendingPlan.requiresApproval && (
+                <div style={{
+                  margin: isMobile ? '12px 16px' : '12px 24px', padding: 16, borderRadius: 12,
+                  border: '1px solid rgba(249,115,22,0.4)',
+                  background: 'linear-gradient(135deg, rgba(249,115,22,0.15) 0%, rgba(239,68,68,0.08) 100%)',
+                  boxShadow: '0 4px 15px rgba(249,115,22,0.2)',
+                  flexShrink: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, justifyContent: 'center' }}>
+                    <span style={{ fontSize: '24px', filter: 'drop-shadow(0 0 6px rgba(249,115,22,0.6))' }}>✋</span>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#fff', margin: 0 }}>
+                      {pendingPlan.plannedActions?.[0] || pendingPlan.message}
+                    </h3>
+                  </div>
+                  <div style={{
+                    padding: 14, marginBottom: 12, fontSize: '0.85rem',
+                    color: 'rgba(255,255,255,0.95)', background: 'rgba(0,0,0,0.3)',
+                    borderRadius: 12, textAlign: 'center' as const, border: '1px solid rgba(249,115,22,0.3)',
+                  }}>
+                    <span style={{ display: 'block', lineHeight: 1.5 }}>
+                      ✋ Waiting for approval — say <strong>&apos;yes&apos;</strong> to execute or <strong>&apos;no&apos;</strong> to cancel
+                    </span>
+                  </div>
+                  {pendingPlan.toolCallCount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                      <span style={{ fontWeight: 500 }}>
+                        {pendingPlan.toolCallCount} tool{pendingPlan.toolCallCount !== 1 ? 's' : ''} ready to execute
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <button onClick={() => handleRejectPlan(pendingPlan.id)}
+                      style={{ padding: '8px 20px', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 20,
+                        background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: '0.85rem',
+                        fontWeight: 500, cursor: 'pointer' }}>
+                      No
+                    </button>
+                    <button onClick={() => handleExecutePlan(pendingPlan.id)}
+                      style={{ padding: '8px 20px', border: '1px solid rgba(249,115,22,0.6)', borderRadius: 20,
+                        background: 'rgba(249,115,22,0.3)', color: '#fb923c', fontSize: '0.85rem',
+                        fontWeight: 500, cursor: 'pointer' }}>
+                      Yes, Execute
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Chat messages area */}
+              <div
+                ref={chatContainerRef}
+                onScroll={handleChatScroll}
+                style={{
+                ...styles.chatMessages,
+                padding: isMobile ? '16px' : '24px 32px',
+              }}>
+                {messages.length === 0 && (
+                  <div style={styles.emptyChat}>
+                    <div style={{ ...styles.emptyChatIcon, fontSize: '64px' }}>💬</div>
+                    <h3 style={styles.emptyChatTitle}>Chat with Opie</h3>
+                    <p style={styles.emptyChatText}>Turn on the mic or type below to start a conversation</p>
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <div
+                    key={m.id || i}
+                    style={{
+                      ...styles.chatBubble,
+                      ...(m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant)
+                    }}
+                  >
+                    {m.image && (
+                      <img src={m.image} alt="Attached" style={{
+                        maxWidth: '100%', maxHeight: 200, borderRadius: 8,
+                        marginBottom: m.text ? 8 : 0, display: 'block',
+                      }} />
+                    )}
+                    {m.text}
+                  </div>
+                ))}
+                {isLoading && (
+                  <div style={{
+                    ...styles.chatBubble,
+                    ...styles.chatBubbleAssistant,
+                    color: 'rgba(255,255,255,0.4)',
+                  }}>
+                    Thinking...
+                  </div>
+                )}
+              </div>
+
+              {/* Transcript bar */}
+              {transcript && (
+                <div style={styles.transcript}>🎙️ Hearing: {transcript}</div>
+              )}
+
+              {/* Pending image preview */}
+              {pendingImage && (
+                <div style={{
+                  padding: '8px 24px', borderTop: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8,
+                  flexShrink: 0,
+                }}>
+                  <img src={pendingImage} alt="Preview" style={{
+                    maxWidth: 120, maxHeight: 80, borderRadius: 8, objectFit: 'cover' as const,
+                  }} />
+                  <button onClick={() => setPendingImage(null)} style={{
+                    width: 24, height: 24, borderRadius: '50%', border: 'none',
+                    background: 'rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                  }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Mode toggle removed - unified mode */}
+
+              {/* Input row with mic, camera, text, send */}
+              <div style={{
+                ...styles.voiceInput,
+                padding: isMobile ? '12px 16px' : '12px 24px',
+                gap: '10px',
+              }}>
+                {/* Mic button */}
+                <button onClick={toggleMic} style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  border: micOn ? '1px solid rgba(34,197,94,0.5)' : '1px solid rgba(255,255,255,0.15)',
+                  background: micOn ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                    : voiceState === 'processing' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : 'rgba(255,255,255,0.08)',
+                  color: '#fff', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }} title={micOn ? 'Stop listening' : 'Start voice input'}>
+                  <Mic size={20} strokeWidth={2} />
+                </button>
+
+                {/* Cancel processing */}
+                {voiceState === 'processing' && cancelVoiceProcessing && (
+                  <button onClick={cancelVoiceProcessing} style={{
+                    width: 32, height: 32, borderRadius: '50%', border: 'none',
+                    background: 'rgba(239,68,68,0.2)', color: '#ef4444', fontSize: '14px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', flexShrink: 0,
+                  }} title="Cancel">✕</button>
+                )}
+                {/* Stop speaking */}
+                {voiceState === 'speaking' && stopSpeaking && (
+                  <button onClick={stopSpeaking} style={{
+                    width: 32, height: 32, borderRadius: '50%', border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    color: '#fff', fontSize: '14px', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }} title="Stop speaking">⏹</button>
+                )}
+
+                {/* Camera / image upload */}
+                <input ref={dashboardFileInputRef} type="file" accept="image/*"
+                  onChange={handleDashboardImageSelect} style={{ display: 'none' }} />
+                <button onClick={() => dashboardFileInputRef.current?.click()} style={{
+                  width: 40, height: 40, borderRadius: '50%',
+                  border: '1px solid rgba(139,92,246,0.3)',
+                  background: 'rgba(139,92,246,0.1)', color: '#a78bfa',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0,
+                }} title="Attach image">
+                  <Camera size={18} strokeWidth={2} />
+                </button>
+
+                {/* Text input */}
+                <input
+                  ref={chatInputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onPaste={async (e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (let i = 0; i < items.length; i++) {
+                      const item = items[i];
+                      if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (!file) continue;
+                        const reader = new FileReader();
+                        reader.onload = () => setPendingImage(reader.result as string);
+                        reader.readAsDataURL(file);
+                        return;
+                      }
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim() || pendingImage) {
+                        handleSend(input, pendingImage || undefined);
+                        setPendingImage(null);
+                      }
+                    }
+                  }}
+                  placeholder="Type a message to Opie..."
+                  style={styles.textInput}
+                />
+
+                {/* Send button */}
+                <button
+                  onClick={() => {
+                    if (input.trim() || pendingImage) {
+                      handleSend(input, pendingImage || undefined);
+                      setPendingImage(null);
+                    }
+                  }}
+                  style={{
+                    ...styles.sendButton,
+                    opacity: (input.trim() || pendingImage) && !isLoading ? 1 : 0.5,
+                  }}
+                  disabled={isLoading || (!input.trim() && !pendingImage)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Resizable divider handle (desktop only) */}
+            {!isMobile && (
+              <div
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingPanel(true); }}
+                style={{
+                  width: '6px',
+                  cursor: 'col-resize',
+                  background: isResizingPanel ? 'rgba(102,126,234,0.4)' : 'rgba(255,255,255,0.06)',
+                  transition: isResizingPanel ? 'none' : 'background 0.2s ease',
+                  flexShrink: 0,
+                  position: 'relative' as const,
+                  zIndex: 10,
+                }}
+                onMouseEnter={(e) => { if (!isResizingPanel) (e.currentTarget as HTMLElement).style.background = 'rgba(102,126,234,0.25)'; }}
+                onMouseLeave={(e) => { if (!isResizingPanel) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                title="Drag to resize"
+              >
+                <div style={{
+                  position: 'absolute' as const, top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: 'flex', flexDirection: 'column' as const, gap: 3,
+                }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{
+                      width: 3, height: 3, borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.25)',
+                    }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Right: War Room + Agent Stats (desktop/tablet only) */}
+            {!isMobile && (
+              <div style={{
+                width: `${rightPanelWidth}px`,
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh',
+                overflow: 'hidden',
+              }}>
+                <div style={{ flexShrink: 0 }}>
+                  <AgentCommandCenter compact={isTablet} isThinking={isLoading} />
+                </div>
+
+                {/* Real-Time Agent Stats — terminal style */}
+                <div style={{
+                  flex: 1,
+                  borderTop: '1px solid rgba(0,255,200,0.15)',
+                  background: 'linear-gradient(180deg, rgba(0,10,20,0.95) 0%, rgba(0,5,15,0.98) 100%)',
+                  padding: '14px 16px',
+                  overflowY: 'auto',
+                  fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid rgba(0,255,200,0.1)',
+                  }}>
+                    <span style={{
+                      color: '#00ffc8',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase' as const,
+                    }}>
+                      Real-Time Agent Stats
+                    </span>
+                    <span style={{
+                      color: 'rgba(0,255,200,0.4)',
+                      fontSize: '0.6rem',
+                    }}>
+                      {agentNodes.filter(n => n.status === 'working').length}/{agentNodes.length} active
+                    </span>
+                  </div>
+
+                  {/* Agent rows */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {agentNodes.map((node) => {
+                      const statusColor = node.status === 'working' ? '#f59e0b'
+                        : node.status === 'connected' ? '#22c55e' : 'rgba(255,255,255,0.25)';
+                      const statusLabel = node.status === 'working' ? 'BUSY'
+                        : node.status === 'connected' ? 'ONLINE' : 'IDLE';
+                      const isBusy = node.status === 'working';
+
+                      return (
+                        <div
+                          key={node.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            background: isBusy ? 'rgba(245,158,11,0.06)' : 'transparent',
+                            fontSize: '0.72rem',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          <span style={{
+                            color: node.color,
+                            fontWeight: 600,
+                            width: '80px',
+                            flexShrink: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {node.emoji} {node.name.toUpperCase()}
+                          </span>
+                          <span style={{
+                            color: statusColor,
+                            fontWeight: 700,
+                            fontSize: '0.65rem',
+                            padding: '1px 6px',
+                            borderRadius: '3px',
+                            border: `1px solid ${statusColor}`,
+                            background: `${statusColor}15`,
+                            width: '52px',
+                            textAlign: 'center' as const,
+                            flexShrink: 0,
+                          }}>
+                            {statusLabel}
+                          </span>
+                          <span style={{
+                            color: isBusy ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)',
+                            fontSize: '0.65rem',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                          }}>
+                            {node.currentTask
+                              ? `[TASK: ${node.currentTask.toUpperCase().slice(0, 20)}]`
+                              : node.status === 'connected'
+                                ? `[LOAD: ${Math.floor(Math.random() * 40 + 10)}%]`
+                                : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer scan line */}
+                  <div style={{
+                    marginTop: '12px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(0,255,200,0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '0.6rem',
+                    color: 'rgba(0,255,200,0.3)',
+                  }}>
+                    <span>SYS: NOMINAL</span>
+                    <span>{new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile: War Room as collapsible below chat */}
+            {isMobile && (
+              <div style={{ padding: '16px' }}>
+                <CollapsibleSection title="Agent Command Center" icon="⚡" badge={realActiveCount}>
+                  <AgentCommandCenter compact={true} isThinking={isLoading} />
+                </CollapsibleSection>
+              </div>
+            )}
+
+            {/* Conversation History Sidebar */}
+            <style>{sidebarAnimationStyles}</style>
+            <ConversationSidebar
+              isOpen={showDashboardSidebar}
+              onClose={() => setShowDashboardSidebar(false)}
+              conversations={conversations}
+              activeConversationId={activeConversation?.id || null}
+              onSelectConversation={(id) => { switchConversation(id); setShowDashboardSidebar(false); }}
+              onNewConversation={() => { createConversation(); setShowDashboardSidebar(false); }}
+              onDeleteConversation={deleteConversation}
+              pinnedConversationIds={pinnedConversationIds}
+              onPinConversation={pinConversation}
+            />
+          </div>
+        )}
+
+        {/* Project Board View - Kanban + Activity Feed */}
+        {activeView === 'board' && (
           <div style={{
             ...styles.viewContainer,
             padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
             paddingTop: isMobile ? '72px' : undefined,
             paddingBottom: isMobile ? '100px' : undefined,
           }}>
-            {/* TOP: Hero Section - Greeting + Orchestration Side by Side */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : '1fr 1.2fr',
-              gap: '24px',
-              marginBottom: '24px',
-            }}>
-              {/* Left: Smart Dashboard Home - Greeting + Metrics */}
-              <div>
-                <SmartDashboardHome 
-                  userName="Wes"
-                  onNavigate={(view) => handleViewChange(view as ViewId)}
-                  onQuickAction={(action) => {
-                    if (action === 'deploy') handleViewChange('agents');
-                  }}
-                />
-              </div>
-              
-              {/* Right: Orchestration Network - Next to greeting */}
-              <div>
-                {isMobile ? (
-                  <CollapsibleSection title="Agent Orchestration Network" icon="🌌" badge={realActiveCount} defaultOpen>
-                    <OrchestrationStatus compact={true} />
-                  </CollapsibleSection>
-                ) : (
-                  <OrchestrationStatus />
-                )}
-              </div>
-            </div>
-
-            {/* Model Selector */}
-            <div style={styles.modelSelectorSection}>
-              <div style={styles.modelSelectorInner}>
-                <span style={styles.modelSelectorLabel}>🤖 Active Model</span>
-                <div style={styles.modelSelectorDropdown}>
-                  <button
-                    onClick={() => setShowModelDropdown(!showModelDropdown)}
-                    style={styles.modelSelectorButton}
-                  >
-                    <span style={styles.modelSelectorName}>
-                      {AI_MODELS.find(m => m.id === selectedModel)?.name || 'Claude Opus'}
-                    </span>
-                    <span style={styles.modelSelectorArrow}>{showModelDropdown ? '▲' : '▼'}</span>
-                  </button>
-                  {showModelDropdown && (
-                    <div style={styles.modelDropdownMenu}>
-                      {AI_MODELS.map(model => (
-                        <button
-                          key={model.id}
-                          onClick={() => handleModelChange(model.id)}
-                          style={{
-                            ...styles.modelDropdownItem,
-                            ...(selectedModel === model.id ? styles.modelDropdownItemActive : {}),
-                          }}
-                        >
-                          <span style={styles.modelDropdownName}>{model.name}</span>
-                          <span style={styles.modelDropdownDesc}>{model.description}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* BELOW: Kanban Board (Full Width) */}
-            <div style={styles.kanbanSection}>
-              <h2 style={styles.kanbanTitle}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
                 📋 Project Board
-              </h2>
-              <div style={styles.kanbanBoard}>
-                {columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    isMobile={isMobile}
-                  />
-                ))}
-              </div>
+              </h1>
+              <p style={styles.viewSubtitle}>
+                {isMobile ? 'Track project progress' : 'Track tasks across your project pipeline'}
+              </p>
             </div>
-            
-            {/* Activity Feed - Full Width */}
+
+            {/* Kanban Board */}
+            <div style={styles.kanbanSection}>
+              <KanbanBoard isMobile={isMobile} />
+            </div>
+
+            {/* Activity Feed */}
             <div style={{ marginTop: '24px' }}>
               {isMobile ? (
-                <>
-                  <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
-                    <ActivityFeed
-                      maxItems={20}
-                      pollInterval={15000}
-                      isThinking={isLoading}
-                      enabled={activeView === 'dashboard'}
-                    />
-                  </CollapsibleSection>
-                  {/* Mobile: Keep widgets here as collapsible sections */}
-                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <CollapsibleSection title="System Health" icon="🩺">
-                      <SystemHealthPanel />
-                    </CollapsibleSection>
-                    {/* Removed: Calendar and Email widgets */}
-                  </div>
-                </>
+                <CollapsibleSection title="Activity Feed" icon="⚡" defaultOpen>
+                  <ActivityFeed
+                    maxItems={20}
+                    pollInterval={15000}
+                    isThinking={isLoading}
+                    enabled={activeView === 'board'}
+                  />
+                </CollapsibleSection>
               ) : (
                 <ActivityFeed
                   maxItems={50}
                   pollInterval={15000}
                   isThinking={isLoading}
-                  enabled={activeView === 'dashboard'}
+                  enabled={activeView === 'board'}
                 />
               )}
             </div>
-            
           </div>
         )}
 
@@ -1766,6 +2405,21 @@ export default function OpieKanban(): React.ReactElement {
               </p>
             </div>
             <AgentsPanel onDeploy={handleDeployAgent} activeAgents={activeAgents} />
+          </div>
+        )}
+
+        {/* Organization View */}
+        {activeView === 'organization' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <OrganizationChart
+              isMobile={isMobile}
+              isTablet={isTablet}
+            />
           </div>
         )}
 
@@ -1973,6 +2627,29 @@ export default function OpieKanban(): React.ReactElement {
           </div>
         )}
 
+        {/* Model Counsel View */}
+        {activeView === 'model-counsel' && (
+          <div style={{
+            ...styles.viewContainer,
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <Suspense fallback={
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                height: '400px',
+                color: '#666'
+              }}>
+                Loading Model Counsel...
+              </div>
+            }>
+              <ModelCounsel />
+            </Suspense>
+          </div>
+        )}
+
         {/* Context Window View */}
         {activeView === 'context' && (
           <div style={{
@@ -2128,102 +2805,6 @@ export default function OpieKanban(): React.ReactElement {
         </Suspense>
       </main>
 
-      {/* Secondary Chat Windows */}
-      {pinnedConversationIds.map((pinnedId, index) => {
-        const pinnedConv = conversations.find(c => c.id === pinnedId);
-        if (!pinnedConv) return null;
-
-        return (
-          <FloatingChat
-            key={pinnedId}
-            messages={pinnedConv.messages}
-            isSecondary={true}
-            windowIndex={index}
-            onClose={() => unpinConversation(pinnedId)}
-            pinnedTitle={pinnedConv.title}
-            conversationId={pinnedId}
-            input={pinnedInputs[pinnedId] || ''}
-            setInput={(val) => setPinnedInputs(prev => ({ ...prev, [pinnedId]: val }))}
-            isLoading={pinnedLoading[pinnedId] || false}
-            micOn={false}
-            onMicToggle={() => {}}
-            isSpeaking={false}
-            transcript=""
-            onSend={(text, image, mode) => handleSendToPinned(pinnedId, text || pinnedInputs[pinnedId] || '', mode)}
-            interactionMode={interactionMode}
-            onInteractionModeChange={setInteractionMode}
-          />
-        );
-      })}
-
-      {/* Spawn New Chat Button */}
-      {pinnedConversationIds.length < 2 && (
-        <button
-          onClick={() => {
-            const newConv = createConversationForSecondary();
-            pinConversation(newConv.id);
-          }}
-          style={{
-            position: 'fixed',
-            bottom: 90,
-            right: 24,
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(6, 182, 212, 0.15) 100%)',
-            color: '#a855f7',
-            fontSize: '24px',
-            fontWeight: 300,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 997,
-            boxShadow: '0 4px 20px rgba(168, 85, 247, 0.3)',
-            transition: 'all 0.3s ease',
-          }}
-          title="Open new chat window"
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 6px 25px rgba(168, 85, 247, 0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 20px rgba(168, 85, 247, 0.3)';
-          }}
-        >
-          +
-        </button>
-      )}
-
-      {/* Floating Chat Box */}
-      <FloatingChat
-        messages={messages}
-        input={input}
-        setInput={setInput}
-        isLoading={isLoading}
-        onSend={handleSend}
-        micOn={micOn}
-        onMicToggle={toggleMic}
-        isSpeaking={isSpeaking}
-        onStopSpeaking={stopSpeaking}
-        transcript={transcript}
-        interactionMode={interactionMode}
-        onInteractionModeChange={setInteractionMode}
-        selectedModel={selectedModel}
-        onModelChange={handleModelChange}
-        conversations={conversations}
-        activeConversationId={activeConversation?.id || null}
-        onConversationCreate={createConversation}
-        onConversationSwitch={switchConversation}
-        onConversationDelete={deleteConversation}
-        onConversationFork={forkConversation}
-        onSummarizeAndContinue={handleSummarizeAndContinue}
-        pinnedConversationIds={pinnedConversationIds}
-        onPinConversation={pinConversation}
-      />
-
       {/* Command Palette */}
       <CommandPalette 
         isOpen={commandPaletteOpen}
@@ -2252,13 +2833,13 @@ export default function OpieKanban(): React.ReactElement {
         />
       )}
 
-      {/* Mobile FAB for quick actions */}
-      {isMobile && activeView === 'dashboard' && (
+      {/* Mobile FAB for quick actions on Project Board */}
+      {isMobile && activeView === 'board' && (
         <FloatingActionButton
-          icon="⚡"
-          onClick={() => handleViewChange('voice')}
+          icon="💬"
+          onClick={() => handleViewChange('dashboard')}
           color="primary"
-          label="Quick Chat"
+          label="Chat with Opie"
         />
       )}
 

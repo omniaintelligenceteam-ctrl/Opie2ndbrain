@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 
-export type ViewId = 'dashboard' | 'agents' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings' | 'leaderboard' | 'context' | 'email' | 'calendar';
+export type ViewId = 'dashboard' | 'board' | 'agents' | 'organization' | 'skills' | 'tasks' | 'crons' | 'voice' | 'memory' | 'settings' | 'leaderboard' | 'context' | 'email' | 'calendar' | 'model-counsel';
 
 interface KeyboardShortcutsOptions {
   onNavigate?: (view: ViewId) => void;
@@ -16,9 +16,11 @@ interface KeyboardShortcutsOptions {
 const VIEW_SHORTCUTS: Record<string, ViewId> = {
   '1': 'dashboard',
   '2': 'agents',
-  '3': 'skills',
-  '4': 'tasks',
-  '5': 'crons',
+  '3': 'organization',
+  '4': 'skills',
+  '5': 'tasks',
+  '6': 'crons',
+  '7': 'model-counsel',
 };
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
@@ -114,9 +116,11 @@ export const SHORTCUTS = [
   { keys: ['mod', 'N'], description: 'New message to Opie' },
   { keys: ['mod', '1'], description: 'Go to Dashboard' },
   { keys: ['mod', '2'], description: 'Go to Agents' },
-  { keys: ['mod', '3'], description: 'Go to Skills' },
-  { keys: ['mod', '4'], description: 'Go to Tasks' },
-  { keys: ['mod', '5'], description: 'Go to Crons' },
+  { keys: ['mod', '3'], description: 'Go to Organization' },
+  { keys: ['mod', '4'], description: 'Go to Skills' },
+  { keys: ['mod', '5'], description: 'Go to Tasks' },
+  { keys: ['mod', '6'], description: 'Go to Crons' },
+  { keys: ['mod', '7'], description: 'Go to Model Counsel' },
   { keys: ['escape'], description: 'Close modals' },
   { keys: ['?'], description: 'Show keyboard shortcuts' },
 ];

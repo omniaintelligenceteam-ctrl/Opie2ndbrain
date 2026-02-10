@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "env": {
+    "EXECUTE_APPROVAL_GATE": "true"
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 300
+    }
+  }
+}

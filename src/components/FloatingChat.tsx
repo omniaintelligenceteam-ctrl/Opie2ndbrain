@@ -5,6 +5,7 @@ import MessageContextMenu, { contextMenuAnimationStyles } from './MessageContext
 import { Conversation } from '@/types/conversation';
 import { OpieAvatar } from './OpieAvatar';
 import { Mic, Camera } from 'lucide-react';
+import { PendingExecutionPlan } from '@/types/chat';
 
 // ============================================================================
 // Types
@@ -44,10 +45,15 @@ interface FloatingChatProps {
   transcript: string;
   onCancelProcessing?: () => void;
   onStopSpeaking?: () => void;
+  voiceError?: string | null;
   interactionMode?: InteractionMode;
   onInteractionModeChange?: (mode: InteractionMode) => void;
   selectedModel?: AIModel;
   onModelChange?: (model: AIModel) => void;
+  // Execution approval gate
+  pendingPlan?: PendingExecutionPlan | null;
+  onExecutePlan?: (planId: string) => void;
+  onRejectPlan?: (planId: string) => void;
   // Conversation management (new)
   conversations?: Conversation[];
   activeConversationId?: string | null;
@@ -353,6 +359,8 @@ function QuickAction({ emoji, label, onClick }: { emoji: string; label: string; 
   );
 }
 
+// Execution Plan Approval is now handled inline with voice-only UI
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -370,10 +378,14 @@ export default function FloatingChat({
   transcript,
   onCancelProcessing,
   onStopSpeaking,
+  voiceError,
   interactionMode: controlledInteractionMode,
   onInteractionModeChange,
   selectedModel: controlledModel,
   onModelChange,
+  pendingPlan,
+  onExecutePlan,
+  onRejectPlan,
   conversations,
   activeConversationId,
   onConversationCreate,
@@ -704,14 +716,7 @@ export default function FloatingChat({
             </div>
           </div>
           <div class="messages" id="messages"></div>
-          <div class="mode-toggle-container">
-            <button class="mode-btn" id="plan-btn" onclick="setMode('plan')">
-              <span>💭</span><span>Plan</span>
-            </button>
-            <button class="mode-btn" id="doit-btn" onclick="setMode('execute')">
-              <span>🔥</span><span>EXECUTE</span>
-            </button>
-          </div>
+          <!-- Mode toggle removed - unified mode -->
           <div class="input-area">
             <textarea class="text-input" id="input" placeholder="Type a message..." rows="1"></textarea>
             <button class="send-btn" id="send-btn">
@@ -878,15 +883,45 @@ export default function FloatingChat({
         return;
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('Image must be less than 5MB');
+      // Compress image to max 1MB for reliable delivery
+      const compressImage = (dataUrl: string): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            // Max dimension 1600px
+            const maxDim = 1600;
+            if (width > maxDim || height > maxDim) {
+              const ratio = Math.min(maxDim / width, maxDim / height);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            // JPEG at 70% quality for smaller size
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.onerror = () => resolve(dataUrl); // fallback to original
+          img.src = dataUrl;
+        });
+      };
+
+      // Validate file size (max 10MB raw, will compress)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Image must be less than 10MB');
         resolve(null);
         return;
       }
 
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = async () => {
+        const raw = reader.result as string;
+        const compressed = await compressImage(raw);
+        resolve(compressed);
+      };
       reader.onerror = () => {
         console.error('Failed to read image');
         resolve(null);
@@ -1231,35 +1266,9 @@ export default function FloatingChat({
             <div ref={chatEndRef} />
           </div>
 
-          {/* Mode Toggle - Simplified */}
-          <div style={{
-            ...styles.modeToggleContainer,
-            padding: '6px 12px',
-          }}>
-            <div style={styles.modeToggle}>
-              <button
-                onClick={() => setInteractionMode('plan')}
-                style={{
-                  ...styles.modeButton,
-                  padding: '6px 10px',
-                  ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
-                }}
-              >
-                <span style={styles.modeIcon}>💭</span>
-                <span>Plan</span>
-              </button>
-              <button
-                onClick={() => setInteractionMode('execute')}
-                style={{
-                  ...styles.modeButton,
-                  padding: '6px 10px',
-                  ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
-                }}
-              >
-                <span style={styles.modeIcon}>🔥</span>
-                <span>EXECUTE</span>
-              </button>
-            </div>
+          {/* Mode toggle removed - unified mode with EXECUTE? confirmation */}
+          <div style={{ display: 'none' }}>
+            {/* Hidden - keeping state for compatibility */}
           </div>
 
           {/* Input Area */}
@@ -1269,11 +1278,13 @@ export default function FloatingChat({
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (input.trim() && !isLoading) {
-                      onSend(input.trim(), undefined, interactionMode);
+                    if ((input.trim() || pendingImage) && !isLoading) {
+                      onSend(input.trim(), pendingImage || undefined, interactionMode);
+                      setPendingImage(null);
                     }
                   }
                 }}
@@ -1638,34 +1649,40 @@ export default function FloatingChat({
           </div>
         )}
 
-        {/* Mode Toggle */}
-        <div style={styles.modeToggleContainer}>
-          <div style={styles.modeToggle}>
-            <button
-              onClick={() => setInteractionMode('plan')}
-              style={{
-                ...styles.modeButton,
-                ...(interactionMode === 'plan' ? styles.modeButtonActive : {}),
-              }}
-              title="Plan Mode - Brainstorm and discuss without taking action"
-            >
-              <span style={styles.modeIcon}>💭</span>
-              <span>Plan</span>
-            </button>
-            <button
-              onClick={() => setInteractionMode('execute')}
-              style={{
-                ...styles.modeButton,
-                ...(interactionMode === 'execute' ? styles.modeButtonActiveDoIt : {}),
-              }}
-              title="EXECUTE Mode - Execute with OpenClaw power"
-            >
-              <span style={styles.modeIcon}>🔥</span>
-              <span>EXECUTE</span>
-            </button>
+        {/* Pending Execution Plan - Voice-Only Mode */}
+        {pendingPlan && pendingPlan.requiresApproval && (
+          <div style={styles.voiceOnlyApprovalContainer}>
+            <div style={styles.voiceOnlyApprovalHeader}>
+              <span style={styles.voiceOnlyApprovalIcon}>✋</span>
+              <span style={styles.voiceOnlyApprovalText}>
+                I'll {pendingPlan.plannedActions[0]?.replace(/Execute\?$/, '').trim() || 'execute the plan'}. 
+                Say <strong>'yes'</strong> to execute or <strong>'no'</strong> to cancel.
+              </span>
+            </div>
+            {pendingPlan.toolCallCount > 0 && (
+              <div style={styles.voiceOnlyApprovalMeta}>
+                {pendingPlan.toolCallCount} tool{pendingPlan.toolCallCount !== 1 ? 's' : ''} ready to execute
+              </div>
+            )}
           </div>
-          
-        </div>
+        )}
+
+        {/* Mode toggle removed - unified mode */}
+
+        {/* Voice error toast */}
+        {voiceError && (
+          <div style={{
+            padding: '8px 12px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: 8,
+            fontSize: '0.75rem',
+            color: '#fca5a5',
+            margin: '0 12px 4px',
+          }}>
+            {voiceError}
+          </div>
+        )}
 
         {/* Input Area */}
         <div style={styles.inputArea}>
@@ -1858,6 +1875,24 @@ const animationStyles = `
     50% {
       box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.4);
       transform: scale(1.02);
+    }
+  }
+  
+  @keyframes pendingPlanGlow {
+    0%, 100% {
+      box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05);
+    }
+    50% {
+      box-shadow: 0 4px 25px rgba(249, 115, 22, 0.4), inset 0 0 30px rgba(249, 115, 22, 0.1);
+    }
+  }
+  
+  @keyframes executeButtonPulse {
+    0%, 100% {
+      box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4);
+    }
+    50% {
+      box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6), 0 0 15px rgba(239, 68, 68, 0.3);
     }
   }
   ${sidebarAnimationStyles}
@@ -2598,5 +2633,128 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 3,
     borderRadius: 2,
     animation: 'waveform 0.5s ease-in-out infinite',
+  },
+
+  // Pending Execution Plan - Voice-friendly
+  pendingPlanContainer: {
+    margin: '12px 16px',
+    padding: 16,
+    borderRadius: 12,
+    border: '1px solid rgba(249, 115, 22, 0.4)',
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%)',
+    boxShadow: '0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05)',
+    animation: 'pendingPlanGlow 2s ease-in-out infinite',
+  },
+  pendingPlanHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    textAlign: 'center' as const,
+    justifyContent: 'center',
+  },
+  pendingPlanIcon: {
+    fontSize: '24px',
+    filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
+  },
+  pendingPlanTitle: {
+    fontSize: '1rem',
+    fontWeight: 600,
+    color: '#fff',
+    margin: 0,
+    textAlign: 'center' as const,
+  },
+  pendingPlanContent: {
+    marginBottom: 12,
+  },
+  pendingPlanPrompt: {
+    padding: 16,
+    marginBottom: 12,
+    fontSize: '0.9rem',
+    color: 'rgba(255, 255, 255, 0.95)',
+    background: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    textAlign: 'center' as const,
+    border: '1px solid rgba(249, 115, 22, 0.3)',
+  },
+  pendingPlanWaitingText: {
+    display: 'block',
+    lineHeight: 1.5,
+  },
+  pendingPlanMeta: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '8px 0',
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  pendingPlanToolCount: {
+    fontWeight: 500,
+  },
+  pendingPlanFallbackButtons: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  pendingPlanButtonRejectFallback: {
+    padding: '8px 16px',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
+    borderRadius: 20,
+    background: 'rgba(239, 68, 68, 0.15)',
+    color: '#ef4444',
+    fontSize: '0.8rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    minWidth: 60,
+  },
+  pendingPlanButtonExecuteFallback: {
+    padding: '8px 16px',
+    border: '1px solid rgba(249, 115, 22, 0.6)',
+    borderRadius: 20,
+    background: 'rgba(249, 115, 22, 0.3)',
+    color: '#fb923c',
+    fontSize: '0.8rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    minWidth: 60,
+  },
+
+  // Voice-only approval styles
+  voiceOnlyApprovalContainer: {
+    margin: '12px 16px',
+    padding: 16,
+    borderRadius: 12,
+    border: '1px solid rgba(249, 115, 22, 0.4)',
+    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%)',
+    boxShadow: '0 4px 15px rgba(249, 115, 22, 0.2), inset 0 0 20px rgba(249, 115, 22, 0.05)',
+    animation: 'pendingPlanGlow 2s ease-in-out infinite',
+  },
+  voiceOnlyApprovalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  voiceOnlyApprovalIcon: {
+    fontSize: '24px',
+    filter: 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.6))',
+    flexShrink: 0,
+  },
+  voiceOnlyApprovalText: {
+    fontSize: '0.95rem',
+    color: 'rgba(255, 255, 255, 0.95)',
+    lineHeight: 1.4,
+    fontWeight: 500,
+  },
+  voiceOnlyApprovalMeta: {
+    padding: '8px 0',
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center' as const,
+    fontWeight: 500,
   },
 };
