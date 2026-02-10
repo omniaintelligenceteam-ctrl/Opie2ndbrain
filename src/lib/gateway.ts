@@ -1,7 +1,7 @@
 // Gateway configuration - centralized for all API routes
-// Uses proxy endpoint to bypass CORS issues with OpenClaw direct API
-export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || '/api/openclaw-proxy';
-export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'proxy-internal';
+// Uses Tailscale Funnel (public HTTPS) for production access
+export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
+export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'opie-token-123';
 
 // Check if we're likely in a production environment without local gateway
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
