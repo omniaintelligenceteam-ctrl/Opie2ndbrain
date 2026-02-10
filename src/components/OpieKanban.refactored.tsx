@@ -18,7 +18,7 @@ import ImmersiveVoiceMode from './ImmersiveVoiceMode';
 import MobileNavigation, { MobileHeader } from './MobileNavigation';
 import { FloatingActionButton } from './BottomSheet';
 import CommandPalette, { ShortcutsHelp } from './CommandPalette';
-import { globalStyles } from './styles/globalStyles';
+// globalStyles.ts was removed — all CSS is now in src/styles/premium.css
 
 // Lazy-loaded views (code splitting)
 const DashboardView = lazy(() => import('./dashboard/DashboardView'));
@@ -202,7 +202,7 @@ export default function OpieKanban(): React.ReactElement {
           <ShortcutsHelp isOpen={shortcutsHelpOpen} onClose={() => setShortcutsHelpOpen(false)} />
           {isMobile && activeView !== 'voice' && <MobileNavigation activeView={activeView} onNavigate={handleViewChange} agentCount={activeAgents.length} taskCount={runningTasksCount} isVisible={bottomNavVisible} />}
           {isMobile && activeView === 'dashboard' && <FloatingActionButton icon="⚡" onClick={() => handleViewChange('voice')} color="primary" label="Quick Chat" />}
-          <style>{globalStyles}</style>
+          {/* Global styles loaded via premium.css import in layout.tsx */}
         </div>
       </ErrorBoundary>
     </NotificationProvider>

@@ -100,7 +100,7 @@ export const darkTheme: Theme = {
     textPrimary: 'rgba(255, 255, 255, 0.95)',
     textSecondary: 'rgba(255, 255, 255, 0.7)',
     textTertiary: 'rgba(255, 255, 255, 0.5)',
-    textMuted: 'rgba(255, 255, 255, 0.35)',
+    textMuted: 'rgba(255, 255, 255, 0.45)',
     
     // Borders
     border: 'rgba(255, 255, 255, 0.08)',

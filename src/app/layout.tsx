@@ -3,7 +3,7 @@ import { ThemeProvider } from '../contexts/ThemeContext'
 import { AgentPersonalityProvider } from '../contexts/AgentPersonalityContext'
 import { AgentPerformanceProvider } from '../contexts/AgentPerformanceContext'
 import { SystemStatusProvider } from '../contexts/SystemStatusContext'
-import GlobalStyles from '../components/GlobalStyles'
+import '../styles/premium.css'
 
 export const metadata: Metadata = {
   title: 'Opie 2nd Brain',
@@ -72,7 +72,6 @@ export default function RootLayout({
           <SystemStatusProvider>
             <AgentPersonalityProvider>
               <AgentPerformanceProvider>
-                <GlobalStyles />
                 {children}
               </AgentPerformanceProvider>
             </AgentPersonalityProvider>
