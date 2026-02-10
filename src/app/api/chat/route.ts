@@ -51,6 +51,9 @@ User said: `;
 
 const SYSTEM_PROMPT = `You are Opie, a helpful AI assistant. You're friendly, concise, and practical.`;
 
+// For OpenClaw routing - let the agent use its natural identity
+const OPENCLAW_SYSTEM_PROMPT = `You are Wes's AI assistant. Be helpful, direct, and practical.`;
+
 // Helper to create SSE stream
 function createStreamResponse(generator: AsyncGenerator<string>) {
   const stream = new ReadableStream({
@@ -135,7 +138,7 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
     console.log('[streamOllama] Using gateway routing');
     try {
       const gatewayMessages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: OPENCLAW_SYSTEM_PROMPT },
         ...messages.map(msg => ({
           role: msg.role as 'system' | 'user' | 'assistant',
           content: msg.content,
@@ -725,7 +728,7 @@ async function* streamOllamaWithTools(
     console.log('[streamOllamaWithTools] Using OpenClaw gateway for tools');
     try {
       const gatewayMessages: ChatMessage[] = [
-        { role: 'system', content: messages[0]?.content || SYSTEM_PROMPT },
+        { role: 'system', content: messages[0]?.content || OPENCLAW_SYSTEM_PROMPT },
         ...messages.slice(1).map(msg => ({
           role: msg.role as 'system' | 'user' | 'assistant',
           content: msg.content,
@@ -845,7 +848,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
     console.log('[streamAnthropic] Using gateway routing');
     try {
       const gatewayMessages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: OPENCLAW_SYSTEM_PROMPT },
         ...messages.slice(1).map(msg => ({
           role: msg.role as 'system' | 'user' | 'assistant',
           content: msg.content,
