@@ -144,7 +144,7 @@ async function* streamOllama(messages: Array<{role: string, content: string}>, m
 
       const stream = await gatewayChatClient.createStreamingCompletion({
         messages: gatewayMessages,
-        model: model,
+        model: "openclaw:main", // Use OpenClaw main agent
         stream: true,
         max_tokens: 1024,
       });
@@ -408,7 +408,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}`;
 
         const response = await gatewayChatClient.createCompletion({
           messages: gatewayMessages,
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'openclaw:main', // Use OpenClaw main agent
           max_tokens: 1024,
           temperature: 0.1,
         });
@@ -521,7 +521,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}`;
 
         const response = await gatewayChatClient.createCompletion({
           messages: gatewayMessages,
-          model: 'kimi-k2.5:cloud',
+          model: 'openclaw:main', // Use OpenClaw main agent
           max_tokens: 1024,
           temperature: 0.1,
         });
@@ -828,7 +828,7 @@ async function* streamAnthropic(messages: Array<{role: string, content: string}>
 
       const stream = await gatewayChatClient.createStreamingCompletion({
         messages: gatewayMessages,
-        model: model,
+        model: "openclaw:main", // Use OpenClaw main agent
         stream: true,
         max_tokens: 1024,
       });

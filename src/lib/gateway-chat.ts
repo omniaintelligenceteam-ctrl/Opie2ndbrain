@@ -31,8 +31,8 @@ export class GatewayChatClient {
   private useGateway: boolean;
 
   constructor() {
-    this.gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'https://gateway.omnialightscapepro.com';
-    this.gatewayToken = process.env.GATEWAY_TOKEN || '';
+    this.gatewayUrl = GATEWAY_URL;
+    this.gatewayToken = GATEWAY_TOKEN;
     this.useGateway = !!(this.gatewayUrl && this.gatewayToken);
     
     console.log('[GatewayChatClient] Initialized:', {
