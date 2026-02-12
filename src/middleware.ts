@@ -11,6 +11,7 @@ const PUBLIC_ROUTES = [
   '/api/tts',       // Text-to-speech
   '/api/openclaw/:path*', // OpenClaw integration
   '/api/kanban',          // Kanban board (G needs access)
+  '/api/telegram/webhook', // Telegram webhook endpoint (external service access)
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
