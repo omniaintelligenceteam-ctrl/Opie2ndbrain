@@ -88,7 +88,7 @@ const WORKFLOW_NAMES: Record<string, string> = {
 
 function getDB() {
   const db = getSupabaseAdmin()
-  if (!db) throw new Error('Supabase not configured')
+  if (!db) throw new Error('Database not configured — set SUPABASE_URL and SUPABASE_ANON_KEY in .env.local')
   return db
 }
 

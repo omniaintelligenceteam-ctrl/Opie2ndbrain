@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, input, auto_start } = body
+    const { type, input, auto_start, topic, trade } = body
 
     if (!type) {
       return NextResponse.json(
@@ -96,22 +96,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check Supabase availability before attempting DB operations
+    const supabase = getSupabaseAdmin()
+    if (!supabase) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Database not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY) in environment variables.',
+          code: 'SUPABASE_NOT_CONFIGURED',
+        },
+        { status: 503 }
+      )
+    }
+
+    // Accept { topic, trade } directly or nested in input
+    const workflowInput = input || { topic: topic || 'general', trade: trade || 'Home Services' }
+
     // Create workflow in database
-    const workflow = await createWorkflow(type, input || {})
+    const workflow = await createWorkflow(type, workflowInput)
+
+    // Create linked content bundle so handleCompletion can save assets
+    let bundleId: string | null = null
+    try {
+      const bId = `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const { data: bundle } = await supabase
+        .from('content_bundles')
+        .insert({
+          id: bId,
+          topic: workflowInput.topic || workflowInput.trade || type,
+          trade: workflowInput.trade || null,
+          status: 'creating',
+          workflow_id: workflow.id,
+        })
+        .select()
+        .single()
+      bundleId = bundle?.id || null
+    } catch (bundleErr) {
+      console.warn('[Workflows POST] Failed to create bundle:', bundleErr)
+      // Non-fatal — workflow can still run, bundle created on completion as fallback
+    }
 
     // Start if auto_start
     if (auto_start) {
       const started = await startWorkflow(workflow.id)
       return NextResponse.json({
         success: true,
-        data: started,
+        data: { ...started, bundleId },
         timestamp: new Date().toISOString(),
       })
     }
 
     return NextResponse.json({
       success: true,
-      data: workflow,
+      data: { ...workflow, bundleId },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {

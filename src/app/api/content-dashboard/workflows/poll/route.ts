@@ -278,11 +278,29 @@ async function handleCompletion(
   const parsed = parseAgentOutput(rawOutput)
 
   // Find the bundle linked to this workflow
-  const { data: bundle } = await supabase
+  const { data: existingBundle } = await supabase
     .from('content_bundles')
     .select('id')
     .eq('workflow_id', workflow.id)
     .single()
+
+  // Fallback: create bundle if none exists (handles workflows created before bundle-creation fix)
+  let bundle = existingBundle
+  if (!bundle) {
+    const bId = `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const { data: newBundle } = await supabase
+      .from('content_bundles')
+      .insert({
+        id: bId,
+        topic: (workflow.input as Record<string, unknown>)?.topic as string || workflow.type || 'Generated Content',
+        trade: (workflow.input as Record<string, unknown>)?.trade as string || null,
+        status: 'creating',
+        workflow_id: workflow.id,
+      })
+      .select()
+      .single()
+    bundle = newBundle
+  }
 
   if (bundle) {
     // Create content asset records

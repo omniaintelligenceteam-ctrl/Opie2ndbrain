@@ -226,8 +226,11 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
     return () => clearInterval(interval)
   }, [workflows])
 
+  const [triggering, setTriggering] = useState<string | null>(null)
+
   // Trigger new workflow
   const triggerWorkflow = async (workflowType: string, params = {}) => {
+    setTriggering(workflowType)
     try {
       const response = await fetch('/api/content-dashboard/workflows', {
         method: 'POST',
@@ -239,18 +242,21 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
         })
       })
 
-      if (!response.ok) throw new Error('Failed to trigger workflow')
-
       const data = await response.json()
-      if (data.success) {
-        await fetchWorkflows()
-        return data.data
-      } else {
-        throw new Error(data.error)
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `Workflow trigger failed (${response.status})`)
       }
+
+      await fetchWorkflows()
+      showToast?.({ type: 'success', title: 'Workflow Started', message: `${workflowType} is now running`, duration: 4000 })
+      return data.data
     } catch (err: any) {
       setError(err.message)
+      showToast?.({ type: 'error', title: 'Workflow Error', message: err.message, duration: 8000 })
       throw err
+    } finally {
+      setTriggering(null)
     }
   }
 
@@ -444,6 +450,7 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
           {quickWorkflows.map((workflow) => (
             <button
               key={workflow.type}
+              disabled={triggering !== null}
               onClick={() => {
                 triggerWorkflow(workflow.type, {
                   topic: 'HVAC maintenance tips',
@@ -457,17 +464,18 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
                 padding: '14px 18px',
                 borderRadius: '12px',
                 border: 'none',
-                background: workflow.gradient,
+                background: triggering === workflow.type ? 'rgba(100,100,100,0.4)' : workflow.gradient,
                 color: '#fff',
                 fontWeight: 600,
                 fontSize: '0.9rem',
-                cursor: 'pointer',
+                cursor: triggering !== null ? 'not-allowed' : 'pointer',
+                opacity: triggering !== null && triggering !== workflow.type ? 0.5 : 1,
                 transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: `0 4px 15px ${workflow.glow}`,
+                boxShadow: triggering === workflow.type ? 'none' : `0 4px 15px ${workflow.glow}`,
               }}
             >
-              {workflow.icon}
-              {workflow.label}
+              {triggering === workflow.type ? <Loader className="w-5 h-5 animate-spin" /> : workflow.icon}
+              {triggering === workflow.type ? 'Starting...' : workflow.label}
             </button>
           ))}
         </div>
