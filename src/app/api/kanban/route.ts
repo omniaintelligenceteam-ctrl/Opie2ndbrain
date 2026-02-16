@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
-// Initialize Supabase client with service key for admin operations
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+function getClient() {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error('Supabase not configured');
+  return client;
+}
 
 export interface KanbanTask {
   id: string;
@@ -26,6 +26,7 @@ export interface KanbanColumn {
 // GET - Fetch all tasks grouped by column
 export async function GET() {
   try {
+    const supabase = getClient();
     const { data: tasks, error } = await supabase
       .from('kanban_tasks')
       .select('*')
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const supabase = getClient();
     // Get the next position number for this column
     const { data: maxPositionData } = await supabase
       .from('kanban_tasks')
@@ -125,8 +127,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
+    const supabase = getClient();
     const updates: Partial<KanbanTask> = {};
-    
+
     if (column_id && ['todo', 'progress', 'done'].includes(column_id)) {
       updates.column_id = column_id;
     }
@@ -179,6 +182,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
+    const supabase = getClient();
     const { data, error } = await supabase
       .from('kanban_tasks')
       .delete()
