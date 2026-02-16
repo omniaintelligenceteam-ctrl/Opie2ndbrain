@@ -331,7 +331,7 @@ export default function ContentCommandCenter() {
           )}
 
           {activeTab === 'content' && (
-            <ContentStudio supabase={supabase} />
+            <ContentStudio supabase={supabase} onRefresh={fetchStats} />
           )}
         </div>
       </main>
