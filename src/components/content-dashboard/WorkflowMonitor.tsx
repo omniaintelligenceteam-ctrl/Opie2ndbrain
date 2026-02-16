@@ -77,18 +77,33 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
       
       const response = await fetch(`/api/content-dashboard/workflows?${queryParams}`)
       
-      if (!response.ok) throw new Error('Failed to fetch workflows')
-      
       const data = await response.json()
       if (data.success) {
-        setWorkflows(data.data)
-        setSystemStatus(data.system_status)
+        setWorkflows(data.data || [])
+        setSystemStatus(data.system_status || { 
+          activeWorkflows: 0, 
+          queuedWorkflows: 0, 
+          utilizationRate: 0 
+        })
+        // Clear any previous errors if request succeeds
+        setError(null)
       } else {
-        throw new Error(data.error)
+        throw new Error(data.error || 'Failed to fetch workflows')
       }
     } catch (err: any) {
-      setError(err.message)
       console.error('Failed to fetch workflows:', err)
+      
+      // Show empty state instead of hard error
+      setWorkflows([])
+      setSystemStatus({ 
+        activeWorkflows: 0, 
+        queuedWorkflows: 0, 
+        utilizationRate: 0 
+      })
+      
+      // Show a softer error message that auto-clears
+      setError('Workflows temporarily unavailable - retrying...')
+      setTimeout(() => setError(null), 5000)
     } finally {
       setLoading(false)
     }

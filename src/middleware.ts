@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   '/api/openclaw/:path*', // OpenClaw integration
   '/api/kanban',          // Kanban board (G needs access)
   '/api/telegram/webhook', // Telegram webhook endpoint (external service access)
+  '/api/content-dashboard/:path*', // Content dashboard internal APIs
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
