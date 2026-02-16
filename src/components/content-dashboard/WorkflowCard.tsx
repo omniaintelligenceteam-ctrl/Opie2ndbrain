@@ -1,8 +1,8 @@
 'use client'
 
-import { 
-  PlayCircle, 
-  CheckCircle, 
+import {
+  PlayCircle,
+  CheckCircle,
   XCircle,
   Clock,
   AlertTriangle,
@@ -40,24 +40,30 @@ interface WorkflowCardProps {
   formatDuration?: (minutes?: number) => string
 }
 
-export default function WorkflowCard({ 
-  workflow, 
+const STATUS_COLORS: Record<string, string> = {
+  running: '#3b82f6',
+  completed: '#22c55e',
+  failed: '#ef4444',
+  queued: '#eab308',
+  pending: '#6b7280',
+}
+
+export default function WorkflowCard({
+  workflow,
   onView,
-  onCancel, 
+  onCancel,
   onRetry,
   getStatusDisplay,
   formatDuration
 }: WorkflowCardProps) {
   const [showActions, setShowActions] = useState(false)
-  
-  // Use provided status display function or fallback to default
+
   const statusDisplay = getStatusDisplay ? getStatusDisplay(workflow) : {
     color: 'text-gray-600 bg-gray-100',
     icon: <Clock className="w-4 h-4" />,
     label: workflow.status
   }
 
-  // Use provided format function or fallback to default
   const formatTime = formatDuration || ((minutes?: number) => {
     if (!minutes) return 'N/A'
     if (minutes < 60) return `${Math.round(minutes)}m`
@@ -66,82 +72,142 @@ export default function WorkflowCard({
 
   const canCancel = workflow.status === 'running' || workflow.status === 'queued'
   const canRetry = workflow.status === 'failed'
+  const runtimeStatus = workflow.runtime_status || workflow.status
+  const borderColor = STATUS_COLORS[runtimeStatus] || '#6b7280'
 
   return (
-    <div 
-      className="rounded-lg border transition-colors hover:shadow-lg relative"
-      style={{ 
-        background: 'var(--bg-card)',
-        borderColor: 'var(--border)'
+    <div
+      className="card-hover"
+      style={{
+        borderRadius: '14px',
+        background: 'rgba(15, 15, 26, 0.7)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${borderColor}`,
+        transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        position: 'relative',
       }}
     >
-      <div className="p-4">
+      <div style={{ padding: '20px' }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-3">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div className={`rounded-full px-2 py-1 flex items-center space-x-1 ${statusDisplay.color}`}>
               {statusDisplay.icon}
               <span className="text-xs font-medium">{statusDisplay.label}</span>
             </div>
-            
+
             {workflow.queue_position && (
-              <span 
-                className="text-xs px-2 py-1 rounded-full"
-                style={{ 
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-muted)'
-                }}
-              >
+              <span style={{
+                fontSize: '0.75rem',
+                padding: '3px 8px',
+                borderRadius: '20px',
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.45)',
+              }}>
                 #{workflow.queue_position}
               </span>
             )}
           </div>
-          
-          <div className="relative">
+
+          <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowActions(!showActions)}
-              className="p-1 hover:opacity-80 transition-opacity"
-              style={{ color: 'var(--text-muted)' }}
+              style={{
+                padding: '4px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.35)',
+                transition: 'color 0.2s',
+              }}
             >
-              <MoreVertical className="w-4 h-4" />
+              <MoreVertical size={16} />
             </button>
-            
+
             {showActions && (
-              <div 
-                className="absolute right-0 mt-1 py-1 rounded-lg border shadow-lg z-10 min-w-[120px]"
-                style={{ 
-                  background: 'var(--bg-card)',
-                  borderColor: 'var(--border)'
-                }}
-              >
+              <div style={{
+                position: 'absolute',
+                right: 0,
+                marginTop: '4px',
+                padding: '4px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(15, 15, 26, 0.95)',
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+                zIndex: 10,
+                minWidth: '130px',
+              }}>
                 {onView && (
                   <button
                     onClick={() => { onView(); setShowActions(false) }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 transition-colors hover:bg-[var(--bg-hover)]"
-                    style={{ color: 'var(--text-primary)' }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'none',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      color: 'rgba(255,255,255,0.7)',
+                      transition: 'background 0.15s',
+                    }}
                   >
-                    <Eye className="w-4 h-4" />
-                    <span>View Details</span>
+                    <Eye size={14} />
+                    View Details
                   </button>
                 )}
-                
+
                 {canCancel && onCancel && (
                   <button
                     onClick={() => { onCancel(); setShowActions(false) }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 transition-colors text-red-500"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'none',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      color: '#f87171',
+                      transition: 'background 0.15s',
+                    }}
                   >
-                    <StopCircle className="w-4 h-4" />
-                    <span>Cancel</span>
+                    <StopCircle size={14} />
+                    Cancel
                   </button>
                 )}
-                
+
                 {canRetry && onRetry && (
                   <button
                     onClick={() => { onRetry(); setShowActions(false) }}
-                    className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 transition-colors text-blue-500"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'none',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      color: '#60a5fa',
+                      transition: 'background 0.15s',
+                    }}
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Retry</span>
+                    <RefreshCw size={14} />
+                    Retry
                   </button>
                 )}
               </div>
@@ -150,38 +216,50 @@ export default function WorkflowCard({
         </div>
 
         {/* Workflow Info */}
-        <div className="space-y-2">
-          <h3 className="font-medium" style={{ color: 'var(--text-primary)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <h3 style={{
+            fontWeight: 600,
+            fontSize: '1rem',
+            color: '#fff',
+            letterSpacing: '-0.01em',
+          }}>
             {workflow.name || workflow.type.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           </h3>
-          
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+
+          <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.35)' }}>
             {workflow.type} • {workflow.id.slice(0, 8)}
           </p>
 
           {/* Error Message */}
           {workflow.error_message && (
-            <div 
-              className="text-sm p-2 rounded border-l-4"
-              style={{ 
-                background: 'var(--error-bg)',
-                borderColor: 'var(--error)',
-                color: 'var(--error)'
-              }}
-            >
+            <div style={{
+              fontSize: '0.8rem',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              borderLeft: '3px solid #ef4444',
+              color: '#f87171',
+            }}>
               {workflow.error_message}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '16px',
+          paddingTop: '14px',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
             {new Date(workflow.created_at).toLocaleString()}
           </span>
-          
+
           {(workflow.actual_duration || workflow.runtime_duration) && (
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
               {formatTime(workflow.actual_duration || workflow.runtime_duration)}
             </span>
           )}

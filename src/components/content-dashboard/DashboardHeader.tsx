@@ -26,164 +26,176 @@ export default function DashboardHeader({ stats, loading, error, onRefresh }: Da
   }
 
   const getHealthColor = (health: number) => {
-    if (health >= 0.9) return 'text-green-500'
-    if (health >= 0.7) return 'text-yellow-500'
-    return 'text-red-500'
+    if (health >= 0.9) return '#22c55e'
+    if (health >= 0.7) return '#eab308'
+    return '#ef4444'
   }
 
+  const statCards = [
+    {
+      icon: Activity,
+      value: stats?.activeWorkflows || 0,
+      label: 'Active Workflows',
+      color: '#3b82f6',
+    },
+    {
+      icon: Clock,
+      value: stats?.queuedWorkflows || 0,
+      label: 'Queued',
+      color: '#eab308',
+    },
+    {
+      icon: FileText,
+      value: stats?.approvedContent || 0,
+      label: 'Content Ready',
+      color: '#22c55e',
+    },
+    {
+      icon: FileText,
+      value: stats?.queuedTopics || 0,
+      label: 'Ideas Queue',
+      color: '#a855f7',
+    },
+    {
+      icon: Users,
+      value: stats?.avgAgentHealth ? `${Math.round(stats.avgAgentHealth * 100)}%` : '-%',
+      label: 'Agent Health',
+      color: stats?.avgAgentHealth ? getHealthColor(stats.avgAgentHealth) : '#6b7280',
+    },
+    {
+      icon: Clock,
+      value: stats?.scheduledPosts || 0,
+      label: 'Scheduled',
+      color: '#06b6d4',
+    },
+  ]
+
   return (
-    <div className="mb-8">
-      {/* Header Section */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            🎨 Content Command Center
-          </h1>
-          <p className="mt-2" style={{ color: 'var(--text-secondary)' }}>
-            Monitor workflows, manage content bundles, and track performance
-          </p>
+    <div style={{ marginBottom: '32px' }}>
+      {/* Header Section — Glass Card */}
+      <div className="glass-card" style={{
+        padding: '32px',
+        marginBottom: '28px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 className="gradient-text" style={{
+              fontSize: '2rem',
+              fontWeight: 800,
+              letterSpacing: '-0.03em',
+              marginBottom: '8px',
+            }}>
+              Content Command Center
+            </h1>
+            <p style={{
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '0.95rem',
+              fontWeight: 400,
+            }}>
+              Monitor workflows, manage content bundles, and track performance
+            </p>
+          </div>
+
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
         </div>
-        
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex items-center px-4 py-2 rounded-lg font-medium transition-colors"
-          style={{ 
-            background: 'var(--accent)',
-            color: 'white'
-          }}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div 
-          className="mb-6 p-4 rounded-lg border flex items-center"
-          style={{ 
-            background: 'var(--error-bg)',
-            borderColor: 'var(--error)',
-            color: 'var(--error)'
-          }}
-        >
-          <AlertTriangle className="w-5 h-5 mr-2" />
+        <div style={{
+          marginBottom: '24px',
+          padding: '14px 18px',
+          borderRadius: '12px',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          color: '#f87171',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '0.9rem',
+        }}>
+          <AlertTriangle size={18} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <Activity className="w-8 h-8 text-blue-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.activeWorkflows || 0}
+      {/* Stats Cards Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+        {statCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div
+              key={card.label}
+              className="card-hover"
+              style={{
+                padding: '20px',
+                borderRadius: '14px',
+                background: 'rgba(15, 15, 26, 0.6)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderLeft: `3px solid ${card.color}`,
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: `${card.color}15`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Icon size={18} style={{ color: card.color }} />
+                </div>
+              </div>
+              <p style={{
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                color: '#fff',
+                letterSpacing: '-0.02em',
+                lineHeight: 1,
+                marginBottom: '6px',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {loading ? '...' : typeof card.value === 'number' ? formatNumber(card.value) : card.value}
               </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Active Workflows</p>
-            </div>
-          </div>
-        </div>
-
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <Clock className="w-8 h-8 text-yellow-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.queuedWorkflows || 0}
+              <p style={{
+                fontSize: '0.78rem',
+                color: 'rgba(255,255,255,0.4)',
+                fontWeight: 500,
+                letterSpacing: '0.01em',
+              }}>
+                {card.label}
               </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Queued</p>
             </div>
-          </div>
-        </div>
-
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <FileText className="w-8 h-8 text-green-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.approvedContent || 0}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Content Ready</p>
-            </div>
-          </div>
-        </div>
-
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <FileText className="w-8 h-8 text-purple-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.queuedTopics || 0}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Ideas Queue</p>
-            </div>
-          </div>
-        </div>
-
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <Users 
-              className={`w-8 h-8 ${stats?.avgAgentHealth ? getHealthColor(stats.avgAgentHealth) : 'text-gray-500'}`} 
-            />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.avgAgentHealth ? `${Math.round(stats.avgAgentHealth * 100)}%` : '-%'}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Agent Health</p>
-            </div>
-          </div>
-        </div>
-
-        <div 
-          className="p-6 rounded-lg border"
-          style={{ 
-            background: 'var(--bg-card)',
-            borderColor: 'var(--border)'
-          }}
-        >
-          <div className="flex items-center">
-            <Clock className="w-8 h-8 text-cyan-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {loading ? '...' : stats?.scheduledPosts || 0}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Scheduled</p>
-            </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
     </div>
   )
