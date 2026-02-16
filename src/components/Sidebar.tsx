@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain, Clock } from 'lucide-react'
+import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain, Clock, Palette } from 'lucide-react'
 import { Category, Document } from '../lib/documents'
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -31,6 +31,13 @@ return (
       {filteredDocs && <div className="search-results"><div className="search-results-count">{filteredDocs.length} results</div><div className="search-results-list">{filteredDocs.map(doc => <button key={`${doc.category}-${doc.slug}`} onClick={() => { onSelectDoc(doc); onSearchChange('') }} className="sidebar-item"><FileText size={16} /><span>{doc.title}</span></button>)}</div></div>}
       {!searchQuery && recentJournals.length > 0 && <div className="sidebar-section"><div className="sidebar-section-title">Recent Journals</div>{recentJournals.slice(0, 5).map(doc => <button key={doc.slug} onClick={() => onSelectDoc(doc)} className={`sidebar-item ${selectedDoc?.slug === doc.slug ? 'active' : ''}`}><Calendar size={16} style={{ color: 'var(--text-muted)' }} /><span>{doc.title}</span></button>)}</div>}
       <nav className="sidebar-nav">
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">Tools</div>
+          <a href="/content-command-center" className="sidebar-item">
+            <Palette size={16} />
+            <span>Content Command Center</span>
+          </a>
+        </div>
         <div className="sidebar-section-title">Categories</div>
         {categories.map(category => (
           <div key={category.slug} className="sidebar-category">
