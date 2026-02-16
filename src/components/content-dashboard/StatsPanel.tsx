@@ -53,12 +53,12 @@ export default function StatsPanel({
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {stats.map((stat) => (
-        <div key={stat.label} className="p-4 rounded-lg border border-gray-800 bg-gray-900/50">
+        <div key={stat.label} className="p-4 rounded-lg border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2 mb-2">
             <stat.icon className={`w-4 h-4 ${stat.color}`} />
-            <span className="text-xs text-gray-400">{stat.label}</span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{stat.label}</span>
           </div>
-          <p className="text-2xl font-bold">{stat.value}</p>
+          <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stat.value}</p>
         </div>
       ))}
     </div>

@@ -39,25 +39,25 @@ export default function ContentStudio({ supabase }: ContentStudioProps) {
       {/* Asset Library */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {assetTypes.map((asset) => (
-          <div key={asset.label} className="p-4 rounded-lg border border-gray-800 bg-gray-900/50 hover:border-gray-700 transition-colors cursor-pointer">
+          <div key={asset.label} className="p-4 rounded-lg border transition-colors cursor-pointer" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-2 mb-2">
               <asset.icon className="w-5 h-5 text-purple-400" />
-              <span className="text-sm text-gray-300">{asset.label}</span>
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{asset.label}</span>
             </div>
-            <p className="text-2xl font-bold">{asset.count}</p>
+            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{asset.count}</p>
           </div>
         ))}
       </div>
 
       {/* Recent Bundles */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-6">
+      <div className="rounded-lg border p-6" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <TrendingUp className="w-5 h-5" />
           Recent Content Bundles
         </h3>
         
         {bundles.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
             <p>No content bundles yet.</p>
             <p className="text-sm mt-1">Run the content machine workflow to create your first bundle.</p>
           </div>
@@ -67,12 +67,13 @@ export default function ContentStudio({ supabase }: ContentStudioProps) {
               <div 
                 key={bundle.id}
                 onClick={() => setSelectedBundle(bundle)}
-                className="p-3 rounded-lg border border-gray-800 hover:border-gray-700 cursor-pointer transition-colors"
+                className="p-3 rounded-lg border cursor-pointer transition-colors"
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="font-medium text-sm">{bundle.topic}</h4>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                       {bundle.trade} • Quality: {bundle.quality_score}/100
                     </p>
                   </div>
@@ -93,7 +94,7 @@ export default function ContentStudio({ supabase }: ContentStudioProps) {
         <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors">
           Create New Bundle
         </button>
-        <button className="px-4 py-2 border border-gray-700 hover:border-gray-600 rounded-lg text-sm transition-colors">
+        <button className="px-4 py-2 border rounded-lg text-sm transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
           View All Assets
         </button>
       </div>

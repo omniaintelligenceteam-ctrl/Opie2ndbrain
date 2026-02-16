@@ -3,6 +3,7 @@ import { ThemeProvider } from '../contexts/ThemeContext'
 import { AgentPersonalityProvider } from '../contexts/AgentPersonalityContext'
 import { AgentPerformanceProvider } from '../contexts/AgentPerformanceContext'
 import { SystemStatusProvider } from '../contexts/SystemStatusContext'
+import './globals.css'
 import '../styles/premium.css'
 
 export const metadata: Metadata = {
