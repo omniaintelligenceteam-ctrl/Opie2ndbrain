@@ -4,6 +4,7 @@ import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway'
 import { completeWorkflow, failWorkflow, updateWorkflowProgress } from '@/lib/workflowEngine'
 import { parseAgentOutput, parsedContentToAssetRecords } from '@/lib/contentParser'
 import { createVideoFromBundle, HEYGEN_CONFIGURED } from '@/lib/heygen'
+import { generateContentImages, IMAGE_GEN_CONFIGURED } from '@/lib/imageGeneration'
 import type { WorkflowRecord } from '@/lib/workflowEngine'
 
 export const runtime = 'nodejs'
@@ -355,6 +356,24 @@ async function handleCompletion(
       }
     } catch (heygenErr) {
       console.error(`[Poll] HeyGen auto-trigger failed for bundle ${bundle.id}:`, heygenErr)
+    }
+  }
+
+  // Auto-trigger image generation for the bundle
+  if (IMAGE_GEN_CONFIGURED && bundle) {
+    try {
+      const trade = (workflow.input as Record<string, unknown>)?.trade as string || 'General Contracting'
+      const topic = (workflow.input as Record<string, unknown>)?.topic as string || 'Generated Content'
+
+      await generateContentImages({
+        bundleId: bundle.id,
+        trade,
+        topic,
+        count: 3,
+      })
+      console.log(`[Poll] Auto-triggered image generation for bundle ${bundle.id}`)
+    } catch (imgErr) {
+      console.error(`[Poll] Image generation failed for bundle ${bundle.id}:`, imgErr)
     }
   }
 }
