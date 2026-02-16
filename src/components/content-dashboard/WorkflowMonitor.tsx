@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import {
   Activity,
@@ -14,10 +14,13 @@ import {
   AlertTriangle,
   Loader,
   TrendingUp,
-  Settings
+  Settings,
+  Copy,
+  Mail
 } from 'lucide-react'
 import WorkflowCard from './WorkflowCard'
 import StatsPanel from './StatsPanel'
+import type { Toast } from '../../hooks/useRealTimeData'
 
 interface Workflow {
   id: string
@@ -42,6 +45,7 @@ interface Workflow {
   runtime_duration?: number
   queue_position?: number
   priority?: number
+  progress?: number
 }
 
 interface SystemStatus {
@@ -52,9 +56,10 @@ interface SystemStatus {
 
 interface WorkflowMonitorProps {
   supabase: SupabaseClient | null
+  showToast?: (toast: Omit<Toast, 'id'>) => string
 }
 
-export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
+export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitorProps) {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,6 +70,51 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
     type: 'all',
     timeframe: '24h'
   })
+  const prevStatusMapRef = useRef<Map<string, string>>(new Map())
+
+  // Copy to clipboard with toast feedback
+  const copyToClipboard = async (text: string, label?: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast?.({ type: 'success', title: 'Copied!', message: label ? `${label} copied to clipboard` : 'Content copied to clipboard', duration: 2000 })
+    } catch {
+      showToast?.({ type: 'error', title: 'Copy failed', message: 'Could not copy to clipboard', duration: 3000 })
+    }
+  }
+
+  // Parse workflow output into displayable sections
+  const parseWorkflowOutput = (output: any): Array<{ label: string; content: string }> => {
+    if (!output) return []
+    if (typeof output === 'string') return [{ label: 'Generated Content', content: output }]
+    if (typeof output === 'object') {
+      const textValue = output.result || output.content || output.text || output.response
+      if (typeof textValue === 'string') {
+        const sections = textValue.split(/(?=\n##?\s|\n\d+\.\s+[A-Z])/).filter(Boolean)
+        if (sections.length > 1) {
+          return sections.map((section: string, i: number) => {
+            const firstLine = section.trim().split('\n')[0].replace(/^#+\s*/, '').replace(/^\d+\.\s*/, '')
+            return { label: firstLine.slice(0, 60) || `Section ${i + 1}`, content: section.trim() }
+          })
+        }
+        return [{ label: 'Generated Content', content: textValue }]
+      }
+      return Object.entries(output)
+        .filter(([, val]) => val !== null && val !== undefined)
+        .map(([key, val]) => ({
+          label: key.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          content: typeof val === 'string' ? val : JSON.stringify(val, null, 2),
+        }))
+    }
+    return [{ label: 'Output', content: JSON.stringify(output, null, 2) }]
+  }
+
+  // Generate mailto link from workflow output
+  const generateMailtoLink = (workflow: Workflow): string => {
+    const subject = encodeURIComponent(`Content from: ${workflow.name || workflow.type}`)
+    const sections = parseWorkflowOutput(workflow.output)
+    const body = encodeURIComponent(sections.map(s => `--- ${s.label} ---\n\n${s.content}`).join('\n\n'))
+    return `mailto:?subject=${subject}&body=${body}`
+  }
 
   // Fetch workflows data
   const fetchWorkflows = useCallback(async () => {
@@ -79,7 +129,26 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
 
       const data = await response.json()
       if (data.success) {
-        setWorkflows(data.data || [])
+        const newWorkflows: Workflow[] = data.data || []
+        setWorkflows(newWorkflows)
+
+        // Detect status transitions for toast notifications
+        if (showToast && prevStatusMapRef.current.size > 0) {
+          for (const wf of newWorkflows) {
+            const prevStatus = prevStatusMapRef.current.get(wf.id)
+            if (prevStatus && prevStatus !== wf.status) {
+              if (wf.status === 'completed') {
+                showToast({ type: 'success', title: 'Workflow Complete!', message: `"${wf.name || wf.type}" finished successfully.`, duration: 6000 })
+              } else if (wf.status === 'failed') {
+                showToast({ type: 'error', title: 'Workflow Failed', message: `"${wf.name || wf.type}" encountered an error.`, duration: 8000 })
+              }
+            }
+          }
+        }
+        const newMap = new Map<string, string>()
+        for (const wf of newWorkflows) { newMap.set(wf.id, wf.status) }
+        prevStatusMapRef.current = newMap
+
         setSystemStatus(data.system_status || {
           activeWorkflows: 0,
           queuedWorkflows: 0,
@@ -122,17 +191,40 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
         )
         .subscribe()
 
-      const interval = setInterval(fetchWorkflows, 30000)
+      const interval = setInterval(fetchWorkflows, 10000)
 
       return () => {
         channel.unsubscribe()
         clearInterval(interval)
       }
     } else {
-      const interval = setInterval(fetchWorkflows, 30000)
+      const interval = setInterval(fetchWorkflows, 10000)
       return () => clearInterval(interval)
     }
   }, [fetchWorkflows, supabase])
+
+  // Poll for workflow completion via gateway session status
+  useEffect(() => {
+    const running = workflows.filter(w => w.status === 'running' || w.status === 'pending')
+    if (running.length === 0) return
+
+    const pollCompletion = async () => {
+      try {
+        await fetch('/api/content-dashboard/workflows/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workflowIds: running.map(w => w.id) }),
+        })
+        // Poll updates Supabase → triggers real-time subscription → fetchWorkflows()
+      } catch (err) {
+        console.error('Completion poll error:', err)
+      }
+    }
+
+    pollCompletion()
+    const interval = setInterval(pollCompletion, 5000)
+    return () => clearInterval(interval)
+  }, [workflows])
 
   // Trigger new workflow
   const triggerWorkflow = async (workflowType: string, params = {}) => {
@@ -492,7 +584,7 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
           background: 'rgba(0,0,0,0.6)',
           backdropFilter: 'blur(4px)',
           overflowY: 'auto',
-          zIndex: 50,
+          zIndex: 10000,
           display: 'flex',
           justifyContent: 'center',
           paddingTop: '80px',
@@ -576,22 +668,55 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
 
               {selectedWorkflow.output && (
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                    Output
-                  </label>
-                  <pre style={{
-                    marginTop: '6px',
-                    fontSize: '0.8rem',
-                    padding: '14px',
-                    borderRadius: '10px',
-                    overflow: 'auto',
-                    maxHeight: '160px',
-                    background: 'rgba(0,0,0,0.3)',
-                    color: 'rgba(255,255,255,0.7)',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                  }}>
-                    {JSON.stringify(selectedWorkflow.output, null, 2)}
-                  </pre>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Content Preview
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => {
+                          const sections = parseWorkflowOutput(selectedWorkflow.output)
+                          const allText = sections.map(s => `--- ${s.label} ---\n\n${s.content}`).join('\n\n')
+                          copyToClipboard(allText, 'All content')
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '6px', border: 'none', background: 'rgba(102, 126, 234, 0.15)', color: '#667eea', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        <Copy size={12} /> Copy All
+                      </button>
+                      <a
+                        href={generateMailtoLink(selectedWorkflow)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none' }}
+                      >
+                        <Mail size={12} /> Email
+                      </a>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto' }}>
+                    {parseWorkflowOutput(selectedWorkflow.output).map((section, idx) => (
+                      <div key={idx} style={{ padding: '14px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#667eea' }}>{section.label}</span>
+                          <button
+                            onClick={() => copyToClipboard(section.content, section.label)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', cursor: 'pointer' }}
+                          >
+                            <Copy size={10} /> Copy
+                          </button>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {section.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <details style={{ marginTop: '10px' }}>
+                    <summary style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', userSelect: 'none' }}>
+                      Show raw JSON
+                    </summary>
+                    <pre style={{ marginTop: '6px', fontSize: '0.8rem', padding: '14px', borderRadius: '10px', overflow: 'auto', maxHeight: '160px', background: 'rgba(0,0,0,0.3)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      {JSON.stringify(selectedWorkflow.output, null, 2)}
+                    </pre>
+                  </details>
                 </div>
               )}
 

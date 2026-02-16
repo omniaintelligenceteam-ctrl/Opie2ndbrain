@@ -27,6 +27,7 @@ export interface WorkflowRecord {
   queue_position: number | null
   priority: number
   progress: number
+  agent_session_id: string | null
 }
 
 export interface AgentLog {
@@ -194,7 +195,14 @@ async function spawnAgentForWorkflow(
     return
   }
 
-  const task = promptBuilder(input)
+  const baseTask = promptBuilder(input)
+  const structuredSuffix =
+    `\n\n---\nIMPORTANT: When you are finished, wrap your final output in <content-output> tags like this:\n` +
+    `<content-output>\n{"email": "full email text...", "linkedin": "full LinkedIn post...", ` +
+    `"instagram": "full Instagram caption...", "video_script": "full video script...", ` +
+    `"blog_outline": "full blog outline..."}\n</content-output>\n` +
+    `Put your complete content for each piece inside the JSON values. Use \\n for newlines within strings.`
+  const task = baseTask + structuredSuffix
   const label = `workflow-${workflowId}`
 
   await appendLog(workflowId, {
@@ -232,13 +240,12 @@ async function spawnAgentForWorkflow(
     message: `Agent spawned successfully (session: ${sessionId})`,
   })
 
-  // Update progress
+  // Store session ID for the completion poller and update progress
   const db = getDB()
-  await db.from('workflows').update({ progress: 25 }).eq('id', workflowId)
-
-  // Note: In a full system, the agent would call back to update progress.
-  // For now, we mark it as running. The agent completion callback or
-  // polling mechanism would call completeWorkflow() when done.
+  await db.from('workflows').update({
+    progress: 25,
+    agent_session_id: sessionId,
+  }).eq('id', workflowId)
 }
 
 /** Append a log entry to a workflow */

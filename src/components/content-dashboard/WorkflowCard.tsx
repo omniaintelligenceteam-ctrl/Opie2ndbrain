@@ -25,6 +25,7 @@ interface Workflow {
   runtime_duration?: number
   error_message?: string
   queue_position?: number
+  progress?: number
 }
 
 interface WorkflowCardProps {
@@ -242,6 +243,28 @@ export default function WorkflowCard({
             }}>
               {workflow.error_message}
             </div>
+          )}
+
+          {/* Progress Bar */}
+          {(runtimeStatus === 'running' || runtimeStatus === 'pending') && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>Progress</span>
+                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{workflow.progress || 0}%</span>
+              </div>
+              <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  borderRadius: '3px',
+                  width: `${workflow.progress || 0}%`,
+                  background: runtimeStatus === 'running' ? 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)' : 'rgba(255,255,255,0.15)',
+                  transition: 'width 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                }} />
+              </div>
+            </div>
+          )}
+          {runtimeStatus === 'completed' && (
+            <div style={{ marginTop: '12px', height: '6px', borderRadius: '3px', background: 'linear-gradient(90deg, #22c55e 0%, #16a34a 100%)' }} />
           )}
         </div>
 

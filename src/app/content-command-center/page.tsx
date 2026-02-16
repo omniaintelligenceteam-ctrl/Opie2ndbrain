@@ -5,8 +5,14 @@ import Link from 'next/link'
 import WorkflowMonitor from '../../components/content-dashboard/WorkflowMonitor'
 import ContentStudio from '../../components/content-dashboard/ContentStudio'
 import DashboardHeader from '../../components/content-dashboard/DashboardHeader'
+import ScheduleView from '../../components/content-dashboard/ScheduleView'
+import ABTestView from '../../components/content-dashboard/ABTestView'
+import AnalyticsView from '../../components/content-dashboard/AnalyticsView'
+import IntegrationsView from '../../components/content-dashboard/IntegrationsView'
 import { supabase } from '../../lib/supabase'
-import { Activity, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Activity, FileText, Calendar, GitBranch, BarChart3, Webhook, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useToast } from '../../hooks/useRealTimeData'
+import { ToastContainer } from '../../components/NotificationCenter'
 
 interface DashboardStats {
   activeWorkflows: number
@@ -108,6 +114,7 @@ export default function ContentCommandCenter() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const { toasts, showToast, dismissToast } = useToast()
 
   // Load sidebar state on mount
   useEffect(() => {
@@ -159,6 +166,10 @@ export default function ContentCommandCenter() {
   const tabs = [
     { id: 'workflows', label: 'Workflow Monitor', icon: Activity },
     { id: 'content', label: 'Content Studio', icon: FileText },
+    { id: 'schedule', label: 'Schedule', icon: Calendar },
+    { id: 'ab-tests', label: 'A/B Tests', icon: GitBranch },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'integrations', label: 'Integrations', icon: Webhook },
   ]
 
   return (
@@ -327,14 +338,31 @@ export default function ContentCommandCenter() {
 
           {/* Tab Content */}
           {activeTab === 'workflows' && (
-            <WorkflowMonitor supabase={supabase} />
+            <WorkflowMonitor supabase={supabase} showToast={showToast} />
           )}
 
           {activeTab === 'content' && (
-            <ContentStudio supabase={supabase} onRefresh={fetchStats} />
+            <ContentStudio supabase={supabase} onRefresh={fetchStats} showToast={showToast} />
+          )}
+
+          {activeTab === 'schedule' && (
+            <ScheduleView supabase={supabase} showToast={showToast} />
+          )}
+
+          {activeTab === 'ab-tests' && (
+            <ABTestView supabase={supabase} showToast={showToast} />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsView showToast={showToast} />
+          )}
+
+          {activeTab === 'integrations' && (
+            <IntegrationsView showToast={showToast} />
           )}
         </div>
       </main>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
