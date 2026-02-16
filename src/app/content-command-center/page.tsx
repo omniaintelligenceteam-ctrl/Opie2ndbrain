@@ -5,6 +5,7 @@ import WorkflowMonitor from '../../components/content-dashboard/WorkflowMonitor'
 import ContentStudio from '../../components/content-dashboard/ContentStudio'
 import DashboardHeader from '../../components/content-dashboard/DashboardHeader'
 import { supabase } from '../../lib/supabase'
+import { notifyWorkflowCompleted, notifyLeadCaptured, notifyDemoBooked } from '../../lib/make-webhook'
 
 interface DashboardStats {
   activeWorkflows: number
@@ -61,6 +62,32 @@ export default function ContentCommandCenter() {
     return () => clearInterval(interval)
   }, [])
 
+  // Test Make webhook
+  const testMakeWebhook = async () => {
+    const result = await notifyWorkflowCompleted({
+      bundleId: 'test-' + Date.now(),
+      topic: 'Test HVAC Content',
+      trade: 'HVAC',
+      qualityScore: 87,
+      status: 'completed',
+      assets: {
+        email: 'Subject: Why you miss calls...',
+        linkedin: 'Post content...',
+        instagram: 'Caption...',
+        heygenScript: 'Script...',
+        images: 3
+      }
+    })
+    
+    if (result.success) {
+      alert('✅ Sent test data to Make.com! Check your scenario.')
+    } else {
+      alert('❌ Failed to send to Make: ' + (result.error as Error).message)
+    }
+  }
+
+  return (
+
   return (
     <div className="min-h-screen" style={{ 
       background: 'var(--bg-primary)',
@@ -74,6 +101,16 @@ export default function ContentCommandCenter() {
           error={error}
           onRefresh={fetchStats}
         />
+
+        {/* Make.com Test Button */}
+        <div className="mb-4">
+          <button 
+            onClick={testMakeWebhook}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+          >
+            🚀 Test Make.com Webhook
+          </button>
+        </div>
 
         {/* Navigation Tabs */}
         <div className="mb-8">
