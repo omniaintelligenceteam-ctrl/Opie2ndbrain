@@ -278,7 +278,11 @@ export default function WorkflowMonitor({ supabase }: WorkflowMonitorProps) {
         </div>
         
         {systemStatus && (
-          <StatsPanel systemStatus={systemStatus} />
+          <StatsPanel 
+            activeCount={systemStatus.activeWorkflows} 
+            completedCount={0}
+            failedCount={0}
+          />
         )}
       </div>
 
