@@ -32,7 +32,11 @@ return (
       {!searchQuery && recentJournals.length > 0 && <div className="sidebar-section"><div className="sidebar-section-title">Recent Journals</div>{recentJournals.slice(0, 5).map(doc => <button key={doc.slug} onClick={() => onSelectDoc(doc)} className={`sidebar-item ${selectedDoc?.slug === doc.slug ? 'active' : ''}`}><Calendar size={16} style={{ color: 'var(--text-muted)' }} /><span>{doc.title}</span></button>)}</div>}
       <nav className="sidebar-nav">
         <div className="sidebar-section">
-          <div className="sidebar-section-title">Tools</div>
+          <div className="sidebar-section-title">Dashboard</div>
+          <a href="/" className="sidebar-item">
+            <Brain size={16} />
+            <span>Main Dashboard</span>
+          </a>
           <a href="/content-command-center" className="sidebar-item">
             <Palette size={16} />
             <span>Content Command Center</span>
