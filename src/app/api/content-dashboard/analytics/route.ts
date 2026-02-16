@@ -1,54 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    // Try to fetch real data from database (Supabase)
-    let stats;
-    
-    try {
-      // In a real implementation, you would connect to Supabase here
-      // const { data, error } = await supabase
-      //   .from('dashboard_analytics')
-      //   .select('*')
-      //   .single()
-      // 
-      // if (error) throw error
-      // stats = data
-      
-      // For now, return mock data but simulate a real system
-      stats = {
-        activeWorkflows: Math.floor(Math.random() * 10) + 1,
-        queuedWorkflows: Math.floor(Math.random() * 15) + 5,
-        approvedContent: Math.floor(Math.random() * 50) + 20,
-        queuedTopics: Math.floor(Math.random() * 20) + 8,
-        avgAgentHealth: Math.round((0.8 + Math.random() * 0.2) * 100) / 100,
-        scheduledPosts: Math.floor(Math.random() * 30) + 10,
-        timestamp: new Date().toISOString()
-      }
-    } catch (dbError) {
-      console.warn('Database connection failed, using fallback mock data:', dbError)
-      
-      // Fallback mock data if database connection fails
-      stats = {
-        activeWorkflows: 3,
-        queuedWorkflows: 7,
-        approvedContent: 24,
-        queuedTopics: 12,
-        avgAgentHealth: 0.87,
-        scheduledPosts: 15,
-        timestamp: new Date().toISOString(),
-        fallback: true
-      }
+    const supabase = getSupabaseAdmin()
+
+    if (!supabase) {
+      // Fallback when Supabase is not configured
+      return NextResponse.json({
+        success: true,
+        data: {
+          activeWorkflows: 0,
+          queuedWorkflows: 0,
+          approvedContent: 0,
+          queuedTopics: 0,
+          avgAgentHealth: 0,
+          scheduledPosts: 0,
+          timestamp: new Date().toISOString(),
+          fallback: true,
+        },
+      })
     }
+
+    // Run all count queries in parallel
+    const [
+      activeResult,
+      queuedResult,
+      approvedResult,
+      bundlesResult,
+      completedResult,
+      failedResult,
+    ] = await Promise.all([
+      supabase
+        .from('workflows')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'running'),
+      supabase
+        .from('workflows')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['queued', 'pending']),
+      supabase
+        .from('content_bundles')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'complete'),
+      supabase
+        .from('content_bundles')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'creating'),
+      supabase
+        .from('workflows')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed'),
+      supabase
+        .from('workflows')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'failed'),
+    ])
+
+    const active = activeResult.count || 0
+    const queued = queuedResult.count || 0
+    const approved = approvedResult.count || 0
+    const creating = bundlesResult.count || 0
+    const completed = completedResult.count || 0
+    const failed = failedResult.count || 0
+
+    // Calculate agent health as completion rate
+    const totalFinished = completed + failed
+    const avgAgentHealth = totalFinished > 0
+      ? Math.round((completed / totalFinished) * 100) / 100
+      : 1.0 // Default to 100% when no data
 
     return NextResponse.json({
       success: true,
-      data: stats
+      data: {
+        activeWorkflows: active,
+        queuedWorkflows: queued,
+        approvedContent: approved,
+        queuedTopics: creating,
+        avgAgentHealth,
+        scheduledPosts: 0, // No scheduling system yet
+        timestamp: new Date().toISOString(),
+      },
     })
   } catch (error) {
     console.error('Analytics API error:', error)
-    
-    // Even if everything fails, return basic mock data so dashboard doesn't break
+
     return NextResponse.json({
       success: true,
       data: {
@@ -56,11 +95,11 @@ export async function GET(request: NextRequest) {
         queuedWorkflows: 0,
         approvedContent: 0,
         queuedTopics: 0,
-        avgAgentHealth: 0.0,
+        avgAgentHealth: 0,
         scheduledPosts: 0,
         timestamp: new Date().toISOString(),
-        error: true
-      }
+        error: true,
+      },
     })
   }
 }

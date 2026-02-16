@@ -2,6 +2,7 @@
 // Grouped navigation with progressive disclosure
 'use client';
 import React, { memo, useState, useCallback, useEffect } from 'react';
+import Link from 'next/link';
 import { ViewId } from '../../hooks/useKeyboardShortcuts';
 
 // ─── Data types ──────────────────────────────────────────────────────
@@ -263,6 +264,13 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
     return (
       <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
         {renderNavButton(STANDALONE_TOP)}
+        <Link
+          href="/content-command-center"
+          style={{ ...navItemStyle, justifyContent: 'center', textDecoration: 'none' }}
+          title="Content Command Center"
+        >
+          <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center' }}>📡</span>
+        </Link>
         <div style={dividerStyle} />
         {NAV_GROUPS.map(group => {
           const hasActiveChild = groupContainsView(group, activeView);
@@ -295,6 +303,15 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
     <nav style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
       {/* Dashboard - standalone top */}
       {renderNavButton(STANDALONE_TOP)}
+
+      {/* Content Command Center - separate page */}
+      <Link
+        href="/content-command-center"
+        style={{ ...navItemStyle, textDecoration: 'none' }}
+      >
+        <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>📡</span>
+        <span style={{ flex: 1, fontWeight: 500 }}>Content Center</span>
+      </Link>
 
       <div style={dividerStyle} />
 

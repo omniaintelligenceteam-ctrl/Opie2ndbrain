@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain, Clock, Palette } from 'lucide-react'
+import Link from 'next/link'
+import { Calendar, Lightbulb, MessageSquare, Rocket, Sparkles, Search, ChevronRight, ChevronDown, FileText, Brain, Clock, LayoutDashboard, Radio } from 'lucide-react'
 import { Category, Document } from '../lib/documents'
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -30,18 +31,14 @@ return (
       <div className="sidebar-search"><div className="search-wrapper"><Search /><input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} className="search-input" /></div></div>
       {filteredDocs && <div className="search-results"><div className="search-results-count">{filteredDocs.length} results</div><div className="search-results-list">{filteredDocs.map(doc => <button key={`${doc.category}-${doc.slug}`} onClick={() => { onSelectDoc(doc); onSearchChange('') }} className="sidebar-item"><FileText size={16} /><span>{doc.title}</span></button>)}</div></div>}
       {!searchQuery && recentJournals.length > 0 && <div className="sidebar-section"><div className="sidebar-section-title">Recent Journals</div>{recentJournals.slice(0, 5).map(doc => <button key={doc.slug} onClick={() => onSelectDoc(doc)} className={`sidebar-item ${selectedDoc?.slug === doc.slug ? 'active' : ''}`}><Calendar size={16} style={{ color: 'var(--text-muted)' }} /><span>{doc.title}</span></button>)}</div>}
-      <nav className="sidebar-nav">
+      {!searchQuery && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">Dashboard</div>
-          <a href="/" className="sidebar-item">
-            <Brain size={16} />
-            <span>Main Dashboard</span>
-          </a>
-          <a href="/content-command-center" className="sidebar-item">
-            <Palette size={16} />
-            <span>Content Command Center</span>
-          </a>
+          <Link href="/" className="sidebar-item"><LayoutDashboard size={16} style={{ color: 'var(--text-muted)' }} /><span>Main Dashboard</span></Link>
+          <Link href="/content-command-center" className="sidebar-item"><Radio size={16} style={{ color: 'var(--text-muted)' }} /><span>Content Command Center</span></Link>
         </div>
+      )}
+      <nav className="sidebar-nav">
         <div className="sidebar-section-title">Categories</div>
         {categories.map(category => (
           <div key={category.slug} className="sidebar-category">

@@ -1,8 +1,8 @@
 'use client'
 
-import { 
-  Activity, 
-  CheckCircle, 
+import {
+  Activity,
+  CheckCircle,
   Clock,
   TrendingUp
 } from 'lucide-react'
@@ -14,11 +14,11 @@ interface StatsPanelProps {
   avgDuration?: number
 }
 
-export default function StatsPanel({ 
-  activeCount, 
-  completedCount, 
+export default function StatsPanel({
+  activeCount,
+  completedCount,
   failedCount,
-  avgDuration 
+  avgDuration
 }: StatsPanelProps) {
   const total = activeCount + completedCount + failedCount
   const successRate = total > 0 ? Math.round((completedCount / total) * 100) : 0
@@ -28,39 +28,67 @@ export default function StatsPanel({
       label: 'Active',
       value: activeCount,
       icon: Activity,
-      color: 'text-blue-400'
+      color: '#3b82f6',
     },
     {
       label: 'Completed',
       value: completedCount,
       icon: CheckCircle,
-      color: 'text-green-400'
+      color: '#22c55e',
     },
     {
       label: 'Failed',
       value: failedCount,
       icon: Clock,
-      color: 'text-red-400'
+      color: '#ef4444',
     },
     {
       label: 'Success Rate',
       value: `${successRate}%`,
       icon: TrendingUp,
-      color: 'text-purple-400'
+      color: '#a855f7',
     }
   ]
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {stats.map((stat) => (
-        <div key={stat.label} className="p-4 rounded-lg border border-gray-800 bg-gray-900/50">
-          <div className="flex items-center gap-2 mb-2">
-            <stat.icon className={`w-4 h-4 ${stat.color}`} />
-            <span className="text-xs text-gray-400">{stat.label}</span>
+    <div className="glass-card" style={{ padding: '14px 18px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {stats.map((stat) => (
+          <div key={stat.label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: `${stat.color}15`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <stat.icon size={16} style={{ color: stat.color }} />
+            </div>
+            <div>
+              <p style={{
+                fontSize: '1.25rem',
+                fontWeight: 800,
+                color: '#fff',
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {stat.value}
+              </p>
+              <p style={{
+                fontSize: '0.7rem',
+                color: 'rgba(255,255,255,0.4)',
+                fontWeight: 500,
+                marginTop: '2px',
+              }}>
+                {stat.label}
+              </p>
+            </div>
           </div>
-          <p className="text-2xl font-bold">{stat.value}</p>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
