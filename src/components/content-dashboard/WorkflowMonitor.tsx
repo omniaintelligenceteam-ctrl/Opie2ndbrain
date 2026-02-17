@@ -227,6 +227,9 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
   }, [workflows])
 
   const [triggering, setTriggering] = useState<string | null>(null)
+  const [showQuickForm, setShowQuickForm] = useState<string | null>(null)
+  const [quickTopic, setQuickTopic] = useState('')
+  const [quickNiche, setQuickNiche] = useState('')
 
   // Trigger new workflow
   const triggerWorkflow = async (workflowType: string, params = {}) => {
@@ -452,10 +455,13 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
               key={workflow.type}
               disabled={triggering !== null}
               onClick={() => {
-                triggerWorkflow(workflow.type, {
-                  topic: 'HVAC maintenance tips',
-                  trade: 'HVAC'
-                })
+                if (showQuickForm === workflow.type) {
+                  setShowQuickForm(null)
+                } else {
+                  setShowQuickForm(workflow.type)
+                  setQuickTopic('')
+                  setQuickNiche('')
+                }
               }}
               style={{
                 display: 'flex',
@@ -463,7 +469,7 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
                 gap: '12px',
                 padding: '14px 18px',
                 borderRadius: '12px',
-                border: 'none',
+                border: showQuickForm === workflow.type ? '1px solid rgba(255,255,255,0.3)' : 'none',
                 background: triggering === workflow.type ? 'rgba(100,100,100,0.4)' : workflow.gradient,
                 color: '#fff',
                 fontWeight: 600,
@@ -479,6 +485,111 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
             </button>
           ))}
         </div>
+
+        {showQuickForm && (
+          <div style={{
+            marginTop: '16px',
+            padding: '20px',
+            borderRadius: '12px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            animation: 'fadeIn 0.2s ease-out',
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="text"
+                value={quickTopic}
+                onChange={(e) => setQuickTopic(e.target.value)}
+                placeholder="What do you want content about?"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && quickTopic.trim()) {
+                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
+                    setShowQuickForm(null)
+                    setQuickTopic('')
+                    setQuickNiche('')
+                  }
+                }}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  background: 'rgba(0,0,0,0.3)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  width: '100%',
+                }}
+              />
+              <input
+                type="text"
+                value={quickNiche}
+                onChange={(e) => setQuickNiche(e.target.value)}
+                placeholder="Industry or niche (optional) — e.g., SaaS, fitness, real estate..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && quickTopic.trim()) {
+                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
+                    setShowQuickForm(null)
+                    setQuickTopic('')
+                    setQuickNiche('')
+                  }
+                }}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  background: 'rgba(0,0,0,0.3)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  width: '100%',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setShowQuickForm(null)
+                    setQuickTopic('')
+                    setQuickNiche('')
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'transparent',
+                    color: 'rgba(255,255,255,0.6)',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!quickTopic.trim()}
+                  onClick={() => {
+                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
+                    setShowQuickForm(null)
+                    setQuickTopic('')
+                    setQuickNiche('')
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: !quickTopic.trim() ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                    color: '#fff',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: !quickTopic.trim() ? 'not-allowed' : 'pointer',
+                    opacity: !quickTopic.trim() ? 0.5 : 1,
+                  }}
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filters — Glass Card */}

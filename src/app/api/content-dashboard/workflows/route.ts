@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Accept { topic, trade } directly or nested in input
-    const workflowInput = input || { topic: topic || 'general', trade: trade || 'Home Services' }
+    const workflowInput = input || { topic: topic || 'general', trade: trade || '' }
 
     // Create workflow in database
     const workflow = await createWorkflow(type, workflowInput)

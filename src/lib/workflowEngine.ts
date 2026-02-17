@@ -44,7 +44,7 @@ export interface AgentLog {
 const WORKFLOW_PROMPTS: Record<string, (input: Record<string, unknown>) => string> = {
   'content-machine': (input) =>
     `Generate a complete content bundle for the topic "${input.topic || 'general'}". ` +
-    `Trade/Industry: ${input.trade || 'Home Services'}. ` +
+    (input.trade ? `Trade/Industry: ${input.trade}. ` : '') +
     `Create the following content pieces:\n` +
     `1. Email newsletter (subject line + body)\n` +
     `2. LinkedIn post (professional tone, 150-300 words)\n` +
@@ -54,7 +54,7 @@ const WORKFLOW_PROMPTS: Record<string, (input: Record<string, unknown>) => strin
     `Return each piece clearly labeled. Focus on providing actionable value to the target audience.`,
 
   'research-trends': (input) =>
-    `Research current trends in the ${input.industry || input.trade || 'Home Services'} industry. ` +
+    `Research current trends${input.industry || input.trade ? ` in the ${input.industry || input.trade} industry` : ''}. ` +
     `Timeframe: ${input.timeframe || 'last 30 days'}. ` +
     `Provide:\n` +
     `1. Top 5 trending topics\n` +
@@ -66,7 +66,7 @@ const WORKFLOW_PROMPTS: Record<string, (input: Record<string, unknown>) => strin
 
   'hook-generator': (input) =>
     `Generate 10 compelling marketing hooks for the topic "${input.topic || 'general'}". ` +
-    `Trade/Industry: ${input.trade || 'Home Services'}. ` +
+    (input.trade ? `Trade/Industry: ${input.trade}. ` : '') +
     `For each hook provide:\n` +
     `1. The hook text (attention-grabbing first line)\n` +
     `2. Platform recommendation (email, social, video)\n` +

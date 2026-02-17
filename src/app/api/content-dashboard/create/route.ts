@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       // Legacy mode - skip research and create content directly
       const { bundleId, sessionIds } = await createContentBundle(
         topic.trim(),
-        trade?.trim() || 'General',
+        trade?.trim() || '',
         selectedAssets
       )
 
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           spawnedAgents: spawnedCount,
           expectedAgents: expectedCount,
           topic,
-          trade: trade || 'General',
+          trade: trade || '',
           selectedAssets,
           mode: 'legacy',
           currentPhase: 'content'
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       // Research-first mode (default)
       const result = await startResearchFirstContentCreation({
         topic: topic.trim(),
-        trade: trade?.trim() || 'General',
+        trade: trade?.trim() || '',
         platforms,
         tone,
         intent,
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
           bundleId: result.bundleId,
           sessionIds: result.sessionIds,
           topic,
-          trade: trade || 'General',
+          trade: trade || '',
           platforms,
           tone,
           intent,

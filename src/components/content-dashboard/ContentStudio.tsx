@@ -88,14 +88,6 @@ interface ContentStudioProps {
 
 const ASSET_COLORS = ['#a855f7', '#06b6d4', '#f97316', '#22c55e']
 
-const INDUSTRY_SUGGESTIONS = [
-  'HVAC', 'Plumbing', 'Electrical', 'Roofing',
-  'General Contracting', 'Landscaping', 'Painting', 'Solar',
-  'Cleaning Services', 'Pest Control', 'Real Estate', 'Property Management',
-  'Auto Services', 'Restaurant', 'Retail', 'Healthcare',
-  'Fitness', 'Education', 'Technology', 'Photography',
-  'Finance', 'Marketing', 'E-Commerce', 'SaaS',
-]
 
 // Map UI labels to DB asset types
 const ASSET_TYPE_MAP: Record<string, string> = {
@@ -1667,10 +1659,9 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 </label>
                 <input
                   type="text"
-                  list="industry-suggestions"
                   value={createForm.trade}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, trade: e.target.value }))}
-                  placeholder="e.g., Real Estate, Fitness, SaaS, Photography..."
+                  placeholder="e.g., SaaS, fitness, real estate, anything..."
                   disabled={creating}
                   style={{
                     width: '100%',
@@ -1685,11 +1676,6 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                     boxSizing: 'border-box' as const,
                   }}
                 />
-                <datalist id="industry-suggestions">
-                  {INDUSTRY_SUGGESTIONS.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
               </div>
 
               {/* Content Types */}
@@ -2811,21 +2797,15 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   </label>
                   <input
                     type="text"
-                    list="industry-suggestions-import"
                     value={importForm.trade}
                     onChange={(e) => setImportForm(p => ({ ...p, trade: e.target.value }))}
-                    placeholder="e.g., Real Estate, Fitness, SaaS..."
+                    placeholder="e.g., SaaS, fitness, real estate, anything..."
                     disabled={importing}
                     style={{
                       width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
                       background: 'rgba(15, 15, 26, 0.8)', color: '#fff', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' as const,
                     }}
                   />
-                  <datalist id="industry-suggestions-import">
-                    {INDUSTRY_SUGGESTIONS.map((s) => (
-                      <option key={s} value={s} />
-                    ))}
-                  </datalist>
                 </div>
               </div>
 

@@ -24,8 +24,8 @@ interface GatewaySession {
   kind?: string
 }
 
-async function fetchGatewaySessions(): Promise<GatewaySession[]> {
-  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) return []
+async function fetchGatewaySessions(): Promise<{ sessions: GatewaySession[]; reachable: boolean }> {
+  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) return { sessions: [], reachable: false }
 
   try {
     const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
@@ -39,17 +39,23 @@ async function fetchGatewaySessions(): Promise<GatewaySession[]> {
         tool: 'sessions_list',
         args: { activeMinutes: 30, messageLimit: 1 },
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     })
 
     const contentType = res.headers.get('content-type') || ''
-    if (!contentType.includes('application/json')) return []
+    if (!contentType.includes('application/json')) return { sessions: [], reachable: false }
 
     const data = await res.json()
-    return data.result?.details?.sessions || data.result?.sessions || []
+    const sessions = data.result?.details?.sessions || data.result?.sessions || []
+    return { sessions, reachable: true }
   } catch (err) {
-    console.error('[Poll] Gateway sessions_list error:', err)
-    return []
+    const isTimeout = err instanceof DOMException && err.name === 'TimeoutError'
+    if (isTimeout) {
+      console.warn('[Poll] Gateway sessions_list timed out (15s)')
+    } else {
+      console.error('[Poll] Gateway sessions_list error:', err)
+    }
+    return { sessions: [], reachable: false }
   }
 }
 
@@ -159,7 +165,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch all gateway sessions at once (single API call)
-    const gatewaySessions = await fetchGatewaySessions()
+    const { sessions: gatewaySessions, reachable: gatewayReachable } = await fetchGatewaySessions()
     const sessionMap = new Map<string, GatewaySession>()
     for (const s of gatewaySessions) {
       const key = s.key || s.sessionId || ''
@@ -180,6 +186,12 @@ export async function POST(request: NextRequest) {
       const session = sessionMap.get(sessionId) || sessionMap.get(`workflow-${wf.id}`)
 
       if (!session) {
+        // If gateway was unreachable, don't mark anything as failed — just keep running
+        if (!gatewayReachable) {
+          running.push(wf.id)
+          continue
+        }
+
         // Session not found in gateway — might be completed and cleaned up
         // Check if enough time has passed since start (at least 30s)
         const elapsed = wf.started_at
