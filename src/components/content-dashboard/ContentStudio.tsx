@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import type { Toast } from '../../hooks/useRealTimeData'
 import VideoPlayer from './VideoPlayer'
+import { ResearchPanel } from './ResearchPanel'
 
 interface ContentBundle {
   id: string
@@ -29,6 +30,14 @@ interface ContentBundle {
   quality_score: number
   status: string
   created_at: string
+  research_findings?: Record<string, unknown>
+  research_progress?: {
+    stage: string
+    message: string
+    progress_percent: number
+    details?: Record<string, unknown>
+  }
+  strategy_doc?: Record<string, unknown>
 }
 
 interface ContentAsset {
@@ -95,6 +104,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [comments, setComments] = useState<{ id: string; author: string; content: string; created_at: string }[]>([])
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
+  const [researchExpanded, setResearchExpanded] = useState(false)
 
   // Copy to clipboard with toast feedback
   const copyToClipboard = async (text: string, label?: string) => {
@@ -310,7 +320,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     }
   }, [fetchBundles, fetchAssetCounts, supabase])
 
-  // Create bundle via API
+  // Create bundle via research-first API
   const handleCreateBundle = useCallback(async () => {
     if (!createForm.topic.trim()) {
       setCreateError('Please enter a topic')
@@ -321,33 +331,59 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     setCreateError(null)
 
     try {
-      const response = await fetch('/api/content-dashboard/bundles', {
+      const response = await fetch('/api/content-dashboard/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: createForm.topic.trim(),
           trade: createForm.trade,
+          selectedAssets: ['email', 'linkedin', 'instagram', 'video_script', 'hooks', 'image_prompt'],
+          tone: 'professional',
+          intent: 'full_creation',
+          autoApprove: false,
+          skipResearch: false,
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to create bundle')
-
       const data = await response.json()
-      if (data.success) {
-        setCreateForm({ topic: '', trade: 'HVAC' })
-        setShowCreateModal(false)
-        fetchBundles()
-        fetchAssetCounts()
-        onRefresh?.()
-      } else {
-        throw new Error(data.error || 'Unknown error')
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `Server error (${response.status})`)
       }
-    } catch (err: any) {
-      setCreateError(err.message || 'Failed to create bundle')
+
+      const topicText = createForm.topic.trim()
+      const tradeText = createForm.trade
+
+      setCreateForm({ topic: '', trade: 'HVAC' })
+      setShowCreateModal(false)
+      showToast?.({
+        type: 'success',
+        title: 'Research Started!',
+        message: `Researching "${topicText}" before creating content...`,
+        duration: 5000,
+      })
+      fetchBundles()
+      fetchAssetCounts()
+      onRefresh?.()
+
+      // Auto-open the newly created bundle in detail view
+      // Set selectedBundle directly — the research polling effect will load data
+      setSelectedBundle({
+        id: data.data.bundleId,
+        topic: topicText,
+        trade: tradeText,
+        quality_score: 0,
+        status: 'researching',
+        created_at: new Date().toISOString(),
+      })
+      setBundleAssets([])
+      setResearchExpanded(false)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create bundle'
+      setCreateError(message)
     } finally {
       setCreating(false)
     }
-  }, [createForm, onRefresh, fetchBundles, fetchAssetCounts])
+  }, [createForm, onRefresh, fetchBundles, fetchAssetCounts, showToast])
 
   // View all assets
   const handleViewAllAssets = useCallback(async () => {
@@ -451,6 +487,53 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   useEffect(() => {
     fetchTemplates()
   }, [fetchTemplates])
+
+  // Poll research progress when viewing a researching bundle
+  useEffect(() => {
+    if (!selectedBundle || selectedBundle.status !== 'researching') return
+
+    const bundleId = selectedBundle.id
+
+    const pollResearch = async () => {
+      try {
+        const [bundleRes, researchRes] = await Promise.all([
+          fetch(`/api/content-dashboard/bundles/${bundleId}`),
+          fetch(`/api/content-dashboard/research?bundleId=${bundleId}`),
+        ])
+        const bundleData = await bundleRes.json()
+        const researchData = await researchRes.json()
+
+        if (!bundleData.success) return
+
+        const updatedBundle: ContentBundle = {
+          id: bundleData.data.id,
+          topic: bundleData.data.topic,
+          trade: bundleData.data.trade,
+          quality_score: bundleData.data.quality_score || 0,
+          status: bundleData.data.status,
+          created_at: bundleData.data.created_at,
+          research_findings: bundleData.data.research_findings || undefined,
+          research_progress: researchData.data?.progress || undefined,
+          strategy_doc: bundleData.data.strategy_doc || undefined,
+        }
+
+        setSelectedBundle(updatedBundle)
+
+        // If research is done, refresh assets and bundle list
+        if (updatedBundle.status !== 'researching') {
+          setBundleAssets(bundleData.data.content_assets || [])
+          fetchBundles()
+        }
+      } catch (err) {
+        console.error('Research polling error:', err)
+      }
+    }
+
+    pollResearch()
+    const interval = setInterval(pollResearch, 3000)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBundle?.id, selectedBundle?.status])
 
   // Save bundle as template
   const handleSaveAsTemplate = async () => {
@@ -665,9 +748,13 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                     borderRadius: '20px',
                     ...(bundle.status === 'complete'
                       ? { background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }
+                      : bundle.status === 'researching'
+                      ? { background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }
+                      : bundle.status === 'failed'
+                      ? { background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }
                       : { background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24' }),
                   }}>
-                    {bundle.status}
+                    {bundle.status === 'researching' ? 'Researching...' : bundle.status}
                   </span>
                 </div>
               </div>
@@ -1099,7 +1186,14 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>{selectedBundle.topic}</h3>
-                <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>{selectedBundle.trade} • {bundleAssets.length} assets</p>
+                <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                  {selectedBundle.trade}
+                  {selectedBundle.status === 'researching'
+                    ? ' \u2022 Research in progress...'
+                    : selectedBundle.status === 'awaiting_strategy_approval'
+                    ? ' \u2022 Awaiting strategy approval'
+                    : ` \u2022 ${bundleAssets.length} assets`}
+                </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 {bundleAssets.length > 0 && (
@@ -1124,6 +1218,28 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               </div>
             </div>
 
+            {/* Research Progress / Findings */}
+            {(selectedBundle.status === 'researching' || selectedBundle.research_findings) && (
+              <div style={{ marginBottom: '20px' }}>
+                <ResearchPanel
+                  bundle={{
+                    id: selectedBundle.id,
+                    topic: selectedBundle.topic || '',
+                    trade: selectedBundle.trade || '',
+                    status: selectedBundle.status,
+                    research_findings: selectedBundle.research_findings,
+                    research_progress: selectedBundle.research_progress,
+                  } as any}
+                  expanded={researchExpanded}
+                  onToggleExpanded={() => setResearchExpanded(!researchExpanded)}
+                  onReload={() => { if (selectedBundle) handleViewBundle(selectedBundle) }}
+                />
+              </div>
+            )}
+
+            {/* Assets Section - hidden during active research */}
+            {selectedBundle.status !== 'researching' && (
+              <>
             {bundleAssetsLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '12px' }}>
                 <Loader size={20} className="animate-spin" style={{ color: '#667eea' }} />
@@ -1131,7 +1247,13 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               </div>
             ) : bundleAssets.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px' }}>
-                <p style={{ color: 'rgba(255,255,255,0.35)' }}>No assets in this bundle yet.</p>
+                <p style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  {selectedBundle.status === 'awaiting_strategy_approval'
+                    ? 'Research complete. Content will be created after strategy approval.'
+                    : selectedBundle.status === 'creating'
+                    ? 'Content is being created based on research and strategy...'
+                    : 'No assets in this bundle yet.'}
+                </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto' }}>
@@ -1241,6 +1363,8 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   </div>
                 ))}
               </div>
+            )}
+              </>
             )}
 
             {/* Comments Section */}
