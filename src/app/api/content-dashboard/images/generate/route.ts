@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const jobs = await generateContentImages({
+    const result = await generateContentImages({
       bundleId,
       trade,
       topic: topic || trade,
@@ -43,9 +43,12 @@ export async function POST(request: NextRequest) {
       brandColors,
     })
 
+    const jobs = result.jobs || []
+    const jobIds = Array.isArray(jobs) ? jobs.map((j) => j.id) : []
+
     return NextResponse.json({
       success: true,
-      data: { jobs, jobIds: jobs.map((j) => j.id) },
+      data: { jobs, jobIds },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
