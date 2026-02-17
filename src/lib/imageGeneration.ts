@@ -6,6 +6,26 @@
 import { getSupabaseAdmin } from './supabase'
 
 // ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
+export const IMAGE_GEN_CONFIGURED = !!GEMINI_API_KEY
+
+// ---------------------------------------------------------------------------
+// Error Classes
+// ---------------------------------------------------------------------------
+
+export class ImageGenerationError extends Error {
+  public statusCode?: number
+  constructor(message: string, statusCode?: number) {
+    super(message)
+    this.name = 'ImageGenerationError'
+    this.statusCode = statusCode
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -55,12 +75,23 @@ function generateId(prefix: string): string {
 // Image Generation
 // ---------------------------------------------------------------------------
 
+// Trade-based generation interface for compatibility
+export interface TradeImageGenerationRequest {
+  bundleId: string
+  trade: string
+  topic: string
+  count?: number
+  style?: string
+  brandColors?: string[]
+}
+
 /**
  * Generate content images using Gemini API with Nano Banana flavor
+ * Supports both original prompts-based and trade-based generation
  */
 export async function generateContentImages(
-  request: ImageGenerationRequest
-): Promise<{ success: boolean; images?: GeneratedImage[]; error?: string }> {
+  request: ImageGenerationRequest | TradeImageGenerationRequest
+): Promise<{ success: boolean; images?: GeneratedImage[]; error?: string; jobs?: any[] }> {
   const supabase = getSupabase()
 
   try {
@@ -435,4 +466,44 @@ export async function generateImagesFromStrategy(
       error: error instanceof Error ? error.message : 'Strategy-based generation failed'
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Compatibility Functions for Legacy API Routes
+// ---------------------------------------------------------------------------
+
+/**
+ * Check prediction status - compatibility function for legacy routes
+ */
+export async function getPredictionStatus(predictionId: string): Promise<{
+  status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled'
+  output?: string[]
+  error?: string
+}> {
+  // This is a placeholder for compatibility with legacy routes
+  // In a full implementation, this would check Gemini API job status
+  return {
+    status: 'failed',
+    error: 'Legacy prediction status checking not implemented in Gemini version'
+  }
+}
+
+/**
+ * Handle image completion - compatibility function for legacy routes
+ */
+export async function handleImageCompletion(
+  jobId: string,
+  predictionStatus: any
+): Promise<void> {
+  // This is a placeholder for compatibility with legacy routes
+  // In a full implementation, this would handle Gemini API completion
+  console.warn('Legacy image completion handler called - not implemented in Gemini version')
+}
+
+/**
+ * Retry image job - compatibility function for legacy routes
+ */
+export async function retryImageJob(jobId: string): Promise<any> {
+  // This is a placeholder for compatibility with legacy routes
+  throw new ImageGenerationError('Legacy retry functionality not implemented in Gemini version')
 }

@@ -46,7 +46,9 @@ export type VoiceEvent =
   | { type: 'CANCEL' }
   | { type: 'ERROR'; error: string; code?: string }
   | { type: 'RECOVER' }
-  | { type: 'UNMOUNT' };
+  | { type: 'UNMOUNT' }
+  | { type: 'PUSH_TO_TALK_PRESSED' }
+  | { type: 'PUSH_TO_TALK_RELEASED' };
 
 export interface VoiceContext {
   state: VoiceState;

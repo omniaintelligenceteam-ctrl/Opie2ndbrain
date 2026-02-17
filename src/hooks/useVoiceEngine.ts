@@ -15,6 +15,7 @@ import {
   getSpeechRecognitionClass,
   warmUpAudio,
 } from '@/lib/browserCompat';
+import { useVoiceSettings, PushToTalkKey } from './useVoiceSettings';
 
 // ─── Configuration ──────────────────────────────────────────────────
 const SILENCE_TIMEOUT_MS = 1200;   // Send after 1.2s silence
@@ -33,6 +34,10 @@ export interface UseVoiceEngineOptions {
   ttsVoice?: string;
   /** Enable auto-speak responses (default: true when mic is on) */
   autoSpeak?: boolean;
+  /** Enable push-to-talk mode (default: false) */
+  pushToTalkEnabled?: boolean;
+  /** Push-to-talk key code (default: 'Space') */
+  pushToTalkKey?: string;
 }
 
 export interface UseVoiceEngineReturn {
@@ -77,7 +82,10 @@ function voiceReducer(ctx: VoiceContext, event: VoiceEvent): VoiceContext {
 
 // ─── Hook ───────────────────────────────────────────────────────────
 export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineReturn {
-  const { onSend, ttsEndpoint = '/api/tts', ttsProvider, ttsVoice, autoSpeak = true } = options;
+  const { onSend, ttsEndpoint = '/api/tts', ttsProvider, ttsVoice, autoSpeak = true, pushToTalkEnabled: defaultPushToTalkEnabled = false, pushToTalkKey: defaultPushToTalkKey = 'Space' } = options;
+
+  // Push-to-talk settings
+  const { pushToTalkEnabled, pushToTalkKey } = useVoiceSettings();
 
   // State machine
   const [ctx, rawDispatch] = useReducer(voiceReducer, undefined, initialContext);
@@ -97,9 +105,15 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   const recognitionStartedAtRef = useRef<number | null>(null);
   const healthCheckTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Push-to-talk state
+  const pushToTalkKeyPressedRef = useRef(false);
+  const pushToTalkSettingsRef = useRef({ enabled: false, key: 'Space' as PushToTalkKey });
+  const wasListeningBeforePushToTalkRef = useRef(false);
+
   // Keep refs in sync
   ctxRef.current = ctx;
   onSendRef.current = onSend;
+  pushToTalkSettingsRef.current = { enabled: pushToTalkEnabled, key: pushToTalkKey };
 
   // ─── Browser detection (once) ──────────────────────────────────
   if (!browserSupportRef.current && typeof window !== 'undefined') {
@@ -107,11 +121,89 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   }
   const browserSupport = browserSupportRef.current || detectVoiceSupport();
 
+  // ─── Push-to-talk key handlers ─────────────────────────────────
+  const handlePushToTalkKeyDown = useCallback((e: KeyboardEvent) => {
+    const { enabled, key } = pushToTalkSettingsRef.current;
+    if (!enabled || !mountedRef.current) return;
+
+    // Check if the pressed key matches the push-to-talk key
+    if (e.code === key && !pushToTalkKeyPressedRef.current) {
+      // Check if user is typing in an input
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isTyping) return;
+
+      e.preventDefault();
+      pushToTalkKeyPressedRef.current = true;
+      
+      console.log('[VoiceEngine] Push-to-talk key pressed');
+      
+      // If mic is on, start listening
+      if (ctxRef.current.micOn) {
+        // If we're in idle state, go to listening (which will trigger START_RECOGNITION)
+        if (ctxRef.current.state === 'idle') {
+          dispatch({ type: 'MIC_ON' });
+        } else if (ctxRef.current.state === 'listening') {
+          // Already listening but recognition might not be started due to push-to-talk
+          // Re-trigger START_RECOGNITION now that key is pressed
+          executeSideEffects([{ type: 'START_RECOGNITION' }]);
+        }
+      } else {
+        // Turn on mic (will go to listening and start recognition)
+        dispatch({ type: 'MIC_ON' });
+      }
+    }
+  }, [executeSideEffects]);
+
+  const handlePushToTalkKeyUp = useCallback((e: KeyboardEvent) => {
+    const { enabled, key } = pushToTalkSettingsRef.current;
+    if (!enabled || !mountedRef.current) return;
+
+    // Check if the released key matches the push-to-talk key
+    if (e.code === key && pushToTalkKeyPressedRef.current) {
+      e.preventDefault();
+      pushToTalkKeyPressedRef.current = false;
+      
+      console.log('[VoiceEngine] Push-to-talk key released');
+      
+      // Stop recognition but keep state as "listening" ready for next key press
+      if (recognitionRef.current && ctxRef.current.state === 'listening') {
+        // Prevent onend from restarting
+        restartingRef.current = true;
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          console.warn('[VoiceEngine] Recognition stop failed:', e);
+        }
+        setTimeout(() => { restartingRef.current = false; }, RECOGNITION_RESTART_DELAY + 50);
+      }
+    }
+  }, []);
+
+  // ─── Push-to-talk keyboard event listeners ────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    document.addEventListener('keydown', handlePushToTalkKeyDown);
+    document.addEventListener('keyup', handlePushToTalkKeyUp);
+
+    return () => {
+      document.removeEventListener('keydown', handlePushToTalkKeyDown);
+      document.removeEventListener('keyup', handlePushToTalkKeyUp);
+    };
+  }, [handlePushToTalkKeyDown, handlePushToTalkKeyUp]);
+
   // ─── Side effect executor ──────────────────────────────────────
   const executeSideEffects = useCallback((effects: SideEffect[]) => {
     for (const effect of effects) {
       switch (effect.type) {
         case 'START_RECOGNITION': {
+          // In push-to-talk mode, only start recognition if key is pressed
+          if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) {
+            console.log('[VoiceEngine] Push-to-talk mode: not starting recognition until key is pressed');
+            break;
+          }
+          
           if (!recognitionRef.current) {
             console.warn('[VoiceEngine] START_RECOGNITION: recognitionRef is null — cannot start');
             break;
@@ -138,6 +230,12 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               console.log('[VoiceEngine] Aborted start — state changed during delay');
               return;
             }
+            // In push-to-talk mode, double check key is still pressed
+            if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) {
+              restartingRef.current = false;
+              console.log('[VoiceEngine] Aborted start — push-to-talk key no longer pressed');
+              return;
+            }
             restartingRef.current = false;
             try {
               rec.start();
@@ -146,10 +244,13 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               recognitionStartedAtRef.current = Date.now();
               healthCheckTimerRef.current = setTimeout(() => {
                 if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && recognitionStartedAtRef.current) {
+                  // In push-to-talk mode, only restart if key is still pressed
+                  if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                   console.warn('[VoiceEngine] No speech results after 5s — restarting recognition');
                   try { recognitionRef.current?.stop(); } catch { /* ok */ }
                   setTimeout(() => {
                     if (!mountedRef.current || !ctxRef.current.micOn) return;
+                    if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                     try {
                       recognitionRef.current?.start();
                       recognitionStartedAtRef.current = Date.now();
@@ -168,6 +269,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               // Retry once
               setTimeout(() => {
                 if (!mountedRef.current || !ctxRef.current.micOn) return;
+                if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                 try { rec.start(); } catch { /* give up */ }
               }, 500);
             }
@@ -532,7 +634,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
   // ─── Public API ────────────────────────────────────────────────
   const toggleMic = useCallback(async () => {
-    console.log(`[VoiceEngine] toggleMic: micOn=${ctx.micOn}`);
+    console.log(`[VoiceEngine] toggleMic: micOn=${ctx.micOn}, pushToTalk=${pushToTalkSettingsRef.current.enabled}`);
     if (!browserSupport.speechRecognition) {
       alert(
         browserSupport.warnings[0] ||

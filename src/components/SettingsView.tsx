@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
+import { useVoiceSettings, PUSH_TO_TALK_KEYS, PushToTalkKey, getPushToTalkKeyLabel } from '../hooks/useVoiceSettings';
 
 export interface SettingsViewProps {
   isMobile: boolean;
@@ -24,6 +25,7 @@ export function SettingsView({
 }: SettingsViewProps): React.ReactElement {
   const { themeName, toggleTheme } = useTheme();
   const { soundsEnabled, toggleSounds } = useSounds();
+  const { pushToTalkEnabled, togglePushToTalk, pushToTalkKey, setPushToTalkKey } = useVoiceSettings();
 
   return (
     <div style={{
@@ -76,6 +78,35 @@ export function SettingsView({
             {soundsEnabled ? '🔔 On' : '🔕 Muted'}
           </button>
         </div>
+        <div style={styles.settingItem}>
+          <span>Push-to-Talk Mode</span>
+          <button 
+            onClick={togglePushToTalk}
+            style={{
+              ...styles.settingToggle,
+              background: pushToTalkEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.04)',
+              color: pushToTalkEnabled ? '#22c55e' : 'rgba(255,255,255,0.8)',
+            }}
+          >
+            {pushToTalkEnabled ? '🎙️ On' : '⏺️ Off'}
+          </button>
+        </div>
+        {pushToTalkEnabled && (
+          <div style={styles.settingItem}>
+            <span>Push-to-Talk Key</span>
+            <select
+              value={pushToTalkKey}
+              onChange={(e) => setPushToTalkKey(e.target.value as PushToTalkKey)}
+              style={styles.settingSelect}
+            >
+              {PUSH_TO_TALK_KEYS.map((key) => (
+                <option key={key.value} value={key.value}>
+                  {key.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={styles.settingItem}>
           <span>TTS Voice</span>
           <span style={styles.settingValue}>Default</span>
@@ -155,6 +186,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: '24px',
+  },
+  settingSelect: {
+    padding: '10px 18px',
+    borderRadius: '10px',
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.04)',
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    minHeight: '40px',
+    minWidth: '120px',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    MozAppearance: 'none',
+    backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'rgba(255,255,255,0.5)\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 10px center',
+    backgroundSize: '16px',
+    paddingRight: '40px',
   },
   settingsCard: {
     background: 'rgba(20, 20, 35, 0.6)',
