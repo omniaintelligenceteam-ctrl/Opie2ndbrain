@@ -106,6 +106,11 @@ export async function generateContentStrategy(
       model: 'anthropic/claude-sonnet-4',
       thinking: 'high',
       runTimeoutSeconds: 300, // 5 minutes for strategy
+      delivery: {
+        mode: 'announce',
+        channel: 'webhook',
+        url: process.env.NEXT_PUBLIC_WEBHOOK_URL || 'https://second-brain-app-lime.vercel.app/api/content-dashboard/complete',
+      },
     }, { timeout: 30000 })
 
     if (!result.ok) {

@@ -112,6 +112,11 @@ export async function startResearchProcess(
       model: 'ollama/kimi-k2.5:cloud',
       thinking: 'low',
       runTimeoutSeconds: 600, // 10 minutes for comprehensive research
+      delivery: {
+        mode: 'announce',
+        channel: 'webhook',
+        url: process.env.NEXT_PUBLIC_WEBHOOK_URL || 'https://second-brain-app-lime.vercel.app/api/content-dashboard/complete',
+      },
     }, { timeout: 30000 })
 
     if (!result.ok) {
