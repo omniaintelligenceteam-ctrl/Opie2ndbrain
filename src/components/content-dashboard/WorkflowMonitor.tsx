@@ -13,7 +13,6 @@ import {
   XCircle,
   AlertTriangle,
   Loader,
-  TrendingUp,
   Settings,
   Copy,
   Mail
@@ -227,9 +226,10 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
   }, [workflows])
 
   const [triggering, setTriggering] = useState<string | null>(null)
-  const [showQuickForm, setShowQuickForm] = useState<string | null>(null)
   const [quickTopic, setQuickTopic] = useState('')
   const [quickNiche, setQuickNiche] = useState('')
+  const [selectedPlatform, setSelectedPlatform] = useState('linkedin')
+  const [generating, setGenerating] = useState(false)
 
   // Trigger new workflow
   const triggerWorkflow = async (workflowType: string, params = {}) => {
@@ -358,30 +358,35 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
     return `${Math.round(minutes / 60)}h ${Math.round(minutes % 60)}m`
   }
 
-  // Quick workflow triggers with gradient colors
-  const quickWorkflows = [
-    {
-      type: 'content-machine',
-      label: 'Generate Content',
-      icon: <TrendingUp className="w-5 h-5" />,
-      gradient: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
-      glow: 'rgba(168, 85, 247, 0.3)',
-    },
-    {
-      type: 'research-trends',
-      label: 'Research Trends',
-      icon: <Activity className="w-5 h-5" />,
-      gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-      glow: 'rgba(6, 182, 212, 0.3)',
-    },
-    {
-      type: 'hook-generator',
-      label: 'Generate Hooks',
-      icon: <RefreshCw className="w-5 h-5" />,
-      gradient: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-      glow: 'rgba(34, 197, 94, 0.3)',
+  const handleGenerate = async () => {
+    if (!quickTopic.trim() || generating) return
+    setGenerating(true)
+    try {
+      const response = await fetch('/api/content-dashboard/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: quickTopic.trim(),
+          trade: quickNiche.trim() || '',
+          selectedAssets: [selectedPlatform],
+          skipResearch: false,
+          autoApprove: true,
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        showToast?.({ type: 'success', title: 'Content generation started', message: `Researching & creating content for "${quickTopic.trim()}"`, duration: 4000 })
+        setQuickTopic('')
+        setQuickNiche('')
+      } else {
+        showToast?.({ type: 'error', title: 'Generation failed', message: data.error || 'Could not start content generation', duration: 4000 })
+      }
+    } catch (err) {
+      showToast?.({ type: 'error', title: 'Generation failed', message: 'Network error — could not reach API', duration: 4000 })
+    } finally {
+      setGenerating(false)
     }
-  ]
+  }
 
   // Select styling
   const selectStyle: React.CSSProperties = {
@@ -438,7 +443,7 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
         )}
       </div>
 
-      {/* Quick Actions — Glass Card */}
+      {/* Generate Content — Glass Card */}
       <div className="glass-card" style={{ padding: '24px' }}>
         <h3 style={{
           fontSize: '1rem',
@@ -447,149 +452,90 @@ export default function WorkflowMonitor({ supabase, showToast }: WorkflowMonitor
           marginBottom: '16px',
           letterSpacing: '-0.01em',
         }}>
-          Quick Actions
+          Generate Content
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {quickWorkflows.map((workflow) => (
-            <button
-              key={workflow.type}
-              disabled={triggering !== null}
-              onClick={() => {
-                if (showQuickForm === workflow.type) {
-                  setShowQuickForm(null)
-                } else {
-                  setShowQuickForm(workflow.type)
-                  setQuickTopic('')
-                  setQuickNiche('')
-                }
-              }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <input
+            type="text"
+            value={quickTopic}
+            onChange={(e) => setQuickTopic(e.target.value)}
+            placeholder="What do you want content about?"
+            disabled={generating}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleGenerate() }}
+            style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(0,0,0,0.3)',
+              color: '#fff',
+              fontSize: '0.9rem',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box' as const,
+            }}
+          />
+          <input
+            type="text"
+            value={quickNiche}
+            onChange={(e) => setQuickNiche(e.target.value)}
+            placeholder="Industry or niche (optional)"
+            disabled={generating}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleGenerate() }}
+            style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(0,0,0,0.3)',
+              color: '#fff',
+              fontSize: '0.9rem',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box' as const,
+            }}
+          />
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <select
+              value={selectedPlatform}
+              onChange={(e) => setSelectedPlatform(e.target.value)}
+              disabled={generating}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '14px 18px',
-                borderRadius: '12px',
-                border: showQuickForm === workflow.type ? '1px solid rgba(255,255,255,0.3)' : 'none',
-                background: triggering === workflow.type ? 'rgba(100,100,100,0.4)' : workflow.gradient,
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: triggering !== null ? 'not-allowed' : 'pointer',
-                opacity: triggering !== null && triggering !== workflow.type ? 0.5 : 1,
-                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                boxShadow: triggering === workflow.type ? 'none' : `0 4px 15px ${workflow.glow}`,
+                ...selectStyle,
+                flex: 1,
               }}
             >
-              {triggering === workflow.type ? <Loader className="w-5 h-5 animate-spin" /> : workflow.icon}
-              {triggering === workflow.type ? 'Starting...' : workflow.label}
+              <option value="email">Email Sequence</option>
+              <option value="linkedin">LinkedIn Post</option>
+              <option value="instagram">Instagram Caption</option>
+              <option value="video_script">Video Script</option>
+              <option value="hooks">Marketing Hooks</option>
+              <option value="image_prompt">Image Prompts</option>
+            </select>
+            <button
+              disabled={!quickTopic.trim() || generating}
+              onClick={handleGenerate}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '10px',
+                border: 'none',
+                background: !quickTopic.trim() || generating ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                color: '#fff',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: !quickTopic.trim() || generating ? 'not-allowed' : 'pointer',
+                opacity: !quickTopic.trim() || generating ? 0.5 : 1,
+                transition: 'all 0.25s ease',
+                boxShadow: !quickTopic.trim() || generating ? 'none' : '0 4px 15px rgba(168, 85, 247, 0.3)',
+                whiteSpace: 'nowrap' as const,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              {generating && <Loader className="w-4 h-4 animate-spin" />}
+              {generating ? 'Starting...' : 'Generate'}
             </button>
-          ))}
-        </div>
-
-        {showQuickForm && (
-          <div style={{
-            marginTop: '16px',
-            padding: '20px',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            animation: 'fadeIn 0.2s ease-out',
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <input
-                type="text"
-                value={quickTopic}
-                onChange={(e) => setQuickTopic(e.target.value)}
-                placeholder="What do you want content about?"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && quickTopic.trim()) {
-                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
-                    setShowQuickForm(null)
-                    setQuickTopic('')
-                    setQuickNiche('')
-                  }
-                }}
-                style={{
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(0,0,0,0.3)',
-                  color: '#fff',
-                  fontSize: '0.9rem',
-                  outline: 'none',
-                  width: '100%',
-                }}
-              />
-              <input
-                type="text"
-                value={quickNiche}
-                onChange={(e) => setQuickNiche(e.target.value)}
-                placeholder="Industry or niche (optional) — e.g., SaaS, fitness, real estate..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && quickTopic.trim()) {
-                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
-                    setShowQuickForm(null)
-                    setQuickTopic('')
-                    setQuickNiche('')
-                  }
-                }}
-                style={{
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(0,0,0,0.3)',
-                  color: '#fff',
-                  fontSize: '0.9rem',
-                  outline: 'none',
-                  width: '100%',
-                }}
-              />
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => {
-                    setShowQuickForm(null)
-                    setQuickTopic('')
-                    setQuickNiche('')
-                  }}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    background: 'transparent',
-                    color: 'rgba(255,255,255,0.6)',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={!quickTopic.trim()}
-                  onClick={() => {
-                    triggerWorkflow(showQuickForm, { topic: quickTopic.trim(), trade: quickNiche.trim() || undefined })
-                    setShowQuickForm(null)
-                    setQuickTopic('')
-                    setQuickNiche('')
-                  }}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: !quickTopic.trim() ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
-                    color: '#fff',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    cursor: !quickTopic.trim() ? 'not-allowed' : 'pointer',
-                    opacity: !quickTopic.trim() ? 0.5 : 1,
-                  }}
-                >
-                  Generate
-                </button>
-              </div>
-            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Filters — Glass Card */}
