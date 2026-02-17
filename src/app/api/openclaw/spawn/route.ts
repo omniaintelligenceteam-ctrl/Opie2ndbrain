@@ -1,3 +1,5 @@
+import { emitEvent } from '@/lib/observability';
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
@@ -63,7 +65,11 @@ SUPABASE ENV: ${supabaseUrl ? 'Configured' : 'MISSING'}`;
     }
 
     const spawnData = await spawnRes.json();
-    
+
+    emitEvent('AgentSpawn', sessionLabel, {
+      sessionKey: sessionLabel, source: 'direct-spawn', task: message.slice(0, 200),
+    });
+
     return Response.json({
       success: true,
       sessionKey: sessionLabel,
@@ -73,6 +79,9 @@ SUPABASE ENV: ${supabaseUrl ? 'Configured' : 'MISSING'}`;
     });
     
   } catch (error) {
+    emitEvent('AgentSpawnFailed', 'direct-spawn', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     console.error('Spawn error:', error);
     return Response.json(
       { 

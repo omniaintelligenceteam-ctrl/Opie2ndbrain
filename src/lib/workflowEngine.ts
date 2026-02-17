@@ -4,6 +4,7 @@
 
 import { getSupabaseAdmin } from './supabase'
 import { invokeGatewayTool } from './gateway'
+import { emitEvent } from './observability'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -142,6 +143,9 @@ export async function createWorkflow(
     .single()
 
   if (error) throw new Error(`Failed to create workflow: ${error.message}`)
+
+  emitEvent('WorkflowCreated', id, { workflowId: id, type, name: workflowName, input })
+
   return data as WorkflowRecord
 }
 
@@ -164,6 +168,8 @@ export async function startWorkflow(workflowId: string): Promise<WorkflowRecord>
 
   if (updateError) throw new Error(`Failed to start workflow: ${updateError.message}`)
   const wf = workflow as WorkflowRecord
+
+  emitEvent('WorkflowStarted', workflowId, { workflowId, type: wf.type })
 
   // Append log
   await appendLog(workflowId, {
@@ -224,6 +230,10 @@ async function spawnAgentForWorkflow(
   }, { timeout: 30000 })
 
   if (!result.ok) {
+    emitEvent('AgentSpawnFailed', workflowId, {
+      workflowId, agentType: type,
+      error: result.error?.message || 'Failed to spawn agent',
+    })
     await failWorkflow(
       workflowId,
       `Gateway error: ${result.error?.message || 'Failed to spawn agent'}`
@@ -239,6 +249,10 @@ async function spawnAgentForWorkflow(
     level: 'success',
     message: `Agent spawned successfully (session: ${sessionId})`,
   })
+
+  emitEvent('AgentSpawn', workflowId, {
+    workflowId, agentType: type, sessionId,
+  }, { agent_id: sessionId, agent_type: type })
 
   // Store session ID for the completion poller and update progress
   const db = getDB()
@@ -284,6 +298,8 @@ export async function updateWorkflowProgress(
     .from('workflows')
     .update({ progress: Math.min(progress, 100) })
     .eq('id', workflowId)
+
+  emitEvent('WorkflowProgress', workflowId, { workflowId, progress, logMessage: logEntry?.message })
 }
 
 /** Mark workflow as completed with output */
@@ -327,6 +343,9 @@ export async function completeWorkflow(
     .single()
 
   if (error) throw new Error(`Failed to complete workflow: ${error.message}`)
+
+  emitEvent('WorkflowCompleted', workflowId, { workflowId, duration })
+
   return data as WorkflowRecord
 }
 
@@ -357,6 +376,9 @@ export async function failWorkflow(
     .single()
 
   if (error) throw new Error(`Failed to update workflow: ${error.message}`)
+
+  emitEvent('WorkflowFailed', workflowId, { workflowId, errorMessage })
+
   return data as WorkflowRecord
 }
 
@@ -383,6 +405,9 @@ export async function cancelWorkflow(workflowId: string): Promise<WorkflowRecord
     .single()
 
   if (error) throw new Error(`Failed to cancel workflow: ${error.message}`)
+
+  emitEvent('WorkflowCancelled', workflowId, { workflowId })
+
   return data as WorkflowRecord
 }
 

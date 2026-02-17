@@ -6,6 +6,7 @@
 import { getSupabaseAdmin } from './supabase'
 import { invokeGatewayTool } from './gateway'
 import { parseAgentOutput } from './contentParser'
+import { emitEvent } from './observability'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -479,6 +480,9 @@ async function spawnAgentForAsset(
     }, { timeout: 30000 })
 
     if (!result.ok) {
+      emitEvent('ContentAgentFailed', bundleId, {
+        bundleId, assetType, error: result.error?.message || 'Failed to spawn agent',
+      })
       return {
         sessionId: '',
         success: false,
@@ -488,11 +492,18 @@ async function spawnAgentForAsset(
 
     const sessionId = (result.result as any)?.sessionId || (result.result as any)?.childSessionKey || label
 
+    emitEvent('ContentAgentSpawned', bundleId, {
+      bundleId, assetType, sessionId,
+    }, { agent_id: sessionId, agent_type: assetType })
+
     return {
       sessionId,
       success: true
     }
   } catch (error) {
+    emitEvent('ContentAgentFailed', bundleId, {
+      bundleId, assetType, error: error instanceof Error ? error.message : 'Unknown error',
+    })
     return {
       sessionId: '',
       success: false,

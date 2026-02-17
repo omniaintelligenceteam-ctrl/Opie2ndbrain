@@ -5,6 +5,7 @@
 
 import { getSupabaseAdmin } from './supabase'
 import { invokeGatewayTool } from './gateway'
+import { emitEvent } from './observability'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,6 +126,10 @@ export async function startResearchProcess(
 
     const sessionId = (result.result as any)?.sessionId || (result.result as any)?.childSessionKey || `research-${bundleId}`
 
+    emitEvent('ResearchStarted', bundleId, {
+      bundleId, sessionId, topic: request.topic, trade: request.trade,
+    }, { agent_id: sessionId, agent_type: 'research' })
+
     // Update bundle with research session
     await supabase
       .from('content_bundles')
@@ -136,6 +141,10 @@ export async function startResearchProcess(
     return { sessionId, success: true }
 
   } catch (error) {
+    emitEvent('ResearchFailed', bundleId, {
+      bundleId, error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     await supabase
       .from('content_bundles')
       .update({ status: 'failed' })

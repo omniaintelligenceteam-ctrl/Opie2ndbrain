@@ -6,6 +6,7 @@
 import { getSupabaseAdmin } from './supabase'
 import { invokeGatewayTool } from './gateway'
 import { ResearchFindings } from './research'
+import { emitEvent } from './observability'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,9 +120,17 @@ export async function generateContentStrategy(
 
     const sessionId = (result.result as any)?.sessionId || (result.result as any)?.childSessionKey || `strategy-${request.bundleId}`
 
+    emitEvent('StrategyStarted', request.bundleId, {
+      bundleId: request.bundleId, sessionId,
+    }, { agent_id: sessionId, agent_type: 'strategy' })
+
     return { sessionId, success: true }
 
   } catch (error) {
+    emitEvent('StrategyFailed', request.bundleId, {
+      bundleId: request.bundleId, error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     await supabase
       .from('content_bundles')
       .update({ status: 'failed' })

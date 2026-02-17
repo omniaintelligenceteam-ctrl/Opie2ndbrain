@@ -5,6 +5,7 @@ import { completeWorkflow, failWorkflow, updateWorkflowProgress } from '@/lib/wo
 import { parseAgentOutput, parsedContentToAssetRecords } from '@/lib/contentParser'
 import { createVideoFromBundle, HEYGEN_CONFIGURED } from '@/lib/heygen'
 import { generateContentImages, IMAGE_GEN_CONFIGURED } from '@/lib/imageGeneration'
+import { emitEvent } from '@/lib/observability'
 import type { WorkflowRecord } from '@/lib/workflowEngine'
 
 export const runtime = 'nodejs'
@@ -207,10 +208,12 @@ export async function POST(request: NextRequest) {
         // Try to get output from history
         const output = await fetchSessionHistory(sessionId)
         if (output) {
+          emitEvent('AgentComplete', wf.id, { workflowId: wf.id, sessionId, method: 'poll-history' })
           await handleCompletion(supabase, wf, output)
           completed.push(wf.id)
         } else {
           // No session and no history — likely timed out or failed
+          emitEvent('AgentFailed', wf.id, { workflowId: wf.id, sessionId, reason: 'Agent session lost' })
           await failWorkflow(wf.id, 'Agent session lost — gateway returned no data')
           failed.push(wf.id)
         }
@@ -232,6 +235,7 @@ export async function POST(request: NextRequest) {
         }
         running.push(wf.id)
       } else if (status === 'failed') {
+        emitEvent('AgentFailed', wf.id, { workflowId: wf.id, sessionId, reason: 'Agent session aborted' })
         await failWorkflow(wf.id, 'Agent session was aborted')
         failed.push(wf.id)
       } else {
