@@ -293,6 +293,15 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             }
           }
         )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'image_generation_jobs' },
+          (payload) => {
+            const job = payload.new as Record<string, unknown>
+            if (job?.status === 'completed') {
+              fetchAssetCounts()
+            }
+          }
+        )
         .subscribe()
 
       return () => {
@@ -1204,6 +1213,29 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                             </button>
                           )
                         })()}
+                      </div>
+                    )}
+                    {/* Generated Images Grid */}
+                    {asset.type === 'image' && Array.isArray((asset.metadata as Record<string, unknown>)?.images) && ((asset.metadata as Record<string, unknown>).images as Array<{ url: string; size_name: string }>).length > 0 && (
+                      <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                        {((asset.metadata as Record<string, unknown>).images as Array<{ url: string; size_name: string }>).map((img, idx) => (
+                          <div key={idx} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img.url} alt={`Generated ${img.size_name}`} style={{ width: '100%', display: 'block' }} />
+                            <div style={{ padding: '6px 10px', background: 'rgba(15,15,26,0.9)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'capitalize' as const }}>{img.size_name}</span>
+                              <a href={img.url} download target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.7rem', color: '#22c55e', textDecoration: 'none' }}>
+                                Download
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {asset.type === 'image' && !Array.isArray((asset.metadata as Record<string, unknown>)?.images) && (
+                      <div style={{ marginTop: '12px', padding: '16px', borderRadius: '8px', background: 'rgba(102, 126, 234, 0.08)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Loader size={14} className="animate-spin" style={{ color: '#667eea' }} />
+                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)' }}>Generating images...</span>
                       </div>
                     )}
                   </div>
