@@ -77,6 +77,7 @@ export type SideEffect =
   | { type: 'START_SILENCE_TIMER'; text: string }
   | { type: 'CLEANUP_AUDIO' }
   | { type: 'REVOKE_BLOB_URLS' }
+  | { type: 'ABORT_REQUEST' }
   | { type: 'LOG'; message: string; level: 'info' | 'warn' | 'error' };
 
 export function initialContext(): VoiceContext {
@@ -247,8 +248,9 @@ export function transition(ctx: VoiceContext, event: VoiceEvent): VoiceTransitio
           };
 
         case 'BARGE_IN':
-          // User started talking while AI is processing — cancel and listen
-          effects.push({ type: 'LOG', message: 'Barge-in during processing', level: 'info' });
+          // User started talking while AI is processing — abort request and listen
+          effects.push({ type: 'ABORT_REQUEST' });
+          effects.push({ type: 'LOG', message: 'Barge-in during processing — aborting request', level: 'info' });
           return {
             context: {
               ...ctx,
@@ -290,10 +292,31 @@ export function transition(ctx: VoiceContext, event: VoiceEvent): VoiceTransitio
             sideEffects: effects,
           };
 
-        case 'SPEECH_RESULT':
-          // User is speaking while processing — this is a barge-in
-          effects.push({ type: 'LOG', message: 'Speech detected during processing — barge-in', level: 'info' });
-          return transition(ctx, { type: 'BARGE_IN' });
+        case 'SPEECH_RESULT': {
+          // User is speaking while processing — abort request, go back to listening
+          // so they can add more context. The recognition's accumulated finals
+          // naturally include the original text + new speech, so the next
+          // SILENCE_DETECTED will send the full combined message.
+          effects.push({ type: 'ABORT_REQUEST' });
+          effects.push({ type: 'LOG', message: 'Speech during processing — interrupting to add more context', level: 'info' });
+
+          const interruptTranscript = event.transcript;
+          const interruptPending = event.isFinal ? interruptTranscript : ctx.pendingText;
+
+          effects.push({ type: 'CLEAR_SILENCE_TIMER' });
+          effects.push({ type: 'START_SILENCE_TIMER', text: interruptPending || interruptTranscript });
+
+          return {
+            context: {
+              ...ctx,
+              state: 'listening',
+              transcript: interruptTranscript,
+              pendingText: interruptPending,
+              interruptedWhileProcessing: true,
+            },
+            sideEffects: effects,
+          };
+        }
 
         case 'UNMOUNT':
           effects.push({ type: 'CLEANUP_AUDIO' });

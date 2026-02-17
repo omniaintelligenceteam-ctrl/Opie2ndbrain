@@ -365,6 +365,15 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
           break;
         }
 
+        case 'ABORT_REQUEST': {
+          // Abort the in-flight AI request so the user can add more context
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+          }
+          break;
+        }
+
         case 'LOG': {
           const logFn = effect.level === 'error' ? console.error
             : effect.level === 'warn' ? console.warn

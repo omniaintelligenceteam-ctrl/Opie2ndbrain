@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import {
   FileText,
@@ -18,10 +18,31 @@ import {
   FileUp,
   Trash2,
   Film,
+  FolderOpen,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  RefreshCw,
+  Zap,
+  FlaskConical,
+  BarChart3,
+  Calendar,
+  Settings2,
+  Search,
+  MessageSquare,
 } from 'lucide-react'
 import type { Toast } from '../../hooks/useRealTimeData'
+import { useTheme } from '../../contexts/ThemeContext'
+import { Badge, Button, Input, EmptyState, SkeletonMetricCard, SkeletonList, Alert, AlertDescription } from '../ui'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui'
 import VideoPlayer from './VideoPlayer'
 import { ResearchPanel } from './ResearchPanel'
+import { AssetCompare } from './AssetCompare'
+
+const ABTestView = lazy(() => import('./ABTestView'))
+const ScheduleView = lazy(() => import('./ScheduleView'))
+const IntegrationsView = lazy(() => import('./IntegrationsView'))
 
 interface ContentBundle {
   id: string
@@ -47,6 +68,8 @@ interface ContentAsset {
   content: string
   status: string
   metadata: Record<string, unknown> | null
+  research_influence?: Record<string, string> | null
+  version?: number
   created_at: string
 }
 
@@ -82,13 +105,52 @@ const ASSET_TYPE_MAP: Record<string, string> = {
   'Images': 'image',
 }
 
+const AVAILABLE_ASSET_TYPES = [
+  { type: 'email', name: 'Email Sequence', icon: Mail, description: '3-email nurture sequence' },
+  { type: 'linkedin', name: 'LinkedIn Post', icon: FileText, description: 'Engagement-optimized post' },
+  { type: 'instagram', name: 'Instagram Caption', icon: ImageIcon, description: 'Caption with hashtags' },
+  { type: 'video_script', name: 'Video Script', icon: Video, description: '30-60s HeyGen script' },
+  { type: 'hooks', name: 'Marketing Hooks', icon: Zap, description: '10 compelling hooks' },
+  { type: 'image_prompt', name: 'Image Prompts', icon: Sparkles, description: '5 AI image prompts' },
+]
+
+const TONE_OPTIONS = [
+  { value: 'professional', label: 'Professional' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'educational', label: 'Educational' },
+  { value: 'conversational', label: 'Conversational' },
+]
+
+const ALL_ASSET_TYPES = AVAILABLE_ASSET_TYPES.map(a => a.type)
+
+type ContentTab = 'dashboard' | 'ab-tests' | 'schedule' | 'integrations'
+
 export default function ContentStudio({ supabase, onRefresh, showToast }: ContentStudioProps) {
+  const { theme } = useTheme()
+  const c = theme.colors
+
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [assetSearchQuery, setAssetSearchQuery] = useState('')
+  const [assetTypeFilter, setAssetTypeFilter] = useState<string | null>(null)
+  const [bundleDetailTab, setBundleDetailTab] = useState<string>('content')
+
   const [bundles, setBundles] = useState<ContentBundle[]>([])
   const [selectedBundle, setSelectedBundle] = useState<ContentBundle | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ topic: '', trade: '' })
+  const [createForm, setCreateForm] = useState({
+    topic: '',
+    trade: '',
+    selectedAssets: ALL_ASSET_TYPES as string[],
+    tone: 'professional',
+    targetAudience: '',
+    skipResearch: false,
+    autoApprove: false,
+  })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [showAdvancedCreate, setShowAdvancedCreate] = useState(false)
+  const [activeTab, setActiveTab] = useState<ContentTab>('dashboard')
   const [assetCounts, setAssetCounts] = useState<AssetCounts>({ email: 0, linkedin: 0, heygen: 0, image: 0 })
   const [showAssets, setShowAssets] = useState(false)
   const [allAssets, setAllAssets] = useState<ContentAsset[]>([])
@@ -113,6 +175,31 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const researchPollingStartRef = useRef<number>(0)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deletingBundleId, setDeletingBundleId] = useState<string | null>(null)
+  const [completedBundles, setCompletedBundles] = useState<ContentBundle[]>([])
+  // Strategy approval state
+  const [strategyDoc, setStrategyDoc] = useState<Record<string, unknown> | null>(null)
+  const [strategyLoading, setStrategyLoading] = useState(false)
+  const [approvingStrategy, setApprovingStrategy] = useState(false)
+  const [regeneratingStrategy, setRegeneratingStrategy] = useState(false)
+  // Asset viewing state
+  const [expandedAssetIds, setExpandedAssetIds] = useState<Set<string>>(new Set())
+  const [compareAsset, setCompareAsset] = useState<ContentAsset | null>(null)
+
+  // Status badge helper
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { color: 'success' | 'warning' | 'error' | 'info' | 'accent' | 'muted'; label: string }> = {
+      complete: { color: 'success', label: 'Complete' },
+      researching: { color: 'info', label: 'Researching...' },
+      creating: { color: 'info', label: 'Creating...' },
+      awaiting_strategy_approval: { color: 'warning', label: 'Strategy Review' },
+      cancelled: { color: 'error', label: 'Cancelled' },
+      failed: { color: 'error', label: 'Failed' },
+    }
+    const cfg = map[status] || { color: 'muted' as const, label: status }
+    return <Badge variant="status" color={cfg.color}>{cfg.label}</Badge>
+  }
 
   // Copy to clipboard with toast feedback
   const copyToClipboard = async (text: string, label?: string) => {
@@ -246,17 +333,25 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   }, [showToast, startPollingJob])
 
   // Fetch bundles from API
+  const [bundleStatusFilter, setBundleStatusFilter] = useState<string>('all')
+  const [bundlePage, setBundlePage] = useState(0)
+  const [hasMoreBundles, setHasMoreBundles] = useState(false)
+  const BUNDLES_PER_PAGE = 10
+
   const fetchBundles = useCallback(async () => {
     try {
-      const response = await fetch('/api/content-dashboard/bundles?limit=5')
+      const params = new URLSearchParams({ limit: String(BUNDLES_PER_PAGE), offset: String(bundlePage * BUNDLES_PER_PAGE) })
+      if (bundleStatusFilter !== 'all') params.set('status', bundleStatusFilter)
+      const response = await fetch(`/api/content-dashboard/bundles?${params}`)
       const data = await response.json()
       if (data.success) {
         setBundles(data.data.bundles || [])
+        setHasMoreBundles((data.data.bundles || []).length === BUNDLES_PER_PAGE)
       }
     } catch (err) {
       console.error('Failed to fetch bundles:', err)
     }
-  }, [])
+  }, [bundleStatusFilter, bundlePage])
 
   // Fetch asset counts from API
   const fetchAssetCounts = useCallback(async () => {
@@ -281,10 +376,23 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     }
   }, [])
 
+  // Fetch completed bundles for Content Library
+  const fetchCompletedBundles = useCallback(async () => {
+    try {
+      const response = await fetch('/api/content-dashboard/bundles?status=complete&limit=20')
+      const data = await response.json()
+      if (data.success) {
+        setCompletedBundles(data.data.bundles || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch completed bundles:', err)
+    }
+  }, [])
+
   // Load data on mount
   useEffect(() => {
-    fetchBundles()
-    fetchAssetCounts()
+    Promise.all([fetchBundles(), fetchAssetCounts(), fetchCompletedBundles()])
+      .finally(() => setInitialLoading(false))
 
     // Real-time subscription for bundles
     if (supabase) {
@@ -294,6 +402,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
           { event: '*', schema: 'public', table: 'content_bundles' },
           () => {
             fetchBundles()
+            fetchCompletedBundles()
           }
         )
         .on('postgres_changes',
@@ -326,12 +435,16 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
         channel.unsubscribe()
       }
     }
-  }, [fetchBundles, fetchAssetCounts, supabase])
+  }, [fetchBundles, fetchAssetCounts, fetchCompletedBundles, supabase])
 
   // Create bundle via research-first API
   const handleCreateBundle = useCallback(async () => {
     if (!createForm.topic.trim()) {
       setCreateError('Please enter a topic')
+      return
+    }
+    if (createForm.selectedAssets.length === 0) {
+      setCreateError('Please select at least one content type')
       return
     }
 
@@ -344,12 +457,12 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: createForm.topic.trim(),
-          trade: createForm.trade,
-          selectedAssets: ['email', 'linkedin', 'instagram', 'video_script', 'hooks', 'image_prompt'],
-          tone: 'professional',
+          trade: createForm.trade || 'General',
+          selectedAssets: createForm.selectedAssets,
+          tone: createForm.tone,
           intent: 'full_creation',
-          autoApprove: false,
-          skipResearch: false,
+          autoApprove: createForm.autoApprove,
+          skipResearch: createForm.skipResearch,
         }),
       })
 
@@ -361,12 +474,14 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       const topicText = createForm.topic.trim()
       const tradeText = createForm.trade
 
-      setCreateForm({ topic: '', trade: '' })
+      setCreateForm({ topic: '', trade: '', selectedAssets: ALL_ASSET_TYPES as string[], tone: 'professional', targetAudience: '', skipResearch: false, autoApprove: false })
       setShowCreateModal(false)
       showToast?.({
         type: 'success',
-        title: 'Research Started!',
-        message: `Researching "${topicText}" before creating content...`,
+        title: createForm.skipResearch ? 'Content Creation Started!' : 'Research Started!',
+        message: createForm.skipResearch
+          ? `Creating ${createForm.selectedAssets.length} content assets for "${topicText}"...`
+          : `Researching "${topicText}" before creating content...`,
         duration: 5000,
       })
       fetchBundles()
@@ -393,10 +508,93 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     }
   }, [createForm, onRefresh, fetchBundles, fetchAssetCounts, showToast])
 
+  // Fetch strategy doc for a bundle
+  const fetchStrategyDoc = useCallback(async (bundleId: string) => {
+    setStrategyLoading(true)
+    try {
+      const res = await fetch(`/api/content-dashboard/strategy?bundleId=${bundleId}`)
+      const data = await res.json()
+      if (data.success && data.data?.strategy_doc) {
+        setStrategyDoc(data.data.strategy_doc)
+      }
+    } catch {
+      // Strategy may not exist yet
+    } finally {
+      setStrategyLoading(false)
+    }
+  }, [])
+
+  // Approve strategy and proceed to content creation
+  const handleApproveStrategy = useCallback(async () => {
+    if (!selectedBundle) return
+    setApprovingStrategy(true)
+    try {
+      const res = await fetch('/api/content-dashboard/strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId: selectedBundle.id, action: 'approve' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      showToast?.({ type: 'success', title: 'Strategy Approved!', message: 'Content creation has started.', duration: 4000 })
+      setSelectedBundle({ ...selectedBundle, status: 'creating' })
+      setStrategyDoc(null)
+      fetchBundles()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to approve strategy'
+      showToast?.({ type: 'error', title: 'Approval Failed', message: msg, duration: 5000 })
+    } finally {
+      setApprovingStrategy(false)
+    }
+  }, [selectedBundle, fetchBundles, showToast])
+
+  // Regenerate strategy
+  const handleRegenerateStrategy = useCallback(async () => {
+    if (!selectedBundle) return
+    setRegeneratingStrategy(true)
+    try {
+      const res = await fetch('/api/content-dashboard/strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId: selectedBundle.id, action: 'regenerate' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      showToast?.({ type: 'success', title: 'Regenerating Strategy', message: 'A new strategy is being generated from research...', duration: 4000 })
+      setStrategyDoc(null)
+      setSelectedBundle({ ...selectedBundle, status: 'researching' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to regenerate strategy'
+      showToast?.({ type: 'error', title: 'Regeneration Failed', message: msg, duration: 5000 })
+    } finally {
+      setRegeneratingStrategy(false)
+    }
+  }, [selectedBundle, showToast])
+
+  // ESC key handler for all modals
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (cancelConfirmOpen) { setCancelConfirmOpen(false); return }
+        if (deleteConfirmId) { setDeleteConfirmId(null); return }
+        if (showSaveTemplate) { setShowSaveTemplate(false); return }
+        if (compareAsset) { setCompareAsset(null); return }
+        if (selectedBundle) { setSelectedBundle(null); setBundleAssets([]); return }
+        if (showAssets) { setShowAssets(false); return }
+        if (showCreateModal && !creating) { setShowCreateModal(false); return }
+        if (showImportModal && !importing) { setShowImportModal(false); return }
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [cancelConfirmOpen, deleteConfirmId, showSaveTemplate, compareAsset, selectedBundle, showAssets, showCreateModal, creating, showImportModal, importing])
+
   // View all assets
-  const handleViewAllAssets = useCallback(async () => {
+  const handleViewAllAssets = useCallback(async (typeFilter?: string) => {
     setShowAssets(true)
     setAssetsLoading(true)
+    setAssetTypeFilter(typeFilter || null)
+    setAssetSearchQuery('')
     try {
       const response = await fetch('/api/content-dashboard/assets?limit=50')
       const data = await response.json()
@@ -426,11 +624,26 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     setSelectedBundle(bundle)
     setBundleAssetsLoading(true)
     setComments([])
+    setStrategyDoc(null)
+    setExpandedAssetIds(new Set())
+    // Auto-select tab based on status
+    if (bundle.status === 'researching' || bundle.status === 'awaiting_strategy_approval') {
+      setBundleDetailTab('research')
+    } else {
+      setBundleDetailTab('content')
+    }
     try {
       const response = await fetch(`/api/content-dashboard/bundles/${bundle.id}`)
       const data = await response.json()
       if (data.success) {
         setBundleAssets(data.data.content_assets || [])
+        // Update bundle with latest data from server
+        if (data.data.strategy_doc) {
+          setStrategyDoc(data.data.strategy_doc)
+        }
+        if (data.data.status) {
+          setSelectedBundle(prev => prev ? { ...prev, status: data.data.status, research_findings: data.data.research_findings, strategy_doc: data.data.strategy_doc } : prev)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch bundle assets:', err)
@@ -438,6 +651,12 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     } finally {
       setBundleAssetsLoading(false)
     }
+
+    // Fetch strategy if awaiting approval
+    if (bundle.status === 'awaiting_strategy_approval') {
+      fetchStrategyDoc(bundle.id)
+    }
+
     fetchComments(bundle.id)
 
     // Fetch HeyGen jobs for this bundle
@@ -457,7 +676,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     } catch {
       // Non-critical
     }
-  }, [fetchComments, startPollingJob])
+  }, [fetchComments, startPollingJob, fetchStrategyDoc])
 
   const handleAddComment = async () => {
     if (!selectedBundle || !newComment.trim()) return
@@ -542,6 +761,14 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
           fetchBundles()
           researchPollingStartRef.current = 0
           setResearchTimeout(false)
+          setResearchExpanded(true) // Auto-expand research findings
+          // If strategy is ready, fetch it
+          if (updatedBundle.status === 'awaiting_strategy_approval') {
+            fetchStrategyDoc(updatedBundle.id)
+          }
+          if (bundleData.data.strategy_doc) {
+            setStrategyDoc(bundleData.data.strategy_doc)
+          }
         }
       } catch (err) {
         console.error('Research polling error:', err)
@@ -620,6 +847,30 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       setCancelConfirmOpen(false)
     }
   }, [selectedBundle, fetchBundles, showToast])
+
+  // Delete a bundle
+  const handleDeleteBundle = useCallback(async (bundleId: string) => {
+    setDeletingBundleId(bundleId)
+    try {
+      const res = await fetch(`/api/content-dashboard/bundles/${bundleId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      if (selectedBundle?.id === bundleId) {
+        setSelectedBundle(null)
+        setBundleAssets([])
+      }
+      fetchBundles()
+      fetchCompletedBundles()
+      fetchAssetCounts()
+      showToast?.({ type: 'info', title: 'Bundle Deleted', message: 'Bundle has been permanently deleted.', duration: 3000 })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete bundle'
+      showToast?.({ type: 'error', title: 'Delete Failed', message, duration: 5000 })
+    } finally {
+      setDeletingBundleId(null)
+      setDeleteConfirmId(null)
+    }
+  }, [selectedBundle, fetchBundles, fetchCompletedBundles, fetchAssetCounts, showToast])
 
   // Use template (duplicate)
   const handleUseTemplate = async (templateId: string) => {
@@ -708,82 +959,191 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Asset Library */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        {assetTypes.map((asset) => (
-          <div
-            key={asset.label}
-            className="card-hover"
-            style={{
-              padding: '22px',
-              borderRadius: '14px',
-              background: 'rgba(15, 15, 26, 0.7)',
-              backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              borderTop: `3px solid ${asset.color}`,
-              cursor: 'pointer',
-              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
-                background: `${asset.color}15`,
+      {/* Animations */}
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      `}</style>
+
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        gap: '6px',
+        padding: '4px',
+        borderRadius: '12px',
+        background: 'rgba(15, 15, 26, 0.5)',
+        border: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        {([
+          { key: 'dashboard' as ContentTab, label: 'Dashboard', icon: TrendingUp },
+          { key: 'ab-tests' as ContentTab, label: 'A/B Tests', icon: FlaskConical },
+          { key: 'schedule' as ContentTab, label: 'Schedule', icon: Calendar },
+          { key: 'integrations' as ContentTab, label: 'Integrations', icon: Settings2 },
+        ]).map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                flex: 1,
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                background: isActive ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                color: isActive ? '#c084fc' : 'rgba(255,255,255,0.35)',
+                fontSize: '0.8rem',
+                fontWeight: isActive ? 600 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-              }}>
-                <asset.icon size={18} style={{ color: asset.color }} />
-              </div>
-              <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
-                {asset.label}
-              </span>
-            </div>
-            <p style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              color: '#fff',
-              letterSpacing: '-0.02em',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {asset.count}
-            </p>
-          </div>
-        ))}
+                gap: '6px',
+              }}
+            >
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Recent Bundles */}
-      <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{
-          fontSize: '1.05rem',
-          fontWeight: 600,
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          color: 'rgba(255,255,255,0.85)',
-        }}>
-          <TrendingUp size={18} style={{ color: '#a855f7' }} />
-          Recent Content Bundles
-        </h3>
+      {/* Sub-view rendering */}
+      {activeTab === 'ab-tests' && (
+        <Suspense fallback={<div style={{ textAlign: 'center', padding: '48px', color: 'rgba(255,255,255,0.3)' }}><Loader size={20} className="animate-spin" style={{ margin: '0 auto' }} /></div>}>
+          <ABTestView supabase={supabase} showToast={showToast} />
+        </Suspense>
+      )}
+      {activeTab === 'schedule' && (
+        <Suspense fallback={<div style={{ textAlign: 'center', padding: '48px', color: 'rgba(255,255,255,0.3)' }}><Loader size={20} className="animate-spin" style={{ margin: '0 auto' }} /></div>}>
+          <ScheduleView supabase={supabase} showToast={showToast} />
+        </Suspense>
+      )}
+      {activeTab === 'integrations' && (
+        <Suspense fallback={<div style={{ textAlign: 'center', padding: '48px', color: 'rgba(255,255,255,0.3)' }}><Loader size={20} className="animate-spin" style={{ margin: '0 auto' }} /></div>}>
+          <IntegrationsView showToast={showToast} />
+        </Suspense>
+      )}
 
-        {bundles.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '48px 20px',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.02)',
+      {/* Dashboard Content */}
+      {activeTab === 'dashboard' && (<>
+
+      {/* Asset Library */}
+      {initialLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {[1,2,3,4].map(i => <SkeletonMetricCard key={i} />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {assetTypes.map((asset) => (
+            <div
+              key={asset.label}
+              className="card-hover"
+              onClick={() => handleViewAllAssets(ASSET_TYPE_MAP[asset.label])}
+              style={{
+                padding: '22px',
+                borderRadius: '14px',
+                background: c.glassBg || 'rgba(15, 15, 26, 0.7)',
+                backdropFilter: 'blur(16px)',
+                border: `1px solid ${c.border}`,
+                borderTop: `3px solid ${asset.color}`,
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: `${asset.color}15`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <asset.icon size={18} style={{ color: asset.color }} />
+                </div>
+                <span style={{ fontSize: '0.85rem', color: c.textTertiary, fontWeight: 500 }}>
+                  {asset.label}
+                </span>
+              </div>
+              <p style={{
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                color: c.textPrimary,
+                letterSpacing: '-0.02em',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {asset.count}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Content Bundles */}
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h3 style={{
+            fontSize: '1.05rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            color: 'rgba(255,255,255,0.85)',
           }}>
-            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.95rem' }}>No content bundles yet.</p>
-            <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.85rem', marginTop: '6px' }}>
-              Click &quot;Create New Bundle&quot; to get started.
-            </p>
-          </div>
+            <TrendingUp size={18} style={{ color: '#a855f7' }} />
+            Content Bundles
+          </h3>
+        </div>
+
+        {/* Status Filter Pills */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          {[
+            { value: 'all', label: 'All' },
+            { value: 'researching', label: 'Researching' },
+            { value: 'awaiting_strategy_approval', label: 'Strategy' },
+            { value: 'creating', label: 'Creating' },
+            { value: 'complete', label: 'Complete' },
+            { value: 'failed', label: 'Failed' },
+            { value: 'cancelled', label: 'Cancelled' },
+          ].map((f) => (
+            <button
+              key={f.value}
+              onClick={() => { setBundleStatusFilter(f.value); setBundlePage(0) }}
+              style={{
+                padding: '4px 12px',
+                borderRadius: '16px',
+                border: `1px solid ${bundleStatusFilter === f.value ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.06)'}`,
+                background: bundleStatusFilter === f.value ? 'rgba(168, 85, 247, 0.12)' : 'transparent',
+                color: bundleStatusFilter === f.value ? '#c084fc' : 'rgba(255,255,255,0.4)',
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {initialLoading ? (
+          <SkeletonList count={3} />
+        ) : bundles.length === 0 ? (
+          <EmptyState
+            icon="📦"
+            title={bundleStatusFilter !== 'all' ? `No ${bundleStatusFilter} bundles` : 'No content bundles yet'}
+            description={bundleStatusFilter === 'all' ? 'Click "Create New Bundle" to get started.' : 'Try a different filter.'}
+            actionLabel={bundleStatusFilter === 'all' ? 'Create Bundle' : undefined}
+            onAction={bundleStatusFilter === 'all' ? () => setShowCreateModal(true) : undefined}
+          />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {bundles.slice(0, 5).map((bundle) => (
+            {bundles.map((bundle) => (
               <div
                 key={bundle.id}
                 onClick={() => handleViewBundle(bundle)}
@@ -795,28 +1155,241 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   transition: 'all 0.2s ease',
                 }}
               >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{bundle.topic}</h4>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bundle.topic}</h4>
                     <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
                       {bundle.trade} {bundle.quality_score > 0 && `• Quality: ${bundle.quality_score}/100`}
+                      <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.2)' }}>
+                        • {(() => {
+                          const mins = Math.floor((Date.now() - new Date(bundle.created_at).getTime()) / 60000)
+                          if (mins < 1) return 'just now'
+                          if (mins < 60) return `${mins}m ago`
+                          const hrs = Math.floor(mins / 60)
+                          if (hrs < 24) return `${hrs}h ago`
+                          return `${Math.floor(hrs / 24)}d ago`
+                        })()}
+                      </span>
                     </p>
                   </div>
-                  <span style={{
-                    fontSize: '0.75rem',
-                    padding: '4px 10px',
-                    borderRadius: '20px',
-                    ...(bundle.status === 'complete'
-                      ? { background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }
-                      : bundle.status === 'researching'
-                      ? { background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }
-                      : bundle.status === 'failed' || bundle.status === 'cancelled'
-                      ? { background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }
-                      : { background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24' }),
-                  }}>
-                    {bundle.status === 'researching' ? 'Researching...'
-                      : bundle.status === 'cancelled' ? 'Cancelled'
-                      : bundle.status}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    {['cancelled', 'failed', 'complete'].includes(bundle.status) && (
+                      deleteConfirmId === bundle.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)' }}>Delete?</span>
+                          <button
+                            onClick={() => handleDeleteBundle(bundle.id)}
+                            disabled={deletingBundleId === bundle.id}
+                            style={{
+                              padding: '3px 8px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(239, 68, 68, 0.2)', color: '#f87171',
+                              fontSize: '0.7rem', fontWeight: 600, cursor: deletingBundleId === bundle.id ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {deletingBundleId === bundle.id ? '...' : 'Yes'}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(null)}
+                            style={{
+                              padding: '3px 8px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)',
+                              fontSize: '0.7rem', cursor: 'pointer',
+                            }}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(bundle.id) }}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'rgba(255,255,255,0.25)', padding: '4px',
+                            transition: 'color 0.2s ease',
+                          }}
+                          title="Delete bundle"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )
+                    )}
+                    {getStatusBadge(bundle.status)}
+                  </div>
+                </div>
+                {/* Pipeline phase indicator */}
+                {!['cancelled', 'failed'].includes(bundle.status) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {[
+                      { key: 'research', label: 'Research', active: ['researching', 'awaiting_strategy_approval', 'creating', 'complete'].includes(bundle.status) },
+                      { key: 'strategy', label: 'Strategy', active: ['awaiting_strategy_approval', 'creating', 'complete'].includes(bundle.status) },
+                      { key: 'content', label: 'Content', active: ['creating', 'complete'].includes(bundle.status) },
+                      { key: 'done', label: 'Done', active: bundle.status === 'complete' },
+                    ].map((phase, i) => (
+                      <div key={phase.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {i > 0 && <div style={{ width: 12, height: 1, background: phase.active ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.06)' }} />}
+                        <div
+                          title={phase.label}
+                          style={{
+                            width: 7, height: 7, borderRadius: '50%',
+                            background: phase.active ? '#a855f7' : 'rgba(255,255,255,0.08)',
+                            transition: 'background 0.3s ease',
+                          }}
+                        />
+                      </div>
+                    ))}
+                    <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', marginLeft: '4px' }}>
+                      {bundle.status === 'researching' ? '1/4'
+                        : bundle.status === 'awaiting_strategy_approval' ? '2/4'
+                        : bundle.status === 'creating' ? '3/4'
+                        : bundle.status === 'complete' ? '4/4'
+                        : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Load More / Pagination */}
+        {hasMoreBundles && (
+          <button
+            onClick={() => setBundlePage(p => p + 1)}
+            style={{
+              marginTop: '12px',
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'rgba(255,255,255,0.02)',
+              color: 'rgba(255,255,255,0.4)',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Load More Bundles
+          </button>
+        )}
+        {bundlePage > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
+            <button
+              onClick={() => setBundlePage(p => Math.max(0, p - 1))}
+              disabled={bundlePage === 0}
+              style={{
+                padding: '4px 12px', borderRadius: '6px', border: 'none',
+                background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)',
+                fontSize: '0.75rem', cursor: bundlePage === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Previous
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.25)', lineHeight: '24px' }}>
+              Page {bundlePage + 1}
+            </span>
+            {hasMoreBundles && (
+              <button
+                onClick={() => setBundlePage(p => p + 1)}
+                style={{
+                  padding: '4px 12px', borderRadius: '6px', border: 'none',
+                  background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)',
+                  fontSize: '0.75rem', cursor: 'pointer',
+                }}
+              >
+                Next
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Content Library — completed bundles */}
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <h3 style={{
+          fontSize: '1.05rem',
+          fontWeight: 600,
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          color: 'rgba(255,255,255,0.85)',
+        }}>
+          <FolderOpen size={18} style={{ color: '#22c55e' }} />
+          Content Library
+          {completedBundles.length > 0 && (
+            <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.35)', fontWeight: 400, marginLeft: '4px' }}>
+              ({completedBundles.length})
+            </span>
+          )}
+        </h3>
+
+        {completedBundles.length === 0 ? (
+          <EmptyState
+            icon="📚"
+            title="No completed content yet"
+            description="Bundles will appear here when the pipeline finishes."
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {completedBundles.map((bundle) => (
+              <div
+                key={bundle.id}
+                onClick={() => handleViewBundle(bundle)}
+                style={{
+                  padding: '16px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(34, 197, 94, 0.15)',
+                  background: 'rgba(34, 197, 94, 0.04)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <h4 style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{bundle.topic}</h4>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(deleteConfirmId === bundle.id ? null : bundle.id) }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.25)', padding: '2px' }}
+                    title="Delete bundle"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.35)', marginBottom: '8px' }}>
+                  {bundle.trade} • {new Date(bundle.created_at).toLocaleDateString()}
+                </p>
+                {deleteConfirmId === bundle.id && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }} onClick={(e) => e.stopPropagation()}>
+                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)' }}>Delete this bundle?</span>
+                    <button
+                      onClick={() => handleDeleteBundle(bundle.id)}
+                      disabled={deletingBundleId === bundle.id}
+                      style={{
+                        padding: '3px 8px', borderRadius: '6px', border: 'none',
+                        background: 'rgba(239, 68, 68, 0.2)', color: '#f87171',
+                        fontSize: '0.7rem', fontWeight: 600, cursor: deletingBundleId === bundle.id ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {deletingBundleId === bundle.id ? '...' : 'Yes'}
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(null)}
+                      style={{
+                        padding: '3px 8px', borderRadius: '6px', border: 'none',
+                        background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)',
+                        fontSize: '0.7rem', cursor: 'pointer',
+                      }}
+                    >
+                      No
+                    </button>
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Badge variant="status" color="success">Complete</Badge>
+                  <span style={{ fontSize: '0.75rem', color: c.textMuted }}>
+                    Click to view assets
                   </span>
                 </div>
               </div>
@@ -826,23 +1399,38 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       </div>
 
       {/* Templates Library */}
-      {templates.length > 0 && (
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <h3 style={{
-            fontSize: '1.05rem',
-            fontWeight: 600,
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            color: 'rgba(255,255,255,0.85)',
-          }}>
-            <Bookmark size={18} style={{ color: '#667eea' }} />
-            Templates
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <h3 style={{
+          fontSize: '1.05rem',
+          fontWeight: 600,
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          color: 'rgba(255,255,255,0.85)',
+        }}>
+          <Bookmark size={18} style={{ color: '#667eea' }} />
+          Templates
+          {templates.length > 0 && (
             <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.35)', fontWeight: 400, marginLeft: '4px' }}>
               ({templates.length})
             </span>
-          </h3>
+          )}
+        </h3>
+        {templates.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '32px 20px',
+            borderRadius: '12px',
+            background: 'rgba(255,255,255,0.02)',
+          }}>
+            <Bookmark size={28} style={{ color: 'rgba(255,255,255,0.08)', margin: '0 auto 10px' }} />
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9rem' }}>No templates yet</p>
+            <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: '0.8rem', marginTop: '4px' }}>
+              Save any completed bundle as a template to reuse it later.
+            </p>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {templates.map((tpl) => (
               <div
@@ -885,70 +1473,23 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          style={{
-            padding: '12px 24px',
-            borderRadius: '10px',
-            border: 'none',
-            background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-            boxShadow: '0 4px 15px rgba(168, 85, 247, 0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}>
-          <Plus size={16} />
+        <Button variant="primary" icon={<Plus size={16} />} onClick={() => setShowCreateModal(true)}>
           Create New Bundle
-        </button>
-        <button
-          onClick={handleViewAllAssets}
-          style={{
-            padding: '12px 24px',
-            borderRadius: '10px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(255,255,255,0.04)',
-            color: 'rgba(255,255,255,0.7)',
-            fontWeight: 500,
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}>
-          <Eye size={16} />
+        </Button>
+        <Button variant="outline" icon={<Eye size={16} />} onClick={() => handleViewAllAssets()}>
           View All Assets
-        </button>
-        <button
-          onClick={() => setShowImportModal(true)}
-          style={{
-            padding: '12px 24px',
-            borderRadius: '10px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(255,255,255,0.04)',
-            color: 'rgba(255,255,255,0.7)',
-            fontWeight: 500,
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}>
-          <FileUp size={16} />
+        </Button>
+        <Button variant="outline" icon={<FileUp size={16} />} onClick={() => setShowImportModal(true)}>
           Import Content
-        </button>
+        </Button>
       </div>
+
+      </>)}
 
       {/* Create Bundle Modal */}
       {showCreateModal && (
@@ -957,13 +1498,15 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: c.overlay || 'rgba(0,0,0,0.6)',
             backdropFilter: 'blur(4px)',
             zIndex: 10000,
             display: 'flex',
             justifyContent: 'center',
-            paddingTop: '80px',
+            paddingTop: '40px',
             paddingBottom: '40px',
+            overflowY: 'auto',
+            animation: 'fadeIn 0.2s ease',
           }}
         >
           <div
@@ -971,9 +1514,10 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '90%',
-              maxWidth: '480px',
+              maxWidth: '600px',
               padding: '28px',
               height: 'fit-content',
+              animation: 'fadeInScale 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <div style={{
@@ -1001,6 +1545,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Topic */}
               <div>
                 <label style={{
                   display: 'block',
@@ -1020,6 +1565,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   onKeyDown={(e) => { if (e.key === 'Enter' && !creating) handleCreateBundle() }}
                   placeholder="e.g., Spring marketing campaigns, AI tools for small business..."
                   disabled={creating}
+                  autoFocus
                   style={{
                     width: '100%',
                     padding: '12px 16px',
@@ -1035,6 +1581,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 />
               </div>
 
+              {/* Industry / Niche */}
               <div>
                 <label style={{
                   display: 'block',
@@ -1052,7 +1599,6 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   list="industry-suggestions"
                   value={createForm.trade}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, trade: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !creating) handleCreateBundle() }}
                   placeholder="e.g., Real Estate, Fitness, SaaS, Photography..."
                   disabled={creating}
                   style={{
@@ -1075,33 +1621,245 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 </datalist>
               </div>
 
-              {createError && (
-                <div style={{
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  color: '#f87171',
-                  fontSize: '0.85rem',
-                }}>
-                  {createError}
+              {/* Content Types */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.5)',
+                    textTransform: 'uppercase' as const,
+                    letterSpacing: '0.03em',
+                  }}>
+                    Content Types
+                  </label>
+                  <button
+                    onClick={() => {
+                      const allSelected = createForm.selectedAssets.length === ALL_ASSET_TYPES.length
+                      setCreateForm(prev => ({ ...prev, selectedAssets: allSelected ? [] : [...ALL_ASSET_TYPES] }))
+                    }}
+                    disabled={creating}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#a855f7',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {createForm.selectedAssets.length === ALL_ASSET_TYPES.length ? 'Deselect All' : 'Select All'}
+                  </button>
                 </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '8px',
+                }}>
+                  {AVAILABLE_ASSET_TYPES.map((asset) => {
+                    const isSelected = createForm.selectedAssets.includes(asset.type)
+                    const Icon = asset.icon
+                    return (
+                      <button
+                        key={asset.type}
+                        onClick={() => {
+                          setCreateForm(prev => ({
+                            ...prev,
+                            selectedAssets: isSelected
+                              ? prev.selectedAssets.filter(a => a !== asset.type)
+                              : [...prev.selectedAssets, asset.type],
+                          }))
+                        }}
+                        disabled={creating}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: `1px solid ${isSelected ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.06)'}`,
+                          background: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'rgba(15, 15, 26, 0.5)',
+                          color: isSelected ? '#c084fc' : 'rgba(255,255,255,0.5)',
+                          cursor: creating ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease',
+                          textAlign: 'left' as const,
+                        }}
+                      >
+                        <Icon size={16} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.2 }}>{asset.name}</div>
+                          <div style={{ fontSize: '0.7rem', opacity: 0.6, lineHeight: 1.2, marginTop: '2px' }}>{asset.description}</div>
+                        </div>
+                        {isSelected && <Check size={14} style={{ flexShrink: 0 }} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Tone */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.5)',
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.03em',
+                  marginBottom: '8px',
+                }}>
+                  Tone
+                </label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {TONE_OPTIONS.map((tone) => (
+                    <button
+                      key={tone.value}
+                      onClick={() => setCreateForm(prev => ({ ...prev, tone: tone.value }))}
+                      disabled={creating}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        border: `1px solid ${createForm.tone === tone.value ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.08)'}`,
+                        background: createForm.tone === tone.value ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                        color: createForm.tone === tone.value ? '#c084fc' : 'rgba(255,255,255,0.45)',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        cursor: creating ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {tone.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Target Audience */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.5)',
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.03em',
+                  marginBottom: '8px',
+                }}>
+                  Target Audience <span style={{ fontWeight: 400, textTransform: 'none' as const }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={createForm.targetAudience}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, targetAudience: e.target.value }))}
+                  placeholder="e.g., Small business owners, homeowners aged 30-50..."
+                  disabled={creating}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(15, 15, 26, 0.8)',
+                    color: '#fff',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    transition: 'border-color 0.2s ease',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+              </div>
+
+              {/* Advanced Options Toggle */}
+              <button
+                onClick={() => setShowAdvancedCreate(!showAdvancedCreate)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.35)',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  padding: '0',
+                }}
+              >
+                {showAdvancedCreate ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                Advanced Options
+              </button>
+
+              {showAdvancedCreate && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  padding: '14px',
+                  borderRadius: '10px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: creating ? 'not-allowed' : 'pointer',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={createForm.skipResearch}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, skipResearch: e.target.checked }))}
+                      disabled={creating}
+                      style={{ accentColor: '#a855f7' }}
+                    />
+                    <div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Skip Research</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+                        Content will be created without market research (faster but less targeted)
+                      </div>
+                    </div>
+                  </label>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: creating ? 'not-allowed' : 'pointer',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={createForm.autoApprove}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, autoApprove: e.target.checked }))}
+                      disabled={creating}
+                      style={{ accentColor: '#a855f7' }}
+                    />
+                    <div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>Auto-Approve Strategy</div>
+                      <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+                        Skip strategy review and go straight to content creation
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {createError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{createError}</AlertDescription>
+                </Alert>
               )}
 
               <button
                 onClick={handleCreateBundle}
-                disabled={creating}
+                disabled={creating || createForm.selectedAssets.length === 0}
                 style={{
                   padding: '12px 24px',
                   borderRadius: '10px',
                   border: 'none',
-                  background: creating
-                    ? 'rgba(168, 85, 247, 0.5)'
+                  background: creating || createForm.selectedAssets.length === 0
+                    ? 'rgba(168, 85, 247, 0.3)'
                     : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
                   color: '#fff',
                   fontWeight: 600,
                   fontSize: '0.9rem',
-                  cursor: creating ? 'not-allowed' : 'pointer',
+                  cursor: creating || createForm.selectedAssets.length === 0 ? 'not-allowed' : 'pointer',
                   transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                   boxShadow: creating ? 'none' : '0 4px 15px rgba(168, 85, 247, 0.3)',
                   display: 'flex',
@@ -1111,7 +1869,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 }}
               >
                 {creating && <Loader size={16} className="animate-spin" />}
-                {creating ? 'Creating Bundle...' : 'Create Bundle'}
+                {creating ? 'Creating Bundle...' : `Create Bundle (${createForm.selectedAssets.length} types)`}
               </button>
             </div>
           </div>
@@ -1125,7 +1883,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: c.overlay || 'rgba(0,0,0,0.6)',
             backdropFilter: 'blur(4px)',
             zIndex: 10000,
             display: 'flex',
@@ -1133,6 +1891,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             paddingTop: '60px',
             paddingBottom: '40px',
             overflowY: 'auto',
+            animation: 'fadeIn 0.2s ease',
           }}
         >
           <div
@@ -1143,15 +1902,16 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               maxWidth: '700px',
               padding: '28px',
               height: 'fit-content',
+              animation: 'fadeInScale 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '24px',
+              marginBottom: '16px',
             }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: c.textPrimary }}>
                 All Content Assets
               </h3>
               <button
@@ -1160,7 +1920,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  color: 'rgba(255,255,255,0.4)',
+                  color: c.textTertiary,
                   padding: '4px',
                 }}
               >
@@ -1168,77 +1928,104 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               </button>
             </div>
 
-            {assetsLoading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '12px' }}>
-                <Loader size={20} className="animate-spin" style={{ color: '#667eea' }} />
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Loading assets...</span>
-              </div>
-            ) : allAssets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <p style={{ color: 'rgba(255,255,255,0.35)' }}>No assets yet. Create a bundle to generate content.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '500px', overflowY: 'auto' }}>
-                {allAssets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      background: 'rgba(255,255,255,0.02)',
-                    }}
+            {/* Search & Filter */}
+            <div style={{ marginBottom: '16px' }}>
+              <Input
+                placeholder="Search assets..."
+                value={assetSearchQuery}
+                onChange={(e) => setAssetSearchQuery(e.target.value)}
+                icon={<Search size={16} />}
+              />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                {['All', 'Emails', 'Posts', 'Videos', 'Images'].map(label => (
+                  <Button
+                    key={label}
+                    variant={(assetTypeFilter === null && label === 'All') || assetTypeFilter === ASSET_TYPE_MAP[label] ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setAssetTypeFilter(label === 'All' ? null : ASSET_TYPE_MAP[label])}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: 'rgba(168, 85, 247, 0.15)',
-                        color: '#a855f7',
-                        fontWeight: 600,
-                        textTransform: 'uppercase' as const,
-                      }}>
-                        {asset.type}
-                      </span>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); copyToClipboard(asset.content, asset.type) }}
-                          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', cursor: 'pointer' }}
-                        >
-                          <Copy size={10} /> Copy
-                        </button>
-                        <span style={{
-                          fontSize: '0.75rem',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          ...(asset.status === 'published'
-                            ? { background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }
-                            : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)' }),
-                        }}>
-                          {asset.status}
-                        </span>
-                      </div>
-                    </div>
-                    {asset.content && (
-                      <p style={{
-                        fontSize: '0.85rem',
-                        color: 'rgba(255,255,255,0.6)',
-                        lineHeight: 1.5,
-                        maxHeight: '60px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>
-                        {asset.content.slice(0, 200)}{asset.content.length > 200 ? '...' : ''}
-                      </p>
-                    )}
-                    <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginTop: '6px' }}>
-                      {new Date(asset.created_at).toLocaleString()}
-                    </p>
-                  </div>
+                    {label}
+                  </Button>
                 ))}
               </div>
-            )}
+            </div>
+
+            {assetsLoading ? (
+              <SkeletonList count={4} />
+            ) : (() => {
+              const filteredAssets = allAssets.filter(a => {
+                if (assetTypeFilter && a.type !== assetTypeFilter) return false
+                if (assetSearchQuery.trim()) {
+                  const q = assetSearchQuery.toLowerCase()
+                  return a.content?.toLowerCase().includes(q) || a.type.toLowerCase().includes(q)
+                }
+                return true
+              })
+              if (filteredAssets.length === 0 && allAssets.length === 0) {
+                return (
+                  <EmptyState
+                    icon="📝"
+                    title="No assets yet"
+                    description="Create a bundle to generate content."
+                    actionLabel="Create Bundle"
+                    onAction={() => { setShowAssets(false); setShowCreateModal(true) }}
+                  />
+                )
+              }
+              if (filteredAssets.length === 0) {
+                return (
+                  <EmptyState
+                    icon="🔍"
+                    title="No matching assets"
+                    description="Try a different search term or filter."
+                    actionLabel="Clear Filters"
+                    onAction={() => { setAssetSearchQuery(''); setAssetTypeFilter(null) }}
+                  />
+                )
+              }
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '500px', overflowY: 'auto' }}>
+                  {filteredAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        border: `1px solid ${c.border}`,
+                        background: 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <Badge variant="level" color="accent" style={{ textTransform: 'uppercase' }}>{asset.type}</Badge>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <Button variant="ghost" size="sm" icon={<Copy size={10} />} onClick={(e) => { e.stopPropagation(); copyToClipboard(asset.content, asset.type) }}>
+                            Copy
+                          </Button>
+                          <Badge variant="status" color={asset.status === 'published' ? 'success' : 'muted'}>
+                            {asset.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      {asset.content && (
+                        <p style={{
+                          fontSize: '0.85rem',
+                          color: c.textSecondary,
+                          lineHeight: 1.5,
+                          maxHeight: '60px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {asset.content.slice(0, 200)}{asset.content.length > 200 ? '...' : ''}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.7rem', color: c.textMuted, marginTop: '6px' }}>
+                        {new Date(asset.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -1247,130 +2034,286 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       {selectedBundle && (
         <div
           onClick={() => { setSelectedBundle(null); setBundleAssets([]) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10000, display: 'flex', justifyContent: 'center', paddingTop: '60px', paddingBottom: '40px', overflowY: 'auto' }}
+          style={{ position: 'fixed', inset: 0, background: c.overlay || 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10000, display: 'flex', justifyContent: 'center', paddingTop: '60px', paddingBottom: '40px', overflowY: 'auto', animation: 'fadeIn 0.2s ease' }}
         >
-          <div className="glass-card" onClick={(e) => e.stopPropagation()} style={{ width: '90%', maxWidth: '700px', padding: '28px', height: 'fit-content' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>{selectedBundle.topic}</h3>
-                <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                  {selectedBundle.trade}
-                  {selectedBundle.status === 'researching'
-                    ? ' \u2022 Research in progress...'
-                    : selectedBundle.status === 'awaiting_strategy_approval'
-                    ? ' \u2022 Awaiting strategy approval'
-                    : selectedBundle.status === 'cancelled'
-                    ? ' \u2022 Cancelled'
-                    : ` \u2022 ${bundleAssets.length} assets`}
+          <div className="glass-card" onClick={(e) => e.stopPropagation()} style={{ width: '90%', maxWidth: '700px', padding: '28px', height: 'fit-content', animation: 'fadeInScale 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: c.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedBundle.topic}</h3>
+                  {getStatusBadge(selectedBundle.status)}
+                </div>
+                <p style={{ fontSize: '0.8rem', color: c.textTertiary, marginTop: '2px' }}>
+                  {selectedBundle.trade} &bull; {bundleAssets.length} assets
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
                 {['researching', 'awaiting_strategy_approval', 'creating'].includes(selectedBundle.status) && (
-                  <button
-                    onClick={() => setCancelConfirmOpen(true)}
-                    disabled={cancelling}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px',
-                      border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171',
-                      fontSize: '0.8rem', fontWeight: 600, cursor: cancelling ? 'not-allowed' : 'pointer',
-                      opacity: cancelling ? 0.5 : 1,
-                    }}
-                  >
-                    <X size={14} /> {cancelling ? 'Cancelling...' : 'Cancel'}
-                  </button>
+                  <Button variant="danger" size="sm" icon={<X size={14} />} onClick={() => setCancelConfirmOpen(true)} disabled={cancelling} loading={cancelling}>
+                    Cancel
+                  </Button>
                 )}
                 {bundleAssets.length > 0 && (
                   <>
-                    <button onClick={() => copyAllAssets(bundleAssets)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', border: 'none', background: 'rgba(102, 126, 234, 0.15)', color: '#667eea', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
-                      <Copy size={14} /> Copy All
-                    </button>
-                    <button onClick={() => downloadAsZip(bundleAssets, selectedBundle.topic)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', border: 'none', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
-                      <Download size={14} /> ZIP
-                    </button>
-                    <a href={generateMailtoLink(bundleAssets, selectedBundle.topic)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none' }}>
-                      <Mail size={14} /> Email
-                    </a>
-                    <button onClick={() => setShowSaveTemplate(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', border: 'none', background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
-                      <Bookmark size={14} /> Template
-                    </button>
+                    <Button variant="ghost" size="sm" icon={<Copy size={14} />} onClick={() => copyAllAssets(bundleAssets)}>Copy All</Button>
+                    <Button variant="ghost" size="sm" icon={<Download size={14} />} onClick={() => downloadAsZip(bundleAssets, selectedBundle.topic)}>ZIP</Button>
+                    <Button variant="ghost" size="sm" icon={<Bookmark size={14} />} onClick={() => setShowSaveTemplate(true)}>Template</Button>
                   </>
                 )}
-                <button onClick={() => { setSelectedBundle(null); setBundleAssets([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }}>
+                <button onClick={() => { setSelectedBundle(null); setBundleAssets([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.textTertiary, padding: '4px' }}>
                   <X size={22} />
                 </button>
               </div>
             </div>
 
-            {/* Research Timeout Warning */}
-            {researchTimeout && selectedBundle.status === 'researching' && (
-              <div style={{
-                padding: '14px 18px',
-                borderRadius: '10px',
-                background: 'rgba(234, 179, 8, 0.1)',
-                border: '1px solid rgba(234, 179, 8, 0.25)',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}>
-                <span style={{ fontSize: '0.85rem', color: '#fbbf24' }}>
-                  Research is taking longer than expected. The agent may still be working. If this persists, try closing and re-opening the bundle.
-                </span>
-              </div>
-            )}
+            {/* Tabbed Layout */}
+            <Tabs value={bundleDetailTab} onValueChange={setBundleDetailTab}>
+              <TabsList>
+                <TabsTrigger value="research" disabled={!selectedBundle.research_findings && selectedBundle.status !== 'researching' && selectedBundle.status !== 'awaiting_strategy_approval'}>
+                  Research
+                </TabsTrigger>
+                <TabsTrigger value="content">
+                  Content ({bundleAssets.length})
+                </TabsTrigger>
+                <TabsTrigger value="comments">
+                  <MessageSquare size={13} /> Comments ({comments.length})
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Research Progress / Findings */}
-            {(selectedBundle.status === 'researching' || selectedBundle.research_findings) && (
+              {/* Research Tab */}
+              <TabsContent value="research">
+                <div style={{ marginTop: '16px' }}>
+                  {/* Research Timeout Warning */}
+                  {researchTimeout && selectedBundle.status === 'researching' && (
+                    <Alert style={{ marginBottom: '16px', background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', color: '#fbbf24' }}>
+                      <AlertDescription>
+                        Research is taking longer than expected. The agent may still be working. If this persists, try closing and re-opening the bundle.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Research Progress / Findings */}
+                  {(selectedBundle.status === 'researching' || selectedBundle.research_findings) && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <ResearchPanel
+                        bundle={{
+                          id: selectedBundle.id,
+                          topic: selectedBundle.topic || '',
+                          trade: selectedBundle.trade || '',
+                          status: selectedBundle.status,
+                          research_findings: selectedBundle.research_findings,
+                          research_progress: selectedBundle.research_progress,
+                        } as any}
+                        expanded={researchExpanded}
+                        onToggleExpanded={() => setResearchExpanded(!researchExpanded)}
+                        onReload={() => { if (selectedBundle) handleViewBundle(selectedBundle) }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Strategy Approval Section */}
+                  {selectedBundle.status === 'awaiting_strategy_approval' && (
               <div style={{ marginBottom: '20px' }}>
-                <ResearchPanel
-                  bundle={{
-                    id: selectedBundle.id,
-                    topic: selectedBundle.topic || '',
-                    trade: selectedBundle.trade || '',
-                    status: selectedBundle.status,
-                    research_findings: selectedBundle.research_findings,
-                    research_progress: selectedBundle.research_progress,
-                  } as any}
-                  expanded={researchExpanded}
-                  onToggleExpanded={() => setResearchExpanded(!researchExpanded)}
-                  onReload={() => { if (selectedBundle) handleViewBundle(selectedBundle) }}
-                />
+                <div style={{
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(168, 85, 247, 0.2)',
+                  background: 'rgba(168, 85, 247, 0.05)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                    <FlaskConical size={18} style={{ color: '#a855f7' }} />
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff', margin: 0 }}>Strategy Review</h4>
+                    {strategyDoc && (strategyDoc as Record<string, unknown>).strategy_confidence != null ? (
+                      <span style={{
+                        fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px',
+                        background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', fontWeight: 600,
+                      }}>
+                        {String((strategyDoc as Record<string, unknown>).strategy_confidence)}% confidence
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {strategyLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '20px 0' }}>
+                      <Loader size={16} className="animate-spin" style={{ color: '#a855f7' }} />
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Loading strategy...</span>
+                    </div>
+                  ) : strategyDoc ? (
+                    <>
+                      {/* Narrative */}
+                      {(strategyDoc as Record<string, unknown>).overall_narrative && (
+                        <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, marginBottom: '16px' }}>
+                          {String((strategyDoc as Record<string, unknown>).overall_narrative)}
+                        </p>
+                      )}
+
+                      {/* Platform Strategy Cards */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                        {['linkedin_strategy', 'email_strategy', 'instagram_strategy', 'video_strategy'].map((key) => {
+                          const strategy = (strategyDoc as Record<string, Record<string, unknown>>)[key]
+                          if (!strategy) return null
+                          const labels: Record<string, string> = {
+                            linkedin_strategy: 'LinkedIn',
+                            email_strategy: 'Email',
+                            instagram_strategy: 'Instagram',
+                            video_strategy: 'Video',
+                          }
+                          return (
+                            <div key={key} style={{
+                              padding: '12px',
+                              borderRadius: '10px',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              background: 'rgba(15, 15, 26, 0.5)',
+                            }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a855f7', textTransform: 'uppercase' as const, marginBottom: '8px' }}>
+                                {labels[key] || key}
+                              </div>
+                              {strategy.hook != null && (
+                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
+                                  <strong style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>Hook: </strong>{String(strategy.hook)}
+                                </div>
+                              )}
+                              {strategy.angle != null && (
+                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
+                                  <strong style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>Angle: </strong>{String(strategy.angle)}
+                                </div>
+                              )}
+                              {strategy.cta != null && (
+                                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)' }}>
+                                  <strong style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>CTA: </strong>{String(strategy.cta)}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button
+                          onClick={handleApproveStrategy}
+                          disabled={approvingStrategy || regeneratingStrategy}
+                          style={{
+                            flex: 1,
+                            padding: '10px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: approvingStrategy ? 'rgba(34, 197, 94, 0.3)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            cursor: approvingStrategy ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          {approvingStrategy ? <Loader size={14} className="animate-spin" /> : <Check size={14} />}
+                          {approvingStrategy ? 'Approving...' : 'Approve & Create Content'}
+                        </button>
+                        <button
+                          onClick={handleRegenerateStrategy}
+                          disabled={approvingStrategy || regeneratingStrategy}
+                          style={{
+                            padding: '10px 16px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            background: 'transparent',
+                            color: '#a855f7',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            cursor: regeneratingStrategy ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          {regeneratingStrategy ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                          Regenerate
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.85rem' }}>
+                      Strategy is being generated from research findings...
+                    </p>
+                  )}
+                </div>
               </div>
             )}
+                </div>
+              </TabsContent>
 
-            {/* Assets Section - hidden during active research */}
-            {selectedBundle.status !== 'researching' && (
-              <>
+              {/* Content Tab */}
+              <TabsContent value="content">
+                <div style={{ marginTop: '16px' }}>
             {bundleAssetsLoading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '12px' }}>
-                <Loader size={20} className="animate-spin" style={{ color: '#667eea' }} />
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Loading assets...</span>
-              </div>
+              <SkeletonList count={3} />
             ) : bundleAssets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <p style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  {selectedBundle.status === 'cancelled'
-                    ? 'This pipeline was cancelled.'
-                    : selectedBundle.status === 'awaiting_strategy_approval'
-                    ? 'Research complete. Content will be created after strategy approval.'
-                    : selectedBundle.status === 'creating'
-                    ? 'Content is being created based on research and strategy...'
-                    : 'No assets in this bundle yet.'}
-                </p>
-              </div>
+              <EmptyState
+                icon="📝"
+                title={selectedBundle.status === 'creating' ? 'Content is being created...' : selectedBundle.status === 'cancelled' ? 'Pipeline was cancelled' : 'No content assets yet'}
+                description={selectedBundle.status === 'creating' ? 'Assets will appear as they are generated.' : 'Approve the strategy to begin content creation.'}
+              />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto' }}>
-                {bundleAssets.map((asset) => (
-                  <div key={asset.id} style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+                {bundleAssets.map((asset) => {
+                  const isExpanded = expandedAssetIds.has(asset.id)
+                  const isLong = asset.content.length > 300
+                  return (
+                  <div key={asset.id} style={{ padding: '16px', borderRadius: '10px', border: `1px solid ${c.border}`, background: 'rgba(255,255,255,0.02)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase' as const }}>{asset.type}</span>
-                      <button onClick={() => copyToClipboard(asset.content, asset.type)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '6px', border: 'none', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', cursor: 'pointer' }}>
-                        <Copy size={12} /> Copy
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Badge variant="level" color="accent" style={{ textTransform: 'uppercase' }}>{asset.type}</Badge>
+                        {asset.version && asset.version > 1 && (
+                          <Badge variant="count" color="info">v{asset.version}</Badge>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Button variant="ghost" size="sm" icon={<RefreshCw size={11} />} onClick={() => setCompareAsset(asset)}>Regenerate</Button>
+                        <Button variant="ghost" size="sm" icon={<Copy size={12} />} onClick={() => copyToClipboard(asset.content, asset.type)}>Copy</Button>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '200px', overflow: 'auto' }}>
+                    <div style={{
+                      fontSize: '0.85rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      maxHeight: isExpanded ? 'none' : '200px', overflow: isExpanded ? 'visible' : 'hidden',
+                      position: 'relative' as const,
+                    }}>
                       {asset.content}
+                      {!isExpanded && isLong && (
+                        <div style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px',
+                          background: 'linear-gradient(transparent, rgba(15, 15, 26, 0.95))',
+                        }} />
+                      )}
                     </div>
+                    {isLong && (
+                      <button
+                        onClick={() => setExpandedAssetIds(prev => {
+                          const next = new Set(prev)
+                          if (next.has(asset.id)) next.delete(asset.id)
+                          else next.add(asset.id)
+                          return next
+                        })}
+                        style={{ background: 'none', border: 'none', color: '#a855f7', fontSize: '0.8rem', cursor: 'pointer', marginTop: '6px', padding: 0, fontWeight: 500 }}
+                      >
+                        {isExpanded ? 'Show less' : 'Show more'}
+                      </button>
+                    )}
+                    {/* Research Influence Tags */}
+                    {asset.research_influence && Object.keys(asset.research_influence).length > 0 && (
+                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.05)', border: '1px solid rgba(168, 85, 247, 0.1)' }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'rgba(168, 85, 247, 0.6)', textTransform: 'uppercase' as const, marginBottom: '6px' }}>AI Research Used</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {Object.entries(asset.research_influence).map(([key, val]) => (
+                            <span key={key} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.45)' }} title={val}>
+                              {key}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {/* HeyGen Video Generation / Player */}
                     {asset.type === 'heygen' && (
                       <div style={{ marginTop: '12px' }}>
@@ -1464,17 +2407,16 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
-              </>
-            )}
+                </div>
+              </TabsContent>
 
-            {/* Comments Section */}
-            <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: '12px' }}>
-                Comments ({comments.length})
-              </h4>
+              {/* Comments Tab */}
+              <TabsContent value="comments">
+                <div style={{ marginTop: '16px' }}>
               {comments.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px', maxHeight: '200px', overflowY: 'auto' }}>
                   {comments.map(comment => (
@@ -1515,7 +2457,9 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   {addingComment ? '...' : 'Post'}
                 </button>
               </div>
-            </div>
+                </div>
+              </TabsContent>
+            </Tabs>
 
             {/* Save as Template inline form */}
             {showSaveTemplate && (
@@ -1587,6 +2531,18 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             </div>
           )}
         </div>
+      )}
+
+      {/* Asset Regeneration Modal */}
+      {compareAsset && (
+        <AssetCompare
+          asset={compareAsset}
+          onClose={() => setCompareAsset(null)}
+          onRegenerate={() => {
+            if (selectedBundle) handleViewBundle(selectedBundle)
+          }}
+          showToast={showToast as ((toast: { type: 'success' | 'error' | 'info'; title: string; message: string; duration?: number }) => void) | undefined}
+        />
       )}
 
       {/* Import Content Modal */}
