@@ -5,38 +5,53 @@ import { useState, useEffect, useCallback } from 'react';
 const PUSH_TO_TALK_ENABLED_KEY = 'opie-push-to-talk-enabled';
 const PUSH_TO_TALK_KEY_KEY = 'opie-push-to-talk-key';
 
-export type PushToTalkKey = 
-  | 'Space' 
-  | 'KeyP' 
-  | 'ShiftLeft' 
-  | 'ShiftRight'
-  | 'ControlLeft'
-  | 'ControlRight'
-  | 'AltLeft'
-  | 'AltRight'
-  | 'F1'
-  | 'F2'
-  | 'F3'
-  | 'F4';
+// Accept any keyboard event code as a push-to-talk key
+export type PushToTalkKey = string;
 
-export const PUSH_TO_TALK_KEYS: { value: PushToTalkKey; label: string }[] = [
-  { value: 'Space', label: 'Space' },
-  { value: 'KeyP', label: 'P' },
-  { value: 'ShiftLeft', label: 'Left Shift' },
-  { value: 'ShiftRight', label: 'Right Shift' },
-  { value: 'ControlLeft', label: 'Left Ctrl' },
-  { value: 'ControlRight', label: 'Right Ctrl' },
-  { value: 'AltLeft', label: 'Left Alt' },
-  { value: 'AltRight', label: 'Right Alt' },
-  { value: 'F1', label: 'F1' },
-  { value: 'F2', label: 'F2' },
-  { value: 'F3', label: 'F3' },
-  { value: 'F4', label: 'F4' },
-];
-
-export function getPushToTalkKeyLabel(key: PushToTalkKey): string {
-  const found = PUSH_TO_TALK_KEYS.find(k => k.value === key);
-  return found?.label || key;
+/** Convert a KeyboardEvent.code to a human-readable label */
+export function getPushToTalkKeyLabel(code: string): string {
+  // Common readable mappings
+  const labels: Record<string, string> = {
+    Space: 'Space',
+    ShiftLeft: 'Left Shift',
+    ShiftRight: 'Right Shift',
+    ControlLeft: 'Left Ctrl',
+    ControlRight: 'Right Ctrl',
+    AltLeft: 'Left Alt',
+    AltRight: 'Right Alt',
+    MetaLeft: 'Left Meta',
+    MetaRight: 'Right Meta',
+    Backquote: '`',
+    Minus: '-',
+    Equal: '=',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Backslash: '\\',
+    Semicolon: ';',
+    Quote: "'",
+    Comma: ',',
+    Period: '.',
+    Slash: '/',
+    CapsLock: 'Caps Lock',
+    Tab: 'Tab',
+    Enter: 'Enter',
+    Backspace: 'Backspace',
+    Escape: 'Esc',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+  };
+  if (labels[code]) return labels[code];
+  // F-keys: F1 through F12
+  if (/^F\d+$/.test(code)) return code;
+  // Letter keys: KeyA → A
+  if (code.startsWith('Key')) return code.slice(3);
+  // Digit keys: Digit0 → 0
+  if (code.startsWith('Digit')) return code.slice(5);
+  // Numpad keys: Numpad0 → Numpad 0
+  if (code.startsWith('Numpad')) return 'Numpad ' + code.slice(6);
+  return code;
 }
 
 export interface VoiceSettings {
@@ -52,14 +67,14 @@ export function useVoiceSettings() {
   // Load preferences from localStorage
   useEffect(() => {
     setMounted(true);
-    
+
     const savedEnabled = localStorage.getItem(PUSH_TO_TALK_ENABLED_KEY);
     if (savedEnabled !== null) {
       setPushToTalkEnabledState(savedEnabled === 'true');
     }
 
-    const savedKey = localStorage.getItem(PUSH_TO_TALK_KEY_KEY) as PushToTalkKey | null;
-    if (savedKey && PUSH_TO_TALK_KEYS.some(k => k.value === savedKey)) {
+    const savedKey = localStorage.getItem(PUSH_TO_TALK_KEY_KEY);
+    if (savedKey) {
       setPushToTalkKeyState(savedKey);
     }
   }, []);

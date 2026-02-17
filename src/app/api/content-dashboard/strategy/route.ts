@@ -1,14 +1,164 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStrategyDocument, generateContentStrategy, approveStrategy } from '@/lib/contentStrategy'
-import { approveStrategyAndProceed } from '@/lib/agentOrchestrator'
+import { approveStrategyAndProceed, processAgentCompletion } from '@/lib/agentOrchestrator'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// ---------------------------------------------------------------------------
+// Gateway session helpers (same pattern as research/route.ts)
+// ---------------------------------------------------------------------------
+
+interface GatewaySession {
+  key?: string
+  sessionId?: string
+  label?: string
+  updatedAt?: number
+  createdAt?: number
+  abortedLastRun?: boolean
+}
+
+async function fetchGatewaySessions(): Promise<GatewaySession[]> {
+  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) return []
+  try {
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+      },
+      body: JSON.stringify({ tool: 'sessions_list', args: { activeMinutes: 30, messageLimit: 1 } }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const contentType = res.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) return []
+    const data = await res.json()
+    return data.result?.details?.sessions || data.result?.sessions || []
+  } catch (err) {
+    console.error('[Strategy] Gateway sessions_list error:', err)
+    return []
+  }
+}
+
+async function fetchSessionHistory(sessionKey: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
+      },
+      body: JSON.stringify({ tool: 'sessions_history', args: { sessionKey, limit: 5, includeTools: false } }),
+      signal: AbortSignal.timeout(10000),
+    })
+    const contentType = res.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) return null
+    const data = await res.json()
+    if (!data.ok) return null
+    const messages = data.result?.messages || data.result?.history || []
+    if (Array.isArray(messages)) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (msg.role === 'assistant' && typeof msg.content === 'string') return msg.content
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          const textParts = msg.content
+            .filter((p: { type: string; text?: string }) => p.type === 'text' && p.text)
+            .map((p: { text: string }) => p.text)
+          if (textParts.length > 0) return textParts.join('\n')
+        }
+      }
+    }
+    if (typeof data.result === 'string') return data.result
+    return null
+  } catch (err) {
+    console.error('[Strategy] Gateway sessions_history error:', err)
+    return null
+  }
+}
+
+function determineSessionStatus(session: GatewaySession): 'running' | 'complete' | 'failed' {
+  if (session.abortedLastRun) return 'failed'
+  if (session.updatedAt && Date.now() - session.updatedAt < 30000) return 'running'
+  return 'complete'
+}
+
+async function checkAndProcessStrategyCompletion(
+  bundleId: string,
+  strategySessionId: string,
+  strategyStartedAt: string | null
+): Promise<{ processed: boolean }> {
+  try {
+    const supabase = getSupabaseAdmin()
+    if (!supabase) return { processed: false }
+
+    // Idempotency: check strategy_doc is still null
+    const { data: current } = await supabase
+      .from('content_bundles')
+      .select('strategy_doc')
+      .eq('id', bundleId)
+      .single()
+    if (current?.strategy_doc != null) return { processed: true }
+
+    const elapsed = strategyStartedAt
+      ? Date.now() - new Date(strategyStartedAt).getTime()
+      : 0
+    if (elapsed < 30000) return { processed: false }
+
+    const gatewaySessions = await fetchGatewaySessions()
+    const sessionMap = new Map<string, GatewaySession>()
+    for (const s of gatewaySessions) {
+      const key = s.key || s.sessionId || ''
+      if (key) sessionMap.set(key, s)
+      if (s.label) sessionMap.set(s.label, s)
+    }
+
+    const session = sessionMap.get(strategySessionId) || sessionMap.get(`strategy-${bundleId}`)
+
+    if (!session) {
+      if (elapsed < 60000) return { processed: false }
+      const output = await fetchSessionHistory(strategySessionId)
+      if (output) {
+        await processAgentCompletion({ bundleId, sessionId: strategySessionId, phase: 'strategy', rawOutput: output })
+        return { processed: true }
+      }
+      if (elapsed > 420000) { // 7 min for strategy (shorter timeout)
+        await supabase.from('content_bundles').update({ status: 'failed' }).eq('id', bundleId)
+        return { processed: true }
+      }
+      return { processed: false }
+    }
+
+    const status = determineSessionStatus(session)
+    if (status === 'running') return { processed: false }
+    if (status === 'failed') {
+      await supabase.from('content_bundles').update({ status: 'failed' }).eq('id', bundleId)
+      return { processed: true }
+    }
+
+    const output = await fetchSessionHistory(session.key || session.sessionId || strategySessionId)
+    if (output) {
+      await processAgentCompletion({ bundleId, sessionId: strategySessionId, phase: 'strategy', rawOutput: output })
+      return { processed: true }
+    }
+    return { processed: false }
+  } catch (err) {
+    console.error('[Strategy] Completion check error:', err)
+    return { processed: false }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/content-dashboard/strategy?bundleId=xxx
+// ---------------------------------------------------------------------------
+
 /**
  * GET /api/content-dashboard/strategy?bundleId=xxx
- * Get strategy document for a bundle
+ * Get strategy document for a bundle.
+ * Also checks gateway for strategy session completion.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +178,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get bundle with strategy data
-    const { data: bundle, error: bundleError } = await supabase
+    let { data: bundle, error: bundleError } = await supabase
       .from('content_bundles')
       .select('*')
       .eq('id', bundleId)
@@ -39,6 +189,25 @@ export async function GET(request: NextRequest) {
         { success: false, error: 'Bundle not found' },
         { status: 404 }
       )
+    }
+
+    // --- Server-side strategy completion detection ---
+    const strategySessionId = (bundle.assets as any)?.strategy_session_id
+    if (strategySessionId && !bundle.strategy_doc) {
+      const completionResult = await checkAndProcessStrategyCompletion(
+        bundleId,
+        strategySessionId,
+        bundle.strategy_started_at
+      )
+
+      if (completionResult.processed) {
+        const { data: refreshedBundle } = await supabase
+          .from('content_bundles')
+          .select('*')
+          .eq('id', bundleId)
+          .single()
+        if (refreshedBundle) bundle = refreshedBundle
+      }
     }
 
     const strategy = await getStrategyDocument(bundleId)

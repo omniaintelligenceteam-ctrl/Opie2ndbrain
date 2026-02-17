@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     if (!IMAGE_GEN_CONFIGURED) {
       return NextResponse.json(
-        { success: false, error: 'REPLICATE_API_TOKEN not configured' },
+        { success: false, error: 'GEMINI_API_KEY not configured' },
         { status: 503 }
       )
     }

@@ -202,6 +202,9 @@ export function ResearchContentStudio({ bundleId, onClose }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={bundle.status} />
+          {['researching', 'awaiting_strategy_approval', 'creating'].includes(bundle.status) && (
+            <CancelPipelineButton bundleId={bundle.id} topic={bundle.topic} onCancelled={loadBundle} />
+          )}
           {onClose && (
             <Button variant="outline" onClick={onClose}>
               Close
@@ -299,7 +302,8 @@ function StatusBadge({ status }: { status: string }) {
     creating: { label: 'Creating Content', color: 'blue', icon: Play },
     review: { label: 'Ready for Review', color: 'green', icon: CheckCircle },
     complete: { label: 'Complete', color: 'green', icon: CheckCircle },
-    failed: { label: 'Failed', color: 'red', icon: Clock }
+    failed: { label: 'Failed', color: 'red', icon: Clock },
+    cancelled: { label: 'Cancelled', color: 'red', icon: Clock }
   }
 
   const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.failed
@@ -329,6 +333,10 @@ function ProgressOverview({ bundle }: { bundle: Bundle }) {
         return { percent: 90, message: 'Content ready for review' }
       case 'complete':
         return { percent: 100, message: 'All content created successfully' }
+      case 'cancelled':
+        return { percent: 0, message: 'Pipeline cancelled by user' }
+      case 'failed':
+        return { percent: 0, message: 'Pipeline failed' }
       default:
         return { percent: 0, message: 'Processing...' }
     }
@@ -364,7 +372,51 @@ function ProgressOverview({ bundle }: { bundle: Bundle }) {
   )
 }
 
-function StrategyPanel({ bundle, onApprove, onReload }: { 
+function CancelPipelineButton({ bundleId, topic, onCancelled }: { bundleId: string; topic: string; onCancelled: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+
+  const handleCancel = async () => {
+    setCancelling(true)
+    try {
+      const res = await fetch('/api/content-dashboard/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId, action: 'cancel' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      onCancelled()
+    } catch (err) {
+      console.error('Cancel failed:', err)
+    } finally {
+      setCancelling(false)
+      setConfirming(false)
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Cancel pipeline?</span>
+        <Button variant="danger" size="sm" onClick={handleCancel} disabled={cancelling}>
+          {cancelling ? 'Cancelling...' : 'Yes, Cancel'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setConfirming(false)} disabled={cancelling}>
+          No
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Button variant="outline" size="sm" onClick={() => setConfirming(true)} className="text-red-400 border-red-400/30 hover:bg-red-400/10">
+      Cancel Pipeline
+    </Button>
+  )
+}
+
+function StrategyPanel({ bundle, onApprove, onReload }: {
   bundle: Bundle
   onApprove: () => void
   onReload: () => void

@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSounds } from '../hooks/useSounds';
-import { useVoiceSettings, PUSH_TO_TALK_KEYS, PushToTalkKey, getPushToTalkKeyLabel } from '../hooks/useVoiceSettings';
+import { useVoiceSettings, getPushToTalkKeyLabel } from '../hooks/useVoiceSettings';
 
 export interface SettingsViewProps {
   isMobile: boolean;
@@ -26,6 +26,37 @@ export function SettingsView({
   const { themeName, toggleTheme } = useTheme();
   const { soundsEnabled, toggleSounds } = useSounds();
   const { pushToTalkEnabled, togglePushToTalk, pushToTalkKey, setPushToTalkKey } = useVoiceSettings();
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureRef = useRef<HTMLButtonElement>(null);
+
+  // Key capture: listen for next keypress when in capture mode
+  useEffect(() => {
+    if (!isCapturing) return;
+
+    const handleCapture = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setPushToTalkKey(e.code);
+      setIsCapturing(false);
+    };
+
+    window.addEventListener('keydown', handleCapture, true);
+    return () => window.removeEventListener('keydown', handleCapture, true);
+  }, [isCapturing, setPushToTalkKey]);
+
+  // Cancel capture if user clicks outside the button
+  useEffect(() => {
+    if (!isCapturing) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (captureRef.current && !captureRef.current.contains(e.target as Node)) {
+        setIsCapturing(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [isCapturing]);
 
   return (
     <div style={{
@@ -94,17 +125,30 @@ export function SettingsView({
         {pushToTalkEnabled && (
           <div style={styles.settingItem}>
             <span>Push-to-Talk Key</span>
-            <select
-              value={pushToTalkKey}
-              onChange={(e) => setPushToTalkKey(e.target.value as PushToTalkKey)}
-              style={styles.settingSelect}
+            <button
+              ref={captureRef}
+              onClick={() => setIsCapturing(true)}
+              style={{
+                ...styles.settingToggle,
+                background: isCapturing
+                  ? 'rgba(59,130,246,0.25)'
+                  : 'rgba(255,255,255,0.04)',
+                color: isCapturing ? '#60a5fa' : 'rgba(255,255,255,0.8)',
+                border: isCapturing
+                  ? '1px solid rgba(59,130,246,0.5)'
+                  : '1px solid rgba(255,255,255,0.08)',
+                minWidth: '140px',
+                animation: isCapturing ? 'pttPulse 1.5s ease-in-out infinite' : 'none',
+              }}
             >
-              {PUSH_TO_TALK_KEYS.map((key) => (
-                <option key={key.value} value={key.value}>
-                  {key.label}
-                </option>
-              ))}
-            </select>
+              {isCapturing ? '⌨️ Press any key...' : `🎯 ${getPushToTalkKeyLabel(pushToTalkKey)}`}
+            </button>
+            <style>{`
+              @keyframes pttPulse {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.3); }
+                50% { box-shadow: 0 0 12px 4px rgba(59,130,246,0.2); }
+              }
+            `}</style>
           </div>
         )}
         <div style={styles.settingItem}>
@@ -186,27 +230,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: '24px',
-  },
-  settingSelect: {
-    padding: '10px 18px',
-    borderRadius: '10px',
-    border: '1px solid rgba(255,255,255,0.08)',
-    background: 'rgba(255,255,255,0.04)',
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    minHeight: '40px',
-    minWidth: '120px',
-    appearance: 'none',
-    WebkitAppearance: 'none',
-    MozAppearance: 'none',
-    backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'rgba(255,255,255,0.5)\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")',
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 10px center',
-    backgroundSize: '16px',
-    paddingRight: '40px',
   },
   settingsCard: {
     background: 'rgba(20, 20, 35, 0.6)',

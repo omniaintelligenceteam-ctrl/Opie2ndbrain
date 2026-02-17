@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import {
   FileText,
@@ -65,9 +65,13 @@ interface ContentStudioProps {
 
 const ASSET_COLORS = ['#a855f7', '#06b6d4', '#f97316', '#22c55e']
 
-const TRADE_OPTIONS = [
+const INDUSTRY_SUGGESTIONS = [
   'HVAC', 'Plumbing', 'Electrical', 'Roofing',
-  'General Contracting', 'Landscaping', 'Painting', 'Solar'
+  'General Contracting', 'Landscaping', 'Painting', 'Solar',
+  'Cleaning Services', 'Pest Control', 'Real Estate', 'Property Management',
+  'Auto Services', 'Restaurant', 'Retail', 'Healthcare',
+  'Fitness', 'Education', 'Technology', 'Photography',
+  'Finance', 'Marketing', 'E-Commerce', 'SaaS',
 ]
 
 // Map UI labels to DB asset types
@@ -82,7 +86,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [bundles, setBundles] = useState<ContentBundle[]>([])
   const [selectedBundle, setSelectedBundle] = useState<ContentBundle | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [createForm, setCreateForm] = useState({ topic: '', trade: 'HVAC' })
+  const [createForm, setCreateForm] = useState({ topic: '', trade: '' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [assetCounts, setAssetCounts] = useState<AssetCounts>({ email: 0, linkedin: 0, heygen: 0, image: 0 })
@@ -96,7 +100,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [templateName, setTemplateName] = useState('')
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [importForm, setImportForm] = useState({ content: '', type: 'email', trade: 'HVAC' })
+  const [importForm, setImportForm] = useState({ content: '', type: 'email', trade: '' })
   const [importing, setImporting] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null)
   const [videoJobs, setVideoJobs] = useState<Record<string, Record<string, unknown>>>({})
@@ -105,6 +109,10 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
   const [researchExpanded, setResearchExpanded] = useState(false)
+  const [researchTimeout, setResearchTimeout] = useState(false)
+  const researchPollingStartRef = useRef<number>(0)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   // Copy to clipboard with toast feedback
   const copyToClipboard = async (text: string, label?: string) => {
@@ -353,7 +361,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       const topicText = createForm.topic.trim()
       const tradeText = createForm.trade
 
-      setCreateForm({ topic: '', trade: 'HVAC' })
+      setCreateForm({ topic: '', trade: '' })
       setShowCreateModal(false)
       showToast?.({
         type: 'success',
@@ -490,9 +498,18 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
 
   // Poll research progress when viewing a researching bundle
   useEffect(() => {
-    if (!selectedBundle || selectedBundle.status !== 'researching') return
+    if (!selectedBundle || selectedBundle.status !== 'researching') {
+      setResearchTimeout(false)
+      researchPollingStartRef.current = 0
+      return
+    }
 
     const bundleId = selectedBundle.id
+
+    // Track when polling started
+    if (!researchPollingStartRef.current) {
+      researchPollingStartRef.current = Date.now()
+    }
 
     const pollResearch = async () => {
       try {
@@ -523,15 +540,34 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
         if (updatedBundle.status !== 'researching') {
           setBundleAssets(bundleData.data.content_assets || [])
           fetchBundles()
+          researchPollingStartRef.current = 0
+          setResearchTimeout(false)
         }
       } catch (err) {
         console.error('Research polling error:', err)
+      }
+
+      // Check for timeout (12 minutes)
+      if (researchPollingStartRef.current) {
+        const elapsed = Date.now() - researchPollingStartRef.current
+        if (elapsed > 720000) {
+          setResearchTimeout(true)
+        }
       }
     }
 
     pollResearch()
     const interval = setInterval(pollResearch, 3000)
-    return () => clearInterval(interval)
+
+    // Safety: stop polling after 15 minutes
+    const maxPollTimer = setTimeout(() => {
+      clearInterval(interval)
+    }, 900000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(maxPollTimer)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBundle?.id, selectedBundle?.status])
 
@@ -560,6 +596,30 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       setSavingTemplate(false)
     }
   }
+
+  // Cancel pipeline
+  const handleCancelBundle = useCallback(async () => {
+    if (!selectedBundle) return
+    setCancelling(true)
+    try {
+      const res = await fetch('/api/content-dashboard/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId: selectedBundle.id, action: 'cancel' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setSelectedBundle({ ...selectedBundle, status: 'cancelled' })
+      fetchBundles()
+      showToast?.({ type: 'info', title: 'Bundle Cancelled', message: `"${selectedBundle.topic}" has been cancelled.`, duration: 4000 })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to cancel bundle'
+      showToast?.({ type: 'error', title: 'Cancel Failed', message, duration: 5000 })
+    } finally {
+      setCancelling(false)
+      setCancelConfirmOpen(false)
+    }
+  }, [selectedBundle, fetchBundles, showToast])
 
   // Use template (duplicate)
   const handleUseTemplate = async (templateId: string) => {
@@ -750,11 +810,13 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                       ? { background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }
                       : bundle.status === 'researching'
                       ? { background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }
-                      : bundle.status === 'failed'
+                      : bundle.status === 'failed' || bundle.status === 'cancelled'
                       ? { background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }
                       : { background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24' }),
                   }}>
-                    {bundle.status === 'researching' ? 'Researching...' : bundle.status}
+                    {bundle.status === 'researching' ? 'Researching...'
+                      : bundle.status === 'cancelled' ? 'Cancelled'
+                      : bundle.status}
                   </span>
                 </div>
               </div>
@@ -956,7 +1018,7 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   value={createForm.topic}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, topic: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !creating) handleCreateBundle() }}
-                  placeholder="e.g., HVAC maintenance tips for spring"
+                  placeholder="e.g., Spring marketing campaigns, AI tools for small business..."
                   disabled={creating}
                   style={{
                     width: '100%',
@@ -983,29 +1045,34 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   letterSpacing: '0.03em',
                   marginBottom: '8px',
                 }}>
-                  Trade
+                  Industry / Niche
                 </label>
-                <select
+                <input
+                  type="text"
+                  list="industry-suggestions"
                   value={createForm.trade}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, trade: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !creating) handleCreateBundle() }}
+                  placeholder="e.g., Real Estate, Fitness, SaaS, Photography..."
                   disabled={creating}
                   style={{
                     width: '100%',
                     padding: '12px 16px',
                     borderRadius: '10px',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.1)',
                     background: 'rgba(15, 15, 26, 0.8)',
-                    color: 'rgba(255,255,255,0.8)',
+                    color: '#fff',
                     fontSize: '0.9rem',
-                    cursor: 'pointer',
                     outline: 'none',
+                    transition: 'border-color 0.2s ease',
                     boxSizing: 'border-box' as const,
                   }}
-                >
-                  {TRADE_OPTIONS.map((trade) => (
-                    <option key={trade} value={trade}>{trade}</option>
+                />
+                <datalist id="industry-suggestions">
+                  {INDUSTRY_SUGGESTIONS.map((s) => (
+                    <option key={s} value={s} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               {createError && (
@@ -1192,10 +1259,26 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                     ? ' \u2022 Research in progress...'
                     : selectedBundle.status === 'awaiting_strategy_approval'
                     ? ' \u2022 Awaiting strategy approval'
+                    : selectedBundle.status === 'cancelled'
+                    ? ' \u2022 Cancelled'
                     : ` \u2022 ${bundleAssets.length} assets`}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {['researching', 'awaiting_strategy_approval', 'creating'].includes(selectedBundle.status) && (
+                  <button
+                    onClick={() => setCancelConfirmOpen(true)}
+                    disabled={cancelling}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px',
+                      border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171',
+                      fontSize: '0.8rem', fontWeight: 600, cursor: cancelling ? 'not-allowed' : 'pointer',
+                      opacity: cancelling ? 0.5 : 1,
+                    }}
+                  >
+                    <X size={14} /> {cancelling ? 'Cancelling...' : 'Cancel'}
+                  </button>
+                )}
                 {bundleAssets.length > 0 && (
                   <>
                     <button onClick={() => copyAllAssets(bundleAssets)} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '8px', border: 'none', background: 'rgba(102, 126, 234, 0.15)', color: '#667eea', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
@@ -1217,6 +1300,24 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 </button>
               </div>
             </div>
+
+            {/* Research Timeout Warning */}
+            {researchTimeout && selectedBundle.status === 'researching' && (
+              <div style={{
+                padding: '14px 18px',
+                borderRadius: '10px',
+                background: 'rgba(234, 179, 8, 0.1)',
+                border: '1px solid rgba(234, 179, 8, 0.25)',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}>
+                <span style={{ fontSize: '0.85rem', color: '#fbbf24' }}>
+                  Research is taking longer than expected. The agent may still be working. If this persists, try closing and re-opening the bundle.
+                </span>
+              </div>
+            )}
 
             {/* Research Progress / Findings */}
             {(selectedBundle.status === 'researching' || selectedBundle.research_findings) && (
@@ -1248,7 +1349,9 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             ) : bundleAssets.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px' }}>
                 <p style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  {selectedBundle.status === 'awaiting_strategy_approval'
+                  {selectedBundle.status === 'cancelled'
+                    ? 'This pipeline was cancelled.'
+                    : selectedBundle.status === 'awaiting_strategy_approval'
                     ? 'Research complete. Content will be created after strategy approval.'
                     : selectedBundle.status === 'creating'
                     ? 'Content is being created based on research and strategy...'
@@ -1450,6 +1553,39 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
               </div>
             )}
           </div>
+
+          {/* Cancel Confirmation Dialog */}
+          {cancelConfirmOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <div className="glass-card" style={{ padding: '24px', maxWidth: '400px', width: '90%' }}>
+                <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: 700, marginBottom: '12px' }}>
+                  Cancel Pipeline?
+                </h4>
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: 1.5 }}>
+                  This will cancel the content pipeline for &ldquo;{selectedBundle.topic}&rdquo;. Any running agent sessions will be abandoned. This action cannot be undone.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setCancelConfirmOpen(false)}
+                    disabled={cancelling}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Keep Running
+                  </button>
+                  <button
+                    onClick={handleCancelBundle}
+                    disabled={cancelling}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '0.85rem', fontWeight: 600, cursor: cancelling ? 'not-allowed' : 'pointer' }}
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel Pipeline'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1508,21 +1644,25 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' as const, letterSpacing: '0.03em', marginBottom: '8px' }}>
-                    Trade
+                    Industry / Niche
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="industry-suggestions-import"
                     value={importForm.trade}
                     onChange={(e) => setImportForm(p => ({ ...p, trade: e.target.value }))}
+                    placeholder="e.g., Real Estate, Fitness, SaaS..."
                     disabled={importing}
                     style={{
-                      width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)',
-                      background: 'rgba(15, 15, 26, 0.8)', color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', cursor: 'pointer', outline: 'none', boxSizing: 'border-box' as const,
+                      width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(15, 15, 26, 0.8)', color: '#fff', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' as const,
                     }}
-                  >
-                    {TRADE_OPTIONS.map(t => (
-                      <option key={t} value={t}>{t}</option>
+                  />
+                  <datalist id="industry-suggestions-import">
+                    {INDUSTRY_SUGGESTIONS.map((s) => (
+                      <option key={s} value={s} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
               </div>
 

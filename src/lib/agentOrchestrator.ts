@@ -182,6 +182,18 @@ async function processResearchPhaseCompletion(
   const supabase = getSupabase()
 
   try {
+    // Idempotency: check bundle is still in 'researching' status
+    const { data: currentBundle } = await supabase
+      .from('content_bundles')
+      .select('status')
+      .eq('id', bundleId)
+      .single()
+
+    if (!currentBundle || currentBundle.status !== 'researching') {
+      console.log(`[Orchestrator] Bundle ${bundleId} already past research phase (status: ${currentBundle?.status}), skipping`)
+      return { success: true, nextPhase: currentBundle?.status || 'unknown' }
+    }
+
     // Process research findings
     const researchResult = await processResearchCompletion(sessionId, rawOutput)
     
@@ -259,6 +271,18 @@ async function processStrategyPhaseCompletion(
   const supabase = getSupabase()
 
   try {
+    // Idempotency: check bundle doesn't already have a strategy_doc
+    const { data: currentBundle } = await supabase
+      .from('content_bundles')
+      .select('status, strategy_doc')
+      .eq('id', bundleId)
+      .single()
+
+    if (!currentBundle || currentBundle.strategy_doc != null) {
+      console.log(`[Orchestrator] Bundle ${bundleId} already has strategy, skipping`)
+      return { success: true, nextPhase: currentBundle?.status || 'unknown' }
+    }
+
     // Process strategy document
     const strategyResult = await processStrategyCompletion(sessionId, rawOutput)
     
@@ -349,19 +373,15 @@ async function createResearchDrivenContentBundle(
   strategy: any
 ): Promise<{ success: boolean; sessionIds?: Record<string, string>; error?: string }> {
   try {
-    // Create enhanced prompts that incorporate research and strategy
-    const enhancedPrompts = createResearchEnhancedPrompts(
+    // Use existing content creation system with research-enhanced prompts
+    const { sessionIds } = await createContentBundle(
       topic,
       trade,
+      selectedAssets,
       researchFindings,
-      strategy
+      strategy,
+      bundleId // Reuse existing bundle instead of creating a duplicate
     )
-
-    // Use existing content creation system but with enhanced prompts
-    const { sessionIds } = await createContentBundle(topic, trade, selectedAssets)
-
-    // TODO: Replace with research-enhanced version once content creation system is updated
-    // For now, this will use the existing prompts, but we need to enhance them
 
     return {
       success: true,
@@ -376,68 +396,8 @@ async function createResearchDrivenContentBundle(
   }
 }
 
-/**
- * Create research-enhanced prompts for content agents
- */
-function createResearchEnhancedPrompts(
-  topic: string,
-  trade: string,
-  researchFindings: any,
-  strategy: any
-): Record<string, string> {
-  const baseContext = `
-RESEARCH CONTEXT:
-- Key Statistics: ${JSON.stringify(researchFindings.key_statistics, null, 2)}
-- Trending Angles: ${researchFindings.trending_angles.join(', ')}
-- Viral Hooks: ${researchFindings.viral_hooks.join(', ')}
-- Brand Voice: ${researchFindings.brand_voice}
-- Recommended CTA: ${researchFindings.recommended_cta}
-
-STRATEGY GUIDANCE:
-- LinkedIn Strategy: ${JSON.stringify(strategy.linkedin_strategy, null, 2)}
-- Instagram Strategy: ${JSON.stringify(strategy.instagram_strategy, null, 2)}
-- Email Strategy: ${JSON.stringify(strategy.email_strategy, null, 2)}
-- Video Strategy: ${JSON.stringify(strategy.video_strategy, null, 2)}
-`
-
-  return {
-    email_agent: `${baseContext}
-
-Create a professional email sequence for "${topic}" targeting ${trade} businesses.
-Use the research findings and email strategy above to create compelling, data-driven content.
-
-SPECIFIC REQUIREMENTS:
-- Subject Line: Use one of the researched subject line options
-- Hook: Implement the researched hook approach
-- Body: Follow the strategy body structure
-- Statistics: Incorporate key statistics from research
-- CTA: Use the recommended CTA approach
-
-Format your output like this:
-<content-output>
-{"email": "EMAIL 1: Welcome\nSubject: [Research-based subject]\n[Email content with research stats]\n\nEMAIL 2: Value\nSubject: [Subject]\n[Email content]\n\nEMAIL 3: CTA\nSubject: [Subject]\n[Email content]"}
-</content-output>`,
-
-    linkedin_agent: `${baseContext}
-
-Create a LinkedIn post about "${topic}" for ${trade} professionals using the research-based strategy.
-
-SPECIFIC REQUIREMENTS:
-- Hook: Use the exact hook from LinkedIn strategy
-- Statistics: Lead with key statistics from research
-- Angle: Follow the strategic angle approach
-- Length: Stay within strategy length target
-- CTA: Use the recommended CTA
-- Engagement: Implement suggested engagement tactics
-
-Format your output like this:
-<content-output>
-{"linkedin": "[Research-driven LinkedIn post with strategy implementation]"}
-</content-output>`,
-
-    // Add other enhanced prompts as needed...
-  }
-}
+// Research-enhanced prompts are built directly in contentCreation.ts AGENT_PROMPTS
+// Each agent prompt builder accepts optional researchFindings and strategy params
 
 /**
  * Get orchestration status for a bundle

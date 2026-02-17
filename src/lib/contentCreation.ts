@@ -69,7 +69,7 @@ function getSupabase() {
 
 const AGENT_PROMPTS = {
   email_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Create a professional email sequence for "${topic}" targeting ${trade} businesses. 
+    const basePrompt = `Create a professional email sequence for "${topic}" in the ${trade} space.
     Create 3 emails: welcome, value-driven, and CTA.
     Each email should have:
     - Compelling subject line
@@ -111,7 +111,7 @@ Format your output like this:
   },
 
   linkedin_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Create an engaging LinkedIn post about "${topic}" for ${trade} professionals.
+    const basePrompt = `Create an engaging LinkedIn post about "${topic}" for the ${trade} audience.
     - Professional but approachable tone
     - 150-300 words
     - Include relevant hashtags
@@ -154,7 +154,7 @@ Format your output like this:
   },
 
   instagram_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Create an Instagram caption about "${topic}" for ${trade} businesses.
+    const basePrompt = `Create an Instagram caption about "${topic}" for the ${trade} niche.
     - Engaging and visual
     - Story-driven approach
     - Relevant hashtags (8-12)
@@ -197,7 +197,7 @@ Format your output like this:
   },
 
   video_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Create a short-form video script about "${topic}" for ${trade} businesses.
+    const basePrompt = `Create a short-form video script about "${topic}" for the ${trade} space.
     30-60 seconds duration for HeyGen AI video creation.
     Include:
     - Strong hook (first 3 seconds)
@@ -241,7 +241,7 @@ Format your output like this:
   },
 
   hooks_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Generate 10 compelling marketing hooks for "${topic}" targeting ${trade} businesses.
+    const basePrompt = `Generate 10 compelling marketing hooks for "${topic}" targeting the ${trade} audience.
     Each hook should be attention-grabbing and trigger curiosity, urgency, or emotion.
     
     For each hook provide:
@@ -284,7 +284,7 @@ Format your output like this:
   },
 
   image_agent: (topic: string, trade: string, researchFindings?: any, strategy?: any) => {
-    const basePrompt = `Create 5 detailed image generation prompts for "${topic}" in the ${trade} industry.
+    const basePrompt = `Create 5 detailed image generation prompts for "${topic}" in the ${trade} space.
     Each prompt should be specific, visual, and ready for AI image generation.
     Include style, composition, colors, mood, and context.`
 
@@ -326,32 +326,52 @@ Format your output like this:
 // ---------------------------------------------------------------------------
 
 /**
- * Create a complete content bundle by spawning specialized agents
+ * Create a complete content bundle by spawning specialized agents.
+ * If existingBundleId is provided, reuse that bundle instead of creating a new one
+ * (used by the research-first pipeline to keep assets on the same bundle as research/strategy).
  */
 export async function createContentBundle(
   topic: string,
   trade: string,
   selectedAssets: string[] = ['email', 'linkedin', 'instagram', 'video_script', 'hooks', 'image_prompt'],
   researchFindings?: any,
-  strategy?: any
+  strategy?: any,
+  existingBundleId?: string
 ): Promise<{ bundleId: string; sessionIds: Record<string, string> }> {
   const supabase = getSupabase()
-  
-  // Create the bundle record
-  const bundleId = generateId('bnd')
-  const { error: bundleError } = await supabase
-    .from('content_bundles')
-    .insert({
-      id: bundleId,
-      topic,
-      trade,
-      status: 'creating',
-      quality_score: 0,
-      assets: {},
-    })
 
-  if (bundleError) {
-    throw new Error(`Failed to create bundle: ${bundleError.message}`)
+  let bundleId: string
+
+  if (existingBundleId) {
+    // Reuse existing bundle (research-first pipeline)
+    bundleId = existingBundleId
+    const { error: updateError } = await supabase
+      .from('content_bundles')
+      .update({
+        status: 'creating',
+      })
+      .eq('id', bundleId)
+
+    if (updateError) {
+      throw new Error(`Failed to update bundle status: ${updateError.message}`)
+    }
+  } else {
+    // Create a new bundle record (legacy/direct mode)
+    bundleId = generateId('bnd')
+    const { error: bundleError } = await supabase
+      .from('content_bundles')
+      .insert({
+        id: bundleId,
+        topic,
+        trade,
+        status: 'creating',
+        quality_score: 0,
+        assets: {},
+      })
+
+    if (bundleError) {
+      throw new Error(`Failed to create bundle: ${bundleError.message}`)
+    }
   }
 
   // Spawn agents for each selected asset type

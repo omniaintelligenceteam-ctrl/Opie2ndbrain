@@ -7,6 +7,8 @@ export interface ParsedContent {
   linkedin?: string
   instagram?: string
   video_script?: string
+  hooks?: string
+  image_prompt?: string
   blog_outline?: string
   raw?: string
   research_influence?: Record<string, string> | null
@@ -36,7 +38,10 @@ export function parseAgentOutput(rawText: string): ParsedContent {
           linkedin: parsed.linkedin || undefined,
           instagram: parsed.instagram || undefined,
           video_script: parsed.video_script || undefined,
+          hooks: parsed.hooks || undefined,
+          image_prompt: parsed.image_prompt || undefined,
           blog_outline: parsed.blog_outline || undefined,
+          research_influence: parsed.research_influence || undefined,
         }
       }
     } catch {
@@ -107,9 +112,11 @@ export function parseAgentOutput(rawText: string): ParsedContent {
 const CONTENT_TYPE_MAP: Record<string, string> = {
   email: 'email',
   linkedin: 'linkedin',
-  instagram: 'linkedin', // Stored as linkedin type since it's social content
+  instagram: 'instagram',
   video_script: 'heygen',
-  blog_outline: 'image', // Re-use image type for blog content
+  hooks: 'hooks',
+  image_prompt: 'image_prompt',
+  blog_outline: 'blog_outline',
 }
 
 /**
@@ -149,7 +156,7 @@ export function parsedContentToAssetRecords(
   }
 
   const entries = Object.entries(parsed).filter(
-    ([key, val]) => key !== 'raw' && val && typeof val === 'string'
+    ([key, val]) => key !== 'raw' && key !== 'research_influence' && val && typeof val === 'string'
   ) as Array<[string, string]>
 
   for (const [key, content] of entries) {

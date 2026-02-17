@@ -141,7 +141,7 @@ ${JSON.stringify(researchFindings, null, 2)}
 
 STRATEGY TARGET:
 - Topic: "${topic}"
-- Trade: "${trade}"
+- Industry/Niche: "${trade}"
 - Selected Platforms: ${selectedPlatforms.join(', ')}
 
 STRATEGY TASK:

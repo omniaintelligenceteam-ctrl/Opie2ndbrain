@@ -12,6 +12,11 @@ import { getSupabaseAdmin } from './supabase'
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 export const IMAGE_GEN_CONFIGURED = !!GEMINI_API_KEY
 
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const IMAGEN_MODEL = 'imagen-4.0-generate-001'
+const GEMINI_FLASH_MODEL = 'gemini-2.5-flash-preview-04-17'
+const IMAGE_BUCKET = 'content-images'
+
 // ---------------------------------------------------------------------------
 // Error Classes
 // ---------------------------------------------------------------------------
@@ -116,7 +121,8 @@ export async function generateContentImages(
         const result = await generateSingleImageWithGemini(enhancedPrompt, {
           aspectRatio,
           style,
-          quality
+          quality,
+          bundleId: request.bundleId,
         })
 
         if (result.success && result.image_url) {
@@ -206,8 +212,61 @@ function enhancePromptWithNanoBananaStyle(
   return styleEnhancements[style as keyof typeof styleEnhancements] || styleEnhancements.commercial_photography
 }
 
+// ---------------------------------------------------------------------------
+// Supabase Storage Upload
+// ---------------------------------------------------------------------------
+
 /**
- * Generate single image using Gemini API
+ * Upload base64 image data to Supabase Storage and return a public URL.
+ * Auto-creates the storage bucket on first use.
+ */
+async function uploadImageToStorage(
+  base64Data: string,
+  bundleId: string,
+  mimeType: string = 'image/png'
+): Promise<string> {
+  const supabase = getSupabase()
+
+  const ext = mimeType === 'image/jpeg' ? 'jpg' : 'png'
+  const fileName = `${bundleId}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`
+  const buffer = Buffer.from(base64Data, 'base64')
+
+  // Try upload
+  let { data, error } = await supabase.storage
+    .from(IMAGE_BUCKET)
+    .upload(fileName, buffer, { contentType: mimeType, upsert: false })
+
+  // If bucket doesn't exist, create it and retry
+  if (error && (error.message.includes('not found') || error.message.includes('does not exist') || error.message.includes('Bucket'))) {
+    console.log(`[ImageGen] Creating storage bucket '${IMAGE_BUCKET}'`)
+    await supabase.storage.createBucket(IMAGE_BUCKET, {
+      public: true,
+      fileSizeLimit: 10485760, // 10MB
+    })
+    const retry = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(fileName, buffer, { contentType: mimeType, upsert: false })
+    data = retry.data
+    error = retry.error
+  }
+
+  if (error || !data) {
+    throw new Error(`Image upload failed: ${error?.message || 'Unknown error'}`)
+  }
+
+  const { data: urlData } = supabase.storage
+    .from(IMAGE_BUCKET)
+    .getPublicUrl(data.path)
+
+  return urlData.publicUrl
+}
+
+// ---------------------------------------------------------------------------
+// Gemini / Imagen API Calls
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a single image using Imagen 4 API, with Gemini Flash fallback.
  */
 async function generateSingleImageWithGemini(
   prompt: string,
@@ -215,103 +274,140 @@ async function generateSingleImageWithGemini(
     aspectRatio: string
     style: string
     quality: string
+    bundleId: string
   }
 ): Promise<GeminiImageResponse> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    return { success: false, error: 'GEMINI_API_KEY not configured' }
+  }
+
+  // Map aspect ratios to Imagen-supported values
+  const aspectRatioMap: Record<string, string> = {
+    '1:1': '1:1',
+    '16:9': '16:9',
+    '9:16': '9:16',
+    '4:5': '3:4',
+    '4:3': '4:3',
+    '3:4': '3:4',
+  }
+  const aspectRatio = aspectRatioMap[options.aspectRatio] || '1:1'
+
   try {
-    // This would be the actual Gemini API call
-    // For now, we'll simulate the API call structure
-    
-    const geminiApiKey = process.env.GEMINI_API_KEY
-    if (!geminiApiKey) {
-      throw new Error('GEMINI_API_KEY not configured')
-    }
-
-    const geminiRequest = {
-      prompt,
-      model: 'gemini-pro-vision',  // or appropriate Gemini model for image generation
-      parameters: {
-        aspect_ratio: options.aspectRatio,
-        style: options.style,
-        quality: options.quality,
-        safety_level: 'moderate',
-        creative_level: 'balanced'
+    // --- Try Imagen 4 first (dedicated image generation, higher quality) ---
+    const imagenResponse = await fetch(
+      `${GEMINI_API_BASE}/models/${IMAGEN_MODEL}:predict`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio,
+          },
+        }),
+        signal: AbortSignal.timeout(60000),
       }
-    }
+    )
 
-    // TODO: Replace with actual Gemini API call
-    // const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${geminiApiKey}`,
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify(geminiRequest)
-    // })
+    if (imagenResponse.ok) {
+      const data = await imagenResponse.json()
+      const prediction = data.predictions?.[0]
+      const imageBytes = prediction?.bytesBase64Encoded
 
-    // For now, return a placeholder structure
-    // In production, this would process the actual Gemini response
-    
-    return {
-      success: false,
-      error: 'Gemini API integration not yet implemented - placeholder for development',
-      metadata: {
-        prompt,
-        options,
-        timestamp: new Date().toISOString()
+      if (imageBytes) {
+        const mimeType = prediction.mimeType || 'image/png'
+        const imageUrl = await uploadImageToStorage(imageBytes, options.bundleId, mimeType)
+
+        return {
+          success: true,
+          image_url: imageUrl,
+          metadata: {
+            model: IMAGEN_MODEL,
+            aspectRatio,
+            timestamp: new Date().toISOString(),
+          },
+        }
       }
+      console.warn('[ImageGen] Imagen 4 returned no image data, trying Gemini Flash')
+    } else {
+      const errorText = await imagenResponse.text().catch(() => 'unknown')
+      console.warn(`[ImageGen] Imagen 4 failed (${imagenResponse.status}): ${errorText.slice(0, 200)}`)
     }
 
-    // TODO: Actual implementation would be:
-    // const data = await response.json()
-    // return processGeminiResponse(data)
+    // --- Fallback: Gemini Flash with image generation ---
+    return await generateWithGeminiFlash(prompt, aspectRatio, apiKey, options.bundleId)
 
   } catch (error) {
-    console.error('Gemini API error:', error)
+    console.error('[ImageGen] Generation error:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Gemini API error'
+      error: error instanceof Error ? error.message : 'Image generation failed',
     }
   }
 }
 
 /**
- * Process Gemini API response (placeholder for actual implementation)
+ * Fallback image generation using Gemini Flash model.
  */
-function processGeminiResponse(geminiData: any): GeminiImageResponse {
-  try {
-    // TODO: Implement actual Gemini response processing
-    // This would extract the image URL, metadata, etc. from Gemini's response
-    
-    if (geminiData.error) {
-      return {
-        success: false,
-        error: geminiData.error.message || 'Gemini API error'
-      }
+async function generateWithGeminiFlash(
+  prompt: string,
+  aspectRatio: string,
+  apiKey: string,
+  bundleId: string
+): Promise<GeminiImageResponse> {
+  const response = await fetch(
+    `${GEMINI_API_BASE}/models/${GEMINI_FLASH_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
+        generationConfig: {
+          responseModalities: ['IMAGE', 'TEXT'],
+        },
+      }),
+      signal: AbortSignal.timeout(60000),
     }
+  )
 
-    if (geminiData.candidates && geminiData.candidates[0]?.output?.image_url) {
-      return {
-        success: true,
-        image_url: geminiData.candidates[0].output.image_url,
-        metadata: {
-          model: geminiData.model,
-          usage: geminiData.usage,
-          safety_ratings: geminiData.candidates[0].safety_ratings,
-          finish_reason: geminiData.candidates[0].finish_reason
-        }
-      }
-    }
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'unknown')
+    throw new Error(`Gemini Flash image generation failed (${response.status}): ${errorText.slice(0, 200)}`)
+  }
 
-    return {
-      success: false,
-      error: 'No image generated by Gemini'
-    }
+  const data = await response.json()
+  const parts = data.candidates?.[0]?.content?.parts || []
+  const imagePart = parts.find(
+    (p: { inline_data?: { mime_type?: string; data?: string } }) =>
+      p.inline_data?.mime_type?.startsWith('image/')
+  )
 
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Response processing error'
-    }
+  if (!imagePart?.inline_data?.data) {
+    throw new Error('Gemini Flash returned no image data')
+  }
+
+  const imageUrl = await uploadImageToStorage(
+    imagePart.inline_data.data,
+    bundleId,
+    imagePart.inline_data.mime_type
+  )
+
+  return {
+    success: true,
+    image_url: imageUrl,
+    metadata: {
+      model: GEMINI_FLASH_MODEL,
+      aspectRatio,
+      timestamp: new Date().toISOString(),
+    },
   }
 }
 
@@ -380,7 +476,8 @@ export async function regenerateImage(
     const result = await generateSingleImageWithGemini(enhancedPrompt, {
       aspectRatio: options?.aspectRatio || originalImage.aspect_ratio,
       style: options?.style || originalImage.style,
-      quality: options?.quality || 'standard'
+      quality: options?.quality || 'standard',
+      bundleId: originalImage.bundle_id,
     })
 
     if (!result.success || !result.image_url) {

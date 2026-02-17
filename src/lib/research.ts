@@ -60,11 +60,20 @@ async function updateResearchProgress(
   progress: ResearchProgress
 ): Promise<void> {
   const supabase = getSupabase()
-  
+
+  // Fetch current assets first to avoid overwriting request_metadata
+  const { data: current } = await supabase
+    .from('content_bundles')
+    .select('assets')
+    .eq('id', bundleId)
+    .single()
+
+  const existingAssets = (current?.assets as Record<string, unknown>) || {}
+
   await supabase
     .from('content_bundles')
     .update({
-      assets: { research_progress: progress }
+      assets: { ...existingAssets, research_progress: progress }
     })
     .eq('id', bundleId)
 }
@@ -157,7 +166,7 @@ Your job is to conduct COMPREHENSIVE research before any content is created.
 
 RESEARCH TARGET:
 - Topic: "${topic}"
-- Trade/Industry: "${trade}"
+- Industry/Niche: "${trade}"
 - Target Platforms: ${platforms.join(', ')}
 - Tone: ${tone}
 - Intent: ${intent}
@@ -166,19 +175,19 @@ RESEARCH PHASES (do them in order, report progress):
 
 PHASE 1: INDUSTRY TRENDS & STATISTICS
 Use web_search to find:
-- Latest trends in ${trade} industry 2024/2025
-- Key statistics about ${trade} businesses 
-- Common pain points and challenges
+- Latest trends in the ${trade} space 2024/2025
+- Key statistics about ${trade}
+- Common pain points and challenges in ${trade}
 - Growth opportunities and market shifts
 - Industry-specific terminology and language
 
 Search queries:
-- "latest trends in ${trade} industry 2024"
-- "${trade} business statistics 2024" 
-- "common problems ${trade} contractors face"
-- "${trade} industry challenges solutions"
+- "latest trends in ${trade} 2024"
+- "${trade} statistics 2024"
+- "common problems in ${trade}"
+- "${trade} challenges and solutions"
 
-PHASE 2: COMPETITOR CONTENT ANALYSIS  
+PHASE 2: COMPETITOR CONTENT ANALYSIS
 Use web_search + web_fetch to:
 - Find top 5 content pieces from ${trade} competitors
 - Analyze their hooks, CTAs, and messaging angles
