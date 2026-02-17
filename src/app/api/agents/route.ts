@@ -107,20 +107,20 @@ async function tryFetchSessions(): Promise<GatewaySession[]> {
           messageLimit: 1,    // Include last message for status
         },
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
-    
+
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       console.warn('Gateway returned non-JSON for sessions_list');
       return [];
     }
-    
+
     const data = await res.json();
-    
+
     // Sessions are in data.result.details.sessions (tools/invoke response format)
     const sessions = data.result?.details?.sessions || data.result?.sessions || [];
-    
+
     if (data.ok && sessions.length > 0) {
       // Map gateway session format to our expected format
       return sessions.map((s: Record<string, unknown>) => ({
@@ -136,10 +136,15 @@ async function tryFetchSessions(): Promise<GatewaySession[]> {
         outputTokens: (s.totalTokens as number) - (s.contextTokens as number || 0),
       }));
     }
-    
+
     return [];
   } catch (error) {
-    console.error('Failed to fetch sessions via tools/invoke:', error);
+    const isTimeout = error instanceof DOMException && error.name === 'TimeoutError';
+    if (isTimeout) {
+      console.warn('Gateway session fetch timed out (15s) — returning empty');
+    } else {
+      console.error('Failed to fetch sessions via tools/invoke:', error);
+    }
     return [];
   }
 }
@@ -283,9 +288,9 @@ export async function POST(request: Request) {
           includeTools: false,
         },
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
-    
+
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return NextResponse.json({ error: 'Gateway returned non-JSON response' }, { status: 502 });

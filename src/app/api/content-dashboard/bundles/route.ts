@@ -45,11 +45,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Bundles GET error:', error)
-    return NextResponse.json({
-      success: true,
-      data: { bundles: [], totalCount: 0 },
-      timestamp: new Date().toISOString(),
-    })
+    const message = error instanceof Error ? error.message : 'Failed to fetch bundles'
+    const isMigrationError = message.includes('does not exist')
+    return NextResponse.json(
+      {
+        success: false,
+        error: isMigrationError ? 'Database migration required' : message,
+        data: { bundles: [], totalCount: 0 },
+      },
+      { status: isMigrationError ? 503 : 500 }
+    )
   }
 }
 

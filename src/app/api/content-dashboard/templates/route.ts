@@ -21,7 +21,17 @@ export async function GET() {
       .eq('is_template', true)
       .order('use_count', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      if (error.message?.includes('does not exist') || error.code === '42703') {
+        console.warn('Templates: columns missing — run migration 20260216_p2_features.sql')
+        return NextResponse.json({
+          success: true,
+          data: { templates: [] },
+          timestamp: new Date().toISOString(),
+        })
+      }
+      throw error
+    }
 
     return NextResponse.json({
       success: true,
@@ -30,11 +40,15 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Templates GET error:', error)
-    return NextResponse.json({
-      success: true,
-      data: { templates: [] },
-      timestamp: new Date().toISOString(),
-    })
+    const message = error instanceof Error ? error.message : 'Failed to fetch templates'
+    const isMigration = message.includes('does not exist')
+    return NextResponse.json(
+      {
+        success: false,
+        error: isMigration ? 'Templates require migration 20260216_p2_features.sql' : message,
+      },
+      { status: isMigration ? 503 : 500 }
+    )
   }
 }
 
@@ -76,13 +90,15 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to save template'
+    const isMigration = message.includes('does not exist')
     console.error('Templates POST error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to save template',
+        error: isMigration ? 'Templates require migration 20260216_p2_features.sql' : message,
       },
-      { status: 500 }
+      { status: isMigration ? 503 : 500 }
     )
   }
 }
@@ -125,13 +141,15 @@ export async function DELETE(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to remove template'
+    const isMigration = message.includes('does not exist')
     console.error('Templates DELETE error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to remove template',
+        error: isMigration ? 'Templates require migration 20260216_p2_features.sql' : message,
       },
-      { status: 500 }
+      { status: isMigration ? 503 : 500 }
     )
   }
 }

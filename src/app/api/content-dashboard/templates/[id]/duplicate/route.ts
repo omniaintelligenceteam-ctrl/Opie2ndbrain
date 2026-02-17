@@ -21,18 +21,38 @@ export async function POST(
     const templateId = params.id
 
     // Get the template bundle
-    const { data: template, error: templateError } = await supabase
-      .from('content_bundles')
-      .select('*')
-      .eq('id', templateId)
-      .eq('is_template', true)
-      .single()
+    let template
+    try {
+      const { data: tplData, error: templateError } = await supabase
+        .from('content_bundles')
+        .select('*')
+        .eq('id', templateId)
+        .eq('is_template', true)
+        .single()
 
-    if (templateError || !template) {
-      return NextResponse.json(
-        { success: false, error: 'Template not found' },
-        { status: 404 }
-      )
+      if (templateError || !tplData) {
+        const msg = templateError?.message || ''
+        if (msg.includes('does not exist') || templateError?.code === '42703') {
+          return NextResponse.json(
+            { success: false, error: 'Templates require migration 20260216_p2_features.sql' },
+            { status: 503 }
+          )
+        }
+        return NextResponse.json(
+          { success: false, error: 'Template not found' },
+          { status: 404 }
+        )
+      }
+      template = tplData
+    } catch (queryError) {
+      const msg = queryError instanceof Error ? queryError.message : ''
+      if (msg.includes('does not exist')) {
+        return NextResponse.json(
+          { success: false, error: 'Templates require migration 20260216_p2_features.sql' },
+          { status: 503 }
+        )
+      }
+      throw queryError
     }
 
     // Get template assets
@@ -80,11 +100,15 @@ export async function POST(
       await supabase.from('content_assets').insert(newAssets)
     }
 
-    // Increment use_count on the template
-    await supabase
-      .from('content_bundles')
-      .update({ use_count: (template.use_count || 0) + 1 })
-      .eq('id', templateId)
+    // Increment use_count on the template (non-critical, skip if column missing)
+    try {
+      await supabase
+        .from('content_bundles')
+        .update({ use_count: (template.use_count || 0) + 1 })
+        .eq('id', templateId)
+    } catch {
+      // Silently ignore if use_count column doesn't exist yet
+    }
 
     // Start the workflow
     const startedWorkflow = await startWorkflow(workflow.id)
