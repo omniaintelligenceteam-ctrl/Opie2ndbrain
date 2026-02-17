@@ -15,12 +15,7 @@ export interface ResearchFindings {
   key_statistics: Record<string, string>
   viral_hooks: string[]
   competitor_insights: string
-  platform_strategy: {
-    linkedin: string
-    instagram: string
-    email: string
-    video: string
-  }
+  platform_strategy: Record<string, string>
   brand_voice: string
   recommended_cta: string
   research_sources: string[]
@@ -226,10 +221,19 @@ For each platform in ${platforms.join(', ')}, define:
 - Visual requirements
 - Posting time recommendations
 
-LinkedIn: Professional, data-driven, 1300 char limit, business focus
-Instagram: Visual-first, story-driven, hashtags important, younger audience
-Email: Longer form, relationship building, soft CTAs, value-first
-Video: 30-60 seconds, hook in first 3 seconds, visual storytelling
+${(() => {
+  const knownDescriptions: Record<string, string> = {
+    linkedin: 'Professional, data-driven, 1300 char limit, business focus',
+    instagram: 'Visual-first, story-driven, hashtags important, younger audience',
+    email: 'Longer form, relationship building, soft CTAs, value-first',
+    video: '30-60 seconds, hook in first 3 seconds, visual storytelling',
+  }
+  return platforms.map(p => {
+    const desc = knownDescriptions[p]
+    const label = p.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    return desc ? `${label}: ${desc}` : `${label}: Research best practices for this content format`
+  }).join('\n')
+})()}
 
 OUTPUT FORMAT (provide complete JSON):
 {
@@ -241,10 +245,7 @@ OUTPUT FORMAT (provide complete JSON):
   "viral_hooks": ["hook1", "hook2", "hook3"],
   "competitor_insights": "Summary of what competitors do well/poorly",
   "platform_strategy": {
-    "linkedin": "Specific strategy for LinkedIn",
-    "instagram": "Specific strategy for Instagram", 
-    "email": "Specific strategy for email",
-    "video": "Specific strategy for video content"
+${platforms.map(p => `    "${p}": "Specific strategy for ${p.replace(/_/g, ' ')}"`).join(',\n')}
   },
   "brand_voice": "Description of Silent AI Partner's voice and positioning",
   "recommended_cta": "Best CTA based on research",
@@ -361,11 +362,10 @@ function parseResearchOutput(rawOutput: string): ResearchFindings | null {
     if (!Array.isArray(findings.viral_hooks)) findings.viral_hooks = []
     if (!Array.isArray(findings.research_sources)) findings.research_sources = []
     
-    // Ensure platform_strategy has required platforms
-    if (!findings.platform_strategy.linkedin) findings.platform_strategy.linkedin = "Professional, data-driven approach"
-    if (!findings.platform_strategy.instagram) findings.platform_strategy.instagram = "Visual, engaging content with hashtags"
-    if (!findings.platform_strategy.email) findings.platform_strategy.email = "Value-first, relationship building"
-    if (!findings.platform_strategy.video) findings.platform_strategy.video = "Short-form, hook-driven content"
+    // Ensure platform_strategy is an object (don't enforce specific keys — custom types are allowed)
+    if (!findings.platform_strategy || typeof findings.platform_strategy !== 'object') {
+      findings.platform_strategy = {}
+    }
 
     // Set defaults for optional fields
     if (!findings.confidence_score) findings.confidence_score = 75

@@ -146,10 +146,12 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     targetAudience: '',
     skipResearch: false,
     autoApprove: false,
+    customTypes: [] as Array<{ type: string; name: string }>,
   })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [showAdvancedCreate, setShowAdvancedCreate] = useState(false)
+  const [customTypeInput, setCustomTypeInput] = useState('')
   const [activeTab, setActiveTab] = useState<ContentTab>('dashboard')
   const [assetCounts, setAssetCounts] = useState<AssetCounts>({ email: 0, linkedin: 0, heygen: 0, image: 0 })
   const [showAssets, setShowAssets] = useState(false)
@@ -177,6 +179,8 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [cancelling, setCancelling] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deletingBundleId, setDeletingBundleId] = useState<string | null>(null)
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null)
+  const [cancellingBundleId, setCancellingBundleId] = useState<string | null>(null)
   const [completedBundles, setCompletedBundles] = useState<ContentBundle[]>([])
   // Strategy approval state
   const [strategyDoc, setStrategyDoc] = useState<Record<string, unknown> | null>(null)
@@ -474,7 +478,8 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
       const topicText = createForm.topic.trim()
       const tradeText = createForm.trade
 
-      setCreateForm({ topic: '', trade: '', selectedAssets: ALL_ASSET_TYPES as string[], tone: 'professional', targetAudience: '', skipResearch: false, autoApprove: false })
+      setCreateForm({ topic: '', trade: '', selectedAssets: ALL_ASSET_TYPES as string[], tone: 'professional', targetAudience: '', skipResearch: false, autoApprove: false, customTypes: [] })
+      setCustomTypeInput('')
       setShowCreateModal(false)
       showToast?.({
         type: 'success',
@@ -848,6 +853,29 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
     }
   }, [selectedBundle, fetchBundles, showToast])
 
+  // Cancel a bundle by ID (from list view, no modal needed)
+  const handleCancelBundleById = useCallback(async (bundleId: string) => {
+    setCancellingBundleId(bundleId)
+    try {
+      const res = await fetch('/api/content-dashboard/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId, action: 'cancel' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      fetchBundles()
+      const bundle = bundles.find(b => b.id === bundleId)
+      showToast?.({ type: 'info', title: 'Bundle Cancelled', message: `"${bundle?.topic || 'Bundle'}" has been cancelled.`, duration: 4000 })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to cancel bundle'
+      showToast?.({ type: 'error', title: 'Cancel Failed', message, duration: 5000 })
+    } finally {
+      setCancellingBundleId(null)
+      setCancelConfirmId(null)
+    }
+  }, [fetchBundles, bundles, showToast])
+
   // Delete a bundle
   const handleDeleteBundle = useCallback(async (bundleId: string) => {
     setDeletingBundleId(bundleId)
@@ -1174,6 +1202,49 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    {/* Cancel button for active pipelines */}
+                    {['researching', 'awaiting_strategy_approval', 'creating'].includes(bundle.status) && (
+                      cancelConfirmId === bundle.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)' }}>Cancel?</span>
+                          <button
+                            onClick={() => handleCancelBundleById(bundle.id)}
+                            disabled={cancellingBundleId === bundle.id}
+                            style={{
+                              padding: '3px 8px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(239, 68, 68, 0.2)', color: '#f87171',
+                              fontSize: '0.7rem', fontWeight: 600, cursor: cancellingBundleId === bundle.id ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {cancellingBundleId === bundle.id ? '...' : 'Yes'}
+                          </button>
+                          <button
+                            onClick={() => setCancelConfirmId(null)}
+                            style={{
+                              padding: '3px 8px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)',
+                              fontSize: '0.7rem', cursor: 'pointer',
+                            }}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setCancelConfirmId(bundle.id) }}
+                          style={{
+                            background: 'none', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', cursor: 'pointer',
+                            color: 'rgba(239, 68, 68, 0.7)', padding: '3px 8px',
+                            fontSize: '0.7rem', fontWeight: 500,
+                            transition: 'all 0.2s ease',
+                          }}
+                          title="Cancel pipeline"
+                        >
+                          Cancel
+                        </button>
+                      )
+                    )}
+                    {/* Delete button for terminal states */}
                     {['cancelled', 'failed', 'complete'].includes(bundle.status) && (
                       deleteConfirmId === bundle.id ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
@@ -1635,8 +1706,9 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                   </label>
                   <button
                     onClick={() => {
-                      const allSelected = createForm.selectedAssets.length === ALL_ASSET_TYPES.length
-                      setCreateForm(prev => ({ ...prev, selectedAssets: allSelected ? [] : [...ALL_ASSET_TYPES] }))
+                      const allTypes = [...ALL_ASSET_TYPES, ...createForm.customTypes.map(ct => ct.type)]
+                      const allSelected = createForm.selectedAssets.length === allTypes.length
+                      setCreateForm(prev => ({ ...prev, selectedAssets: allSelected ? [] : [...allTypes] }))
                     }}
                     disabled={creating}
                     style={{
@@ -1648,7 +1720,10 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                       fontWeight: 500,
                     }}
                   >
-                    {createForm.selectedAssets.length === ALL_ASSET_TYPES.length ? 'Deselect All' : 'Select All'}
+                    {(() => {
+                      const allTypes = [...ALL_ASSET_TYPES, ...createForm.customTypes.map(ct => ct.type)]
+                      return createForm.selectedAssets.length === allTypes.length ? 'Deselect All' : 'Select All'
+                    })()}
                   </button>
                 </div>
                 <div style={{
@@ -1694,6 +1769,138 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                       </button>
                     )
                   })}
+                </div>
+
+                {/* Custom Content Types */}
+                <div style={{ marginTop: '12px' }}>
+                  <label style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.4)',
+                    textTransform: 'uppercase' as const,
+                    letterSpacing: '0.03em',
+                    marginBottom: '6px',
+                    display: 'block',
+                  }}>
+                    Add Custom Types
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={customTypeInput}
+                      onChange={(e) => setCustomTypeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          const name = customTypeInput.trim()
+                          if (!name) return
+                          const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+                          if (ALL_ASSET_TYPES.includes(slug) || createForm.customTypes.some(ct => ct.type === slug)) return
+                          setCreateForm(prev => ({
+                            ...prev,
+                            customTypes: [...prev.customTypes, { type: slug, name }],
+                            selectedAssets: [...prev.selectedAssets, slug],
+                          }))
+                          setCustomTypeInput('')
+                        }
+                      }}
+                      placeholder="e.g. TikTok script, blog post, press release..."
+                      disabled={creating}
+                      style={{
+                        flex: 1,
+                        padding: '9px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(15, 15, 26, 0.8)',
+                        color: '#fff',
+                        fontSize: '0.82rem',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const name = customTypeInput.trim()
+                        if (!name) return
+                        const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+                        if (ALL_ASSET_TYPES.includes(slug) || createForm.customTypes.some(ct => ct.type === slug)) return
+                        setCreateForm(prev => ({
+                          ...prev,
+                          customTypes: [...prev.customTypes, { type: slug, name }],
+                          selectedAssets: [...prev.selectedAssets, slug],
+                        }))
+                        setCustomTypeInput('')
+                      }}
+                      disabled={creating || !customTypeInput.trim()}
+                      style={{
+                        padding: '9px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(168, 85, 247, 0.3)',
+                        background: 'rgba(168, 85, 247, 0.1)',
+                        color: '#c084fc',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: creating || !customTypeInput.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Plus size={14} />
+                      Add
+                    </button>
+                  </div>
+
+                  {createForm.customTypes.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                      {createForm.customTypes.map((ct) => {
+                        const isSelected = createForm.selectedAssets.includes(ct.type)
+                        return (
+                          <button
+                            key={ct.type}
+                            onClick={() => {
+                              setCreateForm(prev => ({
+                                ...prev,
+                                selectedAssets: isSelected
+                                  ? prev.selectedAssets.filter(a => a !== ct.type)
+                                  : [...prev.selectedAssets, ct.type],
+                              }))
+                            }}
+                            disabled={creating}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: `1px solid ${isSelected ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.06)'}`,
+                              background: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'rgba(15, 15, 26, 0.5)',
+                              color: isSelected ? '#c084fc' : 'rgba(255,255,255,0.5)',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <FileText size={13} />
+                            {ct.name}
+                            {isSelected && <Check size={12} />}
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCreateForm(prev => ({
+                                  ...prev,
+                                  customTypes: prev.customTypes.filter(c => c.type !== ct.type),
+                                  selectedAssets: prev.selectedAssets.filter(a => a !== ct.type),
+                                }))
+                              }}
+                              style={{ marginLeft: '2px', opacity: 0.5, cursor: 'pointer', display: 'flex' }}
+                            >
+                              <X size={12} />
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

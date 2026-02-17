@@ -22,10 +22,14 @@ export interface ContentBundle {
   workflow_id: string | null
 }
 
+// Preset types that have specialized agent prompts
+export const PRESET_ASSET_TYPES = ['email', 'linkedin', 'instagram', 'video_script', 'hooks', 'image_prompt'] as const
+export type PresetAssetType = typeof PRESET_ASSET_TYPES[number]
+
 export interface ContentAsset {
   id: string
   bundle_id: string
-  type: 'email' | 'linkedin' | 'instagram' | 'video_script' | 'hooks' | 'image_prompt'
+  type: string
   content: string
   status: 'generated' | 'selected' | 'regenerating' | 'dropped' | 'archived'
   metadata: Record<string, unknown> | null
@@ -321,6 +325,55 @@ Format your output like this:
   }
 }
 
+/**
+ * Generic prompt builder for any custom content type.
+ * Produces high-quality content even without a specialized prompt template.
+ */
+function buildGenericPrompt(
+  contentType: string,
+  topic: string,
+  trade: string,
+  researchFindings?: any,
+  strategy?: any
+): string {
+  const readableName = contentType
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+
+  let prompt = `You are a professional content creator. Create a high-quality "${readableName}" about "${topic}" for the ${trade} industry/niche.
+
+Produce comprehensive, publication-ready content appropriate for the "${readableName}" format.
+
+Consider:
+- The typical structure, length, and conventions of a "${readableName}"
+- Professional tone appropriate for the ${trade} space
+- A compelling hook or opening
+- Clear value proposition
+- A call-to-action where appropriate`
+
+  if (researchFindings && strategy) {
+    prompt += `
+
+RESEARCH INSIGHTS TO INCORPORATE:
+- Key Statistics: ${JSON.stringify(researchFindings.key_statistics, null, 2)}
+- Viral Hooks: ${researchFindings.viral_hooks?.join(', ')}
+- Trending Angles: ${researchFindings.trending_angles?.join(', ')}
+- Brand Voice: ${researchFindings.brand_voice}
+- Recommended CTA: ${researchFindings.recommended_cta}
+
+Use the research insights to make the content data-driven and targeted.`
+  }
+
+  prompt += `
+
+Format your output like this:
+<content-output>
+{"${contentType}": "[Your complete ${readableName} content here]"${researchFindings ? `, "research_influence": {"summary": "how research was applied"}` : ''}}
+</content-output>`
+
+  return prompt
+}
+
 // ---------------------------------------------------------------------------
 // Core Functions
 // ---------------------------------------------------------------------------
@@ -379,15 +432,12 @@ export async function createContentBundle(
   const spawnPromises = selectedAssets.map(async (assetType) => {
     const agentName = `${assetType}_agent` as keyof typeof AGENT_PROMPTS
     const promptBuilder = AGENT_PROMPTS[agentName]
-    
-    if (!promptBuilder) {
-      console.warn(`No prompt builder for asset type: ${assetType}`)
-      return
-    }
 
     try {
-      // Use research-enhanced prompts if available
-      const prompt = promptBuilder(topic, trade, researchFindings, strategy)
+      // Use specialized prompt for preset types, generic for custom types
+      const prompt = promptBuilder
+        ? promptBuilder(topic, trade, researchFindings, strategy)
+        : buildGenericPrompt(assetType, topic, trade, researchFindings, strategy)
       const result = await spawnAgentForAsset(bundleId, assetType, prompt)
       if (result.success) {
         sessionIds[assetType] = result.sessionId
@@ -578,13 +628,12 @@ export async function regenerateAsset(
     throw new Error('Bundle not found')
   }
 
-  // Build regeneration prompt
+  // Build regeneration prompt — use specialized prompt for preset types, generic for custom
   const agentName = `${asset.type}_agent` as keyof typeof AGENT_PROMPTS
-  const basePrompt = AGENT_PROMPTS[agentName]
-  
-  if (!basePrompt) {
-    throw new Error(`No prompt builder for asset type: ${asset.type}`)
-  }
+  const presetBuilder = AGENT_PROMPTS[agentName]
+  const basePromptText = presetBuilder
+    ? presetBuilder(bundle.topic, bundle.trade || 'General')
+    : buildGenericPrompt(asset.type, bundle.topic, bundle.trade || 'General')
 
   let regenerationInstructions = ''
   if (options.angle) regenerationInstructions += `\nAngle: Make it more ${options.angle}.`
@@ -593,7 +642,7 @@ export async function regenerateAsset(
   if (options.focus) regenerationInstructions += `\nFocus: Emphasize ${options.focus}.`
   if (options.style) regenerationInstructions += `\nStyle: ${options.style}.`
 
-  const enhancedPrompt = basePrompt(bundle.topic, bundle.trade || 'General') + 
+  const enhancedPrompt = basePromptText +
     `\n\nREGENERATION REQUEST:${regenerationInstructions}\n\nPrevious version for reference:\n"${asset.content}"`
 
   // Spawn regeneration agent

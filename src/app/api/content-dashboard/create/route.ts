@@ -53,15 +53,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate asset types
-    const validAssetTypes = ['email', 'linkedin', 'instagram', 'video_script', 'hooks', 'image_prompt']
-    const invalidAssets = selectedAssets.filter(asset => !validAssetTypes.includes(asset))
-    
+    // Validate asset types are non-empty strings (any content type is allowed)
+    const invalidAssets = selectedAssets.filter(
+      (asset: unknown) => typeof asset !== 'string' || (asset as string).trim().length === 0
+    )
+
     if (invalidAssets.length > 0) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Invalid asset types: ${invalidAssets.join(', ')}. Valid types: ${validAssetTypes.join(', ')}` 
+        {
+          success: false,
+          error: 'All asset types must be non-empty strings'
         },
         { status: 400 }
       )

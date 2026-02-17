@@ -26,12 +26,7 @@ interface ResearchFindings {
   key_statistics: Record<string, string>
   viral_hooks: string[]
   competitor_insights: string
-  platform_strategy: {
-    linkedin: string
-    instagram: string
-    email: string
-    video: string
-  }
+  platform_strategy: Record<string, string>
   brand_voice: string
   recommended_cta: string
   research_sources: string[]

@@ -12,6 +12,8 @@ export interface ParsedContent {
   blog_outline?: string
   raw?: string
   research_influence?: Record<string, string> | null
+  // Custom content types: any key maps to content string
+  [key: string]: string | Record<string, string> | null | undefined
 }
 
 /**
@@ -33,16 +35,15 @@ export function parseAgentOutput(rawText: string): ParsedContent {
     try {
       const parsed = JSON.parse(tagMatch[1])
       if (typeof parsed === 'object' && parsed !== null) {
-        return {
-          email: parsed.email || undefined,
-          linkedin: parsed.linkedin || undefined,
-          instagram: parsed.instagram || undefined,
-          video_script: parsed.video_script || undefined,
-          hooks: parsed.hooks || undefined,
-          image_prompt: parsed.image_prompt || undefined,
-          blog_outline: parsed.blog_outline || undefined,
-          research_influence: parsed.research_influence || undefined,
+        const result: ParsedContent = {}
+        for (const [key, value] of Object.entries(parsed)) {
+          if (key === 'research_influence' && typeof value === 'object' && value !== null) {
+            result.research_influence = value as Record<string, string>
+          } else if (typeof value === 'string' && value) {
+            result[key] = value
+          }
         }
+        return result
       }
     } catch {
       // JSON parse failed — fall through to strategy 2
@@ -160,7 +161,7 @@ export function parsedContentToAssetRecords(
   ) as Array<[string, string]>
 
   for (const [key, content] of entries) {
-    const dbType = CONTENT_TYPE_MAP[key] || 'email'
+    const dbType = CONTENT_TYPE_MAP[key] || key
     records.push({
       id: `ast_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       bundle_id: bundleId,

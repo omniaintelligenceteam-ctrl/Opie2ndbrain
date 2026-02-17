@@ -23,24 +23,24 @@ export interface PlatformStrategy {
 }
 
 export interface ContentStrategyDocument {
-  linkedin_strategy: PlatformStrategy
-  instagram_strategy: PlatformStrategy
-  email_strategy: PlatformStrategy & {
+  linkedin_strategy?: PlatformStrategy
+  instagram_strategy?: PlatformStrategy
+  email_strategy?: PlatformStrategy & {
     subject_line_options: string[]
     story_angle: string
     sequence_flow: string
   }
-  video_strategy: PlatformStrategy & {
+  video_strategy?: PlatformStrategy & {
     script_structure: string
     timing_breakdown: string
     visual_elements: string[]
   }
-  hooks_strategy: {
+  hooks_strategy?: {
     primary_triggers: string[]
     hook_variations: string[]
     testing_approach: string
   }
-  image_strategy: {
+  image_strategy?: {
     visual_themes: string[]
     style_guide: string
     composition_notes: string
@@ -51,6 +51,8 @@ export interface ContentStrategyDocument {
   risk_assessment: string
   strategy_confidence: number
   created_at: string
+  // Custom platform strategies
+  [key: string]: unknown
 }
 
 export interface StrategyRequest {
@@ -191,7 +193,21 @@ IMAGE STRATEGY:
 - Composition notes: Framing, colors, elements to include
 - Brand elements: Silent AI Partner visual integration
 
-OVERALL NARRATIVE:
+${(() => {
+  const knownPlatforms = ['linkedin', 'instagram', 'email', 'video', 'hooks', 'images']
+  const customPlatforms = selectedPlatforms.filter(p => !knownPlatforms.includes(p))
+  if (customPlatforms.length === 0) return ''
+  return customPlatforms.map(p => {
+    const label = p.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    return `${label.toUpperCase()} STRATEGY:
+- Hook: Compelling opening appropriate for ${label} format
+- Angle: Best approach for this content type
+- Body: Recommended structure and length
+- CTA: Appropriate call-to-action
+- Engagement tactics: How to maximize impact
+`
+  }).join('\n')
+})()}OVERALL NARRATIVE:
 - Unified message across all platforms
 - Key differentiators to emphasize
 - Risk assessment: Potential issues to avoid
@@ -249,7 +265,18 @@ OUTPUT FORMAT (provide complete JSON):
     "style_guide": "clean, professional, warm lighting, branded colors",
     "composition_notes": "rule of thirds, clear focal point, minimal text overlay",
     "brand_elements": ["Silent AI Partner logo", "brand color palette", "professional typography"]
-  },
+  },${(() => {
+    const knownPlatforms = ['linkedin', 'instagram', 'email', 'video', 'hooks', 'images']
+    const customPlatforms = selectedPlatforms.filter(p => !knownPlatforms.includes(p))
+    if (customPlatforms.length === 0) return ''
+    return '\n' + customPlatforms.map(p => `  "${p}_strategy": {
+    "hook": "Compelling opening for ${p.replace(/_/g, ' ')}",
+    "angle": "Strategic approach",
+    "body": "Recommended structure",
+    "cta": "Clear call-to-action",
+    "engagement_tactics": ["tactic 1", "tactic 2"]
+  }`).join(',\n') + ','
+  })()}
   "overall_narrative": "Silent AI Partner helps contractors capture every opportunity through intelligent call management",
   "key_differentiators": ["AI-powered call handling", "proven ROI tracking", "contractor-specific solutions"],
   "risk_assessment": "avoid overly technical language, ensure claims are verifiable, maintain professional tone",
@@ -331,16 +358,16 @@ function parseStrategyOutput(rawOutput: string): ContentStrategyDocument | null 
 
     const strategy = JSON.parse(jsonMatch[0]) as ContentStrategyDocument
     
-    // Validate required strategy sections
-    const requiredSections = [
-      'linkedin_strategy', 'instagram_strategy', 'email_strategy', 
+    // Warn about missing strategy sections but don't fail
+    // (custom content types may not produce all preset sections)
+    const knownSections = [
+      'linkedin_strategy', 'instagram_strategy', 'email_strategy',
       'video_strategy', 'hooks_strategy', 'image_strategy'
     ]
-    
-    for (const section of requiredSections) {
+
+    for (const section of knownSections) {
       if (!strategy[section as keyof ContentStrategyDocument]) {
-        console.error(`Missing required strategy section: ${section}`)
-        return null
+        console.warn(`Missing strategy section: ${section} (may not have been requested)`)
       }
     }
 
