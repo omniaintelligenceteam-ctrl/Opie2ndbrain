@@ -59,3 +59,16 @@ const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
 });
 
 export default Card;
+
+// Named exports for compatibility
+export const CardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, style, ...props }) => (
+  <div style={{ marginBottom: 12, ...style }} {...props}>{children}</div>
+);
+
+export const CardContent: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, style, ...props }) => (
+  <div style={{ ...style }} {...props}>{children}</div>
+);
+
+export const CardTitle: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({ children, style, ...props }) => (
+  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, ...style }} {...props}>{children}</h3>
+);
