@@ -290,7 +290,7 @@ async function processStrategyPhaseCompletion(
 
       // Start content creation with research-enhanced prompts
       const selectedPlatforms = requestMetadata.platforms || ['linkedin', 'instagram', 'email']
-      const contentAssets = selectedPlatforms.map(platform => {
+      const contentAssets = selectedPlatforms.map((platform: string) => {
         if (platform === 'video') return 'video_script'
         if (platform === 'hooks') return 'hooks'
         if (platform === 'images') return 'image_prompt'
@@ -521,7 +521,7 @@ export async function approveStrategyAndProceed(bundleId: string): Promise<{ suc
     // Get bundle data
     const { data: bundle, error: fetchError } = await supabase
       .from('content_bundles')
-      .select('topic, trade, assets, research_findings, strategy_doc')
+      .select('topic, trade, assets, research_findings, strategy_doc, status')
       .eq('id', bundleId)
       .single()
 
@@ -542,7 +542,7 @@ export async function approveStrategyAndProceed(bundleId: string): Promise<{ suc
     // Start content creation
     const requestMetadata = (bundle.assets as any)?.request_metadata || {}
     const selectedPlatforms = requestMetadata.platforms || ['linkedin', 'instagram', 'email']
-    const contentAssets = selectedPlatforms.map(platform => {
+    const contentAssets = selectedPlatforms.map((platform: string) => {
       if (platform === 'video') return 'video_script'
       if (platform === 'hooks') return 'hooks'
       if (platform === 'images') return 'image_prompt'

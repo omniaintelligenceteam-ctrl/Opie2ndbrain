@@ -3,7 +3,7 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
-type BadgeVariant = 'status' | 'level' | 'count';
+type BadgeVariant = 'status' | 'level' | 'count' | 'outline' | 'secondary' | 'default' | 'destructive';
 type BadgeColor = 'success' | 'warning' | 'error' | 'info' | 'accent' | 'muted';
 
 interface BadgeProps {
@@ -11,6 +11,7 @@ interface BadgeProps {
   variant?: BadgeVariant;
   color?: BadgeColor;
   style?: React.CSSProperties;
+  className?: string;
 }
 
 export default function Badge({
@@ -18,6 +19,7 @@ export default function Badge({
   variant = 'status',
   color = 'accent',
   style,
+  className,
 }: BadgeProps) {
   const { theme } = useTheme();
   const c = theme.colors;
@@ -56,10 +58,37 @@ export default function Badge({
       minWidth: 20,
       textAlign: 'center',
     },
+    outline: {
+      padding: '3px 10px',
+      borderRadius: 20,
+      fontSize: '0.7rem',
+      fontWeight: 600,
+      background: 'transparent',
+      border: `1px solid ${c.border}`,
+    },
+    secondary: {
+      padding: '3px 10px',
+      borderRadius: 20,
+      fontSize: '0.7rem',
+      fontWeight: 600,
+    },
+    default: {
+      padding: '3px 10px',
+      borderRadius: 20,
+      fontSize: '0.7rem',
+      fontWeight: 600,
+    },
+    destructive: {
+      padding: '3px 10px',
+      borderRadius: 20,
+      fontSize: '0.7rem',
+      fontWeight: 600,
+    },
   };
 
   return (
     <span
+      className={className}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

@@ -3,7 +3,7 @@
 import React, { forwardRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline' | 'default';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -47,6 +47,17 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       background: c.errorBg,
       color: c.error,
       border: `1px solid ${c.error}33`,
+    },
+    outline: {
+      background: 'transparent',
+      color: c.textSecondary,
+      border: `1px solid ${c.border}`,
+    },
+    default: {
+      background: c.gradientPrimary,
+      color: c.textWhite,
+      border: 'none',
+      boxShadow: '0 2px 12px rgba(102, 126, 234, 0.3)',
     },
   };
 

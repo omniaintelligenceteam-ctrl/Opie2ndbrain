@@ -9,6 +9,7 @@ export interface ParsedContent {
   video_script?: string
   blog_outline?: string
   raw?: string
+  research_influence?: Record<string, string> | null
 }
 
 /**
@@ -45,7 +46,8 @@ export function parseAgentOutput(rawText: string): ParsedContent {
 
   // Strategy 2: Section header splitting
   const result: ParsedContent = {}
-  const sectionPatterns: Array<{ key: keyof ParsedContent; patterns: RegExp[] }> = [
+  type ContentKey = 'email' | 'linkedin' | 'instagram' | 'video_script' | 'blog_outline' | 'raw'
+  const sectionPatterns: Array<{ key: ContentKey; patterns: RegExp[] }> = [
     {
       key: 'email',
       patterns: [

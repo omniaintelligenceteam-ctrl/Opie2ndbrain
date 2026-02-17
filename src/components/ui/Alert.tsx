@@ -6,9 +6,10 @@ interface AlertProps {
   children: React.ReactNode;
   variant?: 'default' | 'destructive';
   style?: React.CSSProperties;
+  className?: string;
 }
 
-export function Alert({ children, variant = 'default', style }: AlertProps) {
+export function Alert({ children, variant = 'default', style, className }: AlertProps) {
   const variantStyles = {
     default: {
       background: 'rgba(102, 126, 234, 0.1)',
@@ -24,6 +25,7 @@ export function Alert({ children, variant = 'default', style }: AlertProps) {
 
   return (
     <div
+      className={className}
       style={{
         padding: '12px 16px',
         borderRadius: 10,

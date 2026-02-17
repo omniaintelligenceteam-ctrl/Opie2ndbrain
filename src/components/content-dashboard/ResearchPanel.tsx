@@ -1,11 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Card, CardHeader, CardContent, CardTitle, Button, Badge, Alert, AlertDescription } from '@/components/ui'
+import { Progress } from '@/components/ui/Progress'
 import { 
   ChevronDown, 
   ChevronUp, 

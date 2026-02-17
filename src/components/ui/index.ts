@@ -11,3 +11,5 @@ export { default as Textarea } from './Textarea';
 export { Alert, AlertDescription } from './Alert';
 export { EmptyState } from './EmptyState';
 export { Skeleton, SkeletonText, SkeletonCard, SkeletonList, SkeletonMetricCard } from './Skeleton';
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
+export { Progress } from './Progress';

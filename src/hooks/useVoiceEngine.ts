@@ -107,6 +107,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
   // Push-to-talk state
   const pushToTalkKeyPressedRef = useRef(false);
+  const executeSideEffectsRef = useRef<(effects: SideEffect[]) => void>(() => {});
   const pushToTalkSettingsRef = useRef({ enabled: false, key: 'Space' as PushToTalkKey });
   const wasListeningBeforePushToTalkRef = useRef(false);
 
@@ -146,14 +147,14 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         } else if (ctxRef.current.state === 'listening') {
           // Already listening but recognition might not be started due to push-to-talk
           // Re-trigger START_RECOGNITION now that key is pressed
-          executeSideEffects([{ type: 'START_RECOGNITION' }]);
+          executeSideEffectsRef.current([{ type: 'START_RECOGNITION' }]);
         }
       } else {
         // Turn on mic (will go to listening and start recognition)
         dispatch({ type: 'MIC_ON' });
       }
     }
-  }, [executeSideEffects]);
+  }, []);
 
   const handlePushToTalkKeyUp = useCallback((e: KeyboardEvent) => {
     const { enabled, key } = pushToTalkSettingsRef.current;
@@ -374,6 +375,9 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       }
     }
   }, [autoSpeak]);
+
+  // Keep ref in sync
+  executeSideEffectsRef.current = executeSideEffects;
 
   // ─── Dispatch wrapper (state + effects) ────────────────────────
   const dispatch = useCallback((event: VoiceEvent) => {

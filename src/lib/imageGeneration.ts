@@ -97,15 +97,26 @@ export async function generateContentImages(
   try {
     const generatedImages: GeneratedImage[] = []
 
+    // Convert trade-based request to prompts-based
+    const prompts = 'prompts' in request
+      ? request.prompts
+      : Array.from({ length: request.count || 3 }, (_, i) =>
+          `${request.topic} for ${request.trade} - variation ${i + 1}`
+        )
+
     // Process each prompt
-    for (const prompt of request.prompts) {
+    for (const prompt of prompts) {
       try {
         const enhancedPrompt = enhancePromptWithNanoBananaStyle(prompt, request.style)
         
+        const aspectRatio = ('aspectRatio' in request ? request.aspectRatio : undefined) || '1:1'
+        const quality = ('quality' in request ? request.quality : undefined) || 'standard'
+        const style = request.style || 'commercial_photography'
+
         const result = await generateSingleImageWithGemini(enhancedPrompt, {
-          aspectRatio: request.aspectRatio || '1:1',
-          style: request.style || 'commercial_photography',
-          quality: request.quality || 'standard'
+          aspectRatio,
+          style,
+          quality
         })
 
         if (result.success && result.image_url) {
@@ -120,16 +131,16 @@ export async function generateContentImages(
               prompt: enhancedPrompt,
               original_prompt: prompt,
               url: result.image_url,
-              style: request.style || 'commercial_photography',
-              aspect_ratio: request.aspectRatio || '1:1',
+              style,
+              aspect_ratio: aspectRatio,
               status: 'generated',
               generated_at: new Date().toISOString(),
               metadata: {
                 gemini_metadata: result.metadata,
                 generation_params: {
-                  style: request.style,
-                  aspectRatio: request.aspectRatio,
-                  quality: request.quality
+                  style,
+                  aspectRatio,
+                  quality
                 }
               }
             })
@@ -142,8 +153,8 @@ export async function generateContentImages(
               bundle_id: request.bundleId,
               prompt: enhancedPrompt,
               url: result.image_url,
-              style: request.style || 'commercial_photography',
-              aspect_ratio: request.aspectRatio || '1:1',
+              style,
+              aspect_ratio: aspectRatio,
               generated_at: new Date().toISOString(),
               metadata: result.metadata || {}
             })
@@ -437,7 +448,7 @@ export async function generateImagesFromStrategy(
     const styleGuide = imageStrategy.style_guide || 'professional commercial photography'
 
     // Create trade-specific prompts
-    const prompts = visualThemes.map(theme => 
+    const prompts = visualThemes.map((theme: string) =>
       `${theme} in ${trade} industry context, ${styleGuide}, premium service aesthetic, professional contractor environment, clean modern composition`
     )
 
