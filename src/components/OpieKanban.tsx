@@ -97,9 +97,9 @@ function saveSidebarState(expanded: boolean): void {
 // AI model options (was in FloatingChat, now here since we removed that import)
 const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
   { id: 'kimi', name: 'Kimi K2', description: 'Default - fast and capable' },
-  { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
-  { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
-  { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
+  { id: 'opus', name: 'Claude Opus 4.6', description: 'Most capable, best for complex tasks' },
+  { id: 'sonnet', name: 'Claude Sonnet 4.6', description: 'Balanced performance and speed' },
+  { id: 'haiku', name: 'Claude Haiku 4.5', description: 'Fast and cost-effective' },
 ];
 
 // Daily motivational quotes (rotates by day of year)
@@ -825,7 +825,32 @@ export default function OpieKanban(): React.ReactElement {
   const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
-    
+
+    // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
+    // so the browser allows audio playback when Ava responds
+    if (typeof window !== 'undefined') {
+      try {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const buf = ctx.createBuffer(1, 1, 22050);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          src.start(0);
+          if (ctx.state === 'suspended') await ctx.resume();
+          setTimeout(() => ctx.close().catch(() => {}), 200);
+        }
+        // Also unlock the voice engine's audio element directly
+        if (voiceEngine?.audioRef?.current) {
+          voiceEngine.audioRef.current.volume = 0.001;
+          await voiceEngine.audioRef.current.play().catch(() => {});
+          voiceEngine.audioRef.current.pause();
+          voiceEngine.audioRef.current.volume = 1.0;
+        }
+      } catch { /* best-effort */ }
+    }
+
     // Ensure we have an active conversation before sending
     if (!activeConversation) {
       console.log('[Chat] No active conversation, creating one...');
@@ -1751,6 +1776,26 @@ export default function OpieKanban(): React.ReactElement {
                         </div>
                       )}
                     </div>
+
+                    {/* OpenClaw bridge status indicator */}
+                    <div
+                      title={statusLoading ? 'Checking OpenClaw bridge…' : (liveStatus?.gateway?.connected ? 'OpenClaw bridge ON' : 'OpenClaw bridge OFF (fallback mode)')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
+                        background: liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
+                      }}
+                    >
+                      <span>{liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
+                      <span>{liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
+                    </div>
                   </div>
                 </div>
                 {/* Quote of the day bar */}
@@ -1831,6 +1876,34 @@ export default function OpieKanban(): React.ReactElement {
                   </div>
                 </div>
               )}
+
+              {/* OpenClaw Bridge Status Banner */}
+              <div style={{
+                flexShrink: 0,
+                padding: '6px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                background: liveStatus?.gateway?.connected
+                  ? 'rgba(34,197,94,0.07)'
+                  : 'rgba(239,68,68,0.07)',
+                borderBottom: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
+                  color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
+                  {liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', flex: 1 }}>
+                  {liveStatus?.gateway?.connected
+                    ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
+                    : 'Fallback mode — direct model chat only, no tools or agent powers'}
+                </span>
+                {liveStatus?.gateway?.latency ? (
+                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
+                    {liveStatus.gateway.latency}ms
+                  </span>
+                ) : null}
+              </div>
 
               {/* Chat messages area */}
               <div

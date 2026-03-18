@@ -5,6 +5,7 @@ import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ExecutionPlanStore, type ToolCall } from '@/lib/execution-plans';
 import { gatewayChatClient, shouldUseGateway, type ChatMessage } from '@/lib/gateway-chat';
+import { streamViaRelay, relayHealth, MAIN_SESSION } from '@/lib/relay-client';
 import { saveToSharedContext, getSharedContextPrompt } from '@/lib/shared-context';
 
 // Force Node.js runtime for full env var access
@@ -29,9 +30,9 @@ const anthropic = new Anthropic({
 
 const MODELS = {
   kimi: { provider: 'ollama' as const, model: 'kimi-k2.5:cloud' },
-  opus: { provider: 'anthropic' as const, model: 'claude-opus-4-5-20250514' },
-  sonnet: { provider: 'anthropic' as const, model: 'claude-sonnet-4-20250514' },
-  haiku: { provider: 'anthropic' as const, model: 'claude-3-5-haiku-20241022' },
+  opus: { provider: 'anthropic' as const, model: 'claude-opus-4-6-20251101' },
+  sonnet: { provider: 'anthropic' as const, model: 'claude-sonnet-4-6-20251101' },
+  haiku: { provider: 'anthropic' as const, model: 'claude-haiku-4-5-20251101' },
 };
 
 type ModelAlias = keyof typeof MODELS;
@@ -75,61 +76,112 @@ function createStreamResponse(generator: AsyncGenerator<string>) {
   });
 }
 
-// Call OpenClaw (non-streaming, converted to SSE)
-async function* streamOpenClaw(messages: Array<{role: string, content: string}>, sessionId: string) {
+// Gateway tool invoker — calls real tools available on the gateway
+async function invokeGatewayToolForChat(tool: string, args: Record<string, any>): Promise<string> {
+  const res = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+    },
+    body: JSON.stringify({ tool, args }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await res.json();
+  if (data.ok && data.result) {
+    const content = data.result.content;
+    if (Array.isArray(content)) return content.map((c: any) => c.text || '').join('\n');
+    if (typeof data.result === 'string') return data.result;
+    return JSON.stringify(data.result);
+  }
+  return `Error: ${data.error?.message || 'tool failed'}`;
+}
+
+// Anthropic tool definitions for gateway-available tools
+const GATEWAY_TOOLS_FOR_ANTHROPIC: Anthropic.Tool[] = [
+  {
+    name: 'web_search',
+    description: 'Search the web for current information',
+    input_schema: { type: 'object' as const, properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] },
+  },
+  {
+    name: 'web_fetch',
+    description: 'Fetch and read content from a URL',
+    input_schema: { type: 'object' as const, properties: { url: { type: 'string', description: 'URL to fetch' } }, required: ['url'] },
+  },
+  {
+    name: 'memory_search',
+    description: 'Search Wes\'s memory/knowledge base for relevant information',
+    input_schema: { type: 'object' as const, properties: { query: { type: 'string', description: 'What to search for' } }, required: ['query'] },
+  },
+  {
+    name: 'sessions_list',
+    description: 'List active OpenClaw agent sessions',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'session_status',
+    description: 'Get current OpenClaw system status, model, token usage',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+];
+
+/**
+ * streamOpenClaw — routes through the Opie Relay (opie-relay.js)
+ * which has operator.admin scope on the OpenClaw gateway.
+ *
+ * The actual AI reasoning, tool use (exec, file I/O, web_search,
+ * memory_search, sessions_spawn, Discord, cron, etc.) all happens
+ * inside the OpenClaw main agent. Opie is just the UI.
+ *
+ * Message is assembled from the last user turn in `messages` array.
+ * Conversation history is injected as context in the message itself
+ * so the agent has full context even without persistent session history.
+ */
+async function* streamOpenClaw(messages: Array<{role: string, content: any}>, sessionId: string) {
+  // Extract last user message
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (!lastUserMessage) {
     yield `data: ${JSON.stringify({ error: 'No user message' })}\n\n`;
+    yield 'data: [DONE]\n\n';
     return;
   }
 
+  const userText = typeof lastUserMessage.content === 'string'
+    ? lastUserMessage.content
+    : Array.isArray(lastUserMessage.content)
+      ? lastUserMessage.content.map((p: any) => p?.text || p?.image_url ? (p?.text || '[image]') : '').filter(Boolean).join('\n')
+      : String(lastUserMessage.content || '');
+
+  // Build conversation context from recent history (last 8 turns)
+  const historyTurns = messages
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .slice(-9, -1) // exclude the last user message we already have
+    .map(m => {
+      const text = typeof m.content === 'string' ? m.content
+        : Array.isArray(m.content) ? m.content.map((p: any) => p?.text || '').filter(Boolean).join('\n')
+        : String(m.content || '');
+      return `${m.role === 'user' ? 'User' : 'Assistant'}: ${text}`;
+    })
+    .join('\n\n');
+
+  // Compose the full message for the agent
+  const fullMessage = historyTurns
+    ? `[Context from recent conversation]\n${historyTurns}\n\n[New message]\n${userText}`
+    : userText;
+
+  console.log('[streamOpenClaw] Routing via relay, message length:', fullMessage.length);
+
   try {
-    const response = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-      },
-      body: JSON.stringify({
-        tool: 'sessions_spawn',
-        args: {
-          task: lastUserMessage.content,
-          label: `opie:chat:${sessionId}`,
-          timeoutSeconds: 115,
-          cleanup: 'keep',
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      yield `data: ${JSON.stringify({ error: `OpenClaw: ${error.slice(0, 200)}` })}\n\n`;
-      return;
+    // Stream via relay → OpenClaw gateway → main agent (all tools available)
+    for await (const chunk of streamViaRelay(fullMessage, MAIN_SESSION, 90_000)) {
+      yield chunk;
     }
-
-    const data = await response.json();
-    let reply = '';
-
-    if (data.ok && data.result) {
-      const result = data.result;
-      // Check for error response
-      if (result.details?.status === 'error' || result.status === 'error') {
-        const errorMsg = result.details?.error || result.error || 'Unknown error';
-        reply = `Error: ${errorMsg}`;
-      }
-      else if (result.details?.reply) reply = result.details.reply;
-      else if (result.reply) reply = result.reply;
-      else if (result.text) reply = result.text;
-      else if (typeof result === 'string') reply = result;
-    }
-
-    // Stream the complete reply as one chunk
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: reply } }] })}\n\n`;
-    yield `data: [DONE]\n\n`;
-
   } catch (error) {
-    console.error("[OpenClaw] Error:", error);
-    yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'OpenClaw failed' })}\n\n`;
+    console.error('[streamOpenClaw] Relay failed:', error);
+    // Fallback message so the user knows what happened
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Gateway connection issue: ${error instanceof Error ? error.message : 'unknown error'}. Try again or check relay status.` } }] })}\n\n`;
+    yield 'data: [DONE]\n\n';
   }
 }
 
@@ -440,7 +492,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}`;
       });
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-6-20251101',
         max_tokens: 1024,
         system: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.',
         messages: apiMessages,
@@ -1103,16 +1155,11 @@ export async function POST(req: NextRequest) {
     ];
 
     try {
-      const stream = await gatewayChatClient.createStreamingCompletion({
-        messages: gatewayMessages,
-        model: "openclaw:main",
-        stream: true,
-        max_tokens: 4096,
-      });
-
-      return createStreamResponse(stream);
+      // Use tool bridge directly so Opie gets full OpenClaw powers (tools/subagents/memory)
+      const generator = streamOpenClaw(gatewayMessages as Array<{ role: string; content: string }>, sessionId);
+      return createStreamResponse(generator);
     } catch (error) {
-      console.error('[Chat] OpenClaw gateway failed, falling back:', error);
+      console.error('[Chat] OpenClaw tool bridge failed, falling back:', error);
     }
   }
 

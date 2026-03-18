@@ -235,13 +235,12 @@ export function transition(ctx: VoiceContext, event: VoiceEvent): VoiceTransitio
     case 'processing': {
       switch (event.type) {
         case 'RESPONSE_RECEIVED':
-          if (ctx.micOn) {
-            effects.push({ type: 'START_TTS', text: event.text });
-          }
+          // Always speak response (TTS fires regardless of mic state)
+          effects.push({ type: 'START_TTS', text: event.text });
           return {
             context: {
               ...ctx,
-              state: ctx.micOn ? 'speaking' : 'idle',
+              state: 'speaking',
               lastResponse: event.text,
             },
             sideEffects: effects,
