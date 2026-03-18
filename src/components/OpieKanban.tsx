@@ -825,7 +825,32 @@ export default function OpieKanban(): React.ReactElement {
   const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
     if ((!messageText.trim() && !image) || isLoading) return;
-    
+
+    // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
+    // so the browser allows audio playback when Ava responds
+    if (typeof window !== 'undefined') {
+      try {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const buf = ctx.createBuffer(1, 1, 22050);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          src.start(0);
+          if (ctx.state === 'suspended') await ctx.resume();
+          setTimeout(() => ctx.close().catch(() => {}), 200);
+        }
+        // Also unlock the voice engine's audio element directly
+        if (voiceEngine?.audioRef?.current) {
+          voiceEngine.audioRef.current.volume = 0.001;
+          await voiceEngine.audioRef.current.play().catch(() => {});
+          voiceEngine.audioRef.current.pause();
+          voiceEngine.audioRef.current.volume = 1.0;
+        }
+      } catch { /* best-effort */ }
+    }
+
     // Ensure we have an active conversation before sending
     if (!activeConversation) {
       console.log('[Chat] No active conversation, creating one...');
