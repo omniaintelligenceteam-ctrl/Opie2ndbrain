@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import WorkflowMonitor from '../../components/content-dashboard/WorkflowMonitor'
+import WorkflowHub from '../../components/content-dashboard/WorkflowHub'
 import ContentStudio from '../../components/content-dashboard/ContentStudio'
 import DashboardHeader from '../../components/content-dashboard/DashboardHeader'
 import ScheduleView from '../../components/content-dashboard/ScheduleView'
@@ -165,7 +165,7 @@ export default function ContentCommandCenter() {
   }, [])
 
   const tabs = [
-    { id: 'workflows', label: 'Workflow Monitor', icon: Activity },
+    { id: 'workflows', label: 'Workflows', icon: Activity },
     { id: 'content', label: 'Content Studio', icon: FileText },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'ab-tests', label: 'A/B Tests', icon: GitBranch },
@@ -340,7 +340,7 @@ export default function ContentCommandCenter() {
 
           {/* Tab Content */}
           {activeTab === 'workflows' && (
-            <WorkflowMonitor supabase={supabase} showToast={showToast} />
+            <WorkflowHub supabase={supabase} showToast={showToast} />
           )}
 
           {activeTab === 'content' && (
