@@ -2802,32 +2802,3 @@ export default function OpieKanban(): React.ReactElement {
 }
 
 // Styles are now in ./kanbanStyles.ts
-                color: 'rgba(255,255,255,0.8)',
-                fontSize: '0.9rem',
-                lineHeight: 1.6,
-              }}>
-                {selectedTask.output}
-              </div>
-            )}
-          </div>
-        )}
-      </BottomSheet>
-
-      {/* All CSS classes and keyframes are in premium.css */}
-
-      {/* Onboarding Modal - first-run experience */}
-      {showOnboarding && (
-        <OnboardingModal
-          onComplete={(newName) => {
-            setUserName(newName);
-            setShowOnboarding(false);
-          }}
-          onNavigate={(view) => handleViewChange(view as ViewId)}
-        />
-      )}
-      </div>
-    </NotificationProvider>
-  );
-}
-
-// Styles are now in ./kanbanStyles.ts
