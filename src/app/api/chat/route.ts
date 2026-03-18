@@ -109,6 +109,24 @@ async function* streamOpenClaw(messages: Array<{role: string, content: any}>, se
 
     if (!response.ok) {
       const error = await response.text();
+      // Fallback: some gateways don't expose sessions_spawn; use chat-completions bridge
+      if (error.includes('Tool not available: sessions_spawn')) {
+        try {
+          const fallbackStream = await gatewayChatClient.createStreamingCompletion({
+            messages: messages.map((m: any) => ({ role: m.role as 'system' | 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : userText })),
+            model: 'openclaw:main',
+            stream: true,
+            max_tokens: 4096,
+          });
+          for await (const chunk of fallbackStream) {
+            yield chunk;
+          }
+          return;
+        } catch (fallbackErr) {
+          yield `data: ${JSON.stringify({ error: `OpenClaw fallback failed: ${fallbackErr instanceof Error ? fallbackErr.message : 'unknown error'}` })}\n\n`;
+          return;
+        }
+      }
       yield `data: ${JSON.stringify({ error: `OpenClaw: ${error.slice(0, 200)}` })}\n\n`;
       return;
     }
@@ -127,6 +145,18 @@ async function* streamOpenClaw(messages: Array<{role: string, content: any}>, se
       else if (result.reply) reply = result.reply;
       else if (result.text) reply = result.text;
       else if (typeof result === 'string') reply = result;
+    } else if (!data.ok && data.error?.message?.includes('Tool not available: sessions_spawn')) {
+      // Fallback for gateways without sessions_spawn
+      const fallbackStream = await gatewayChatClient.createStreamingCompletion({
+        messages: messages.map((m: any) => ({ role: m.role as 'system' | 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : userText })),
+        model: 'openclaw:main',
+        stream: true,
+        max_tokens: 4096,
+      });
+      for await (const chunk of fallbackStream) {
+        yield chunk;
+      }
+      return;
     }
 
     // Stream the complete reply as one chunk
