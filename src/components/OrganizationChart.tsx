@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ORG_DATA, OrgNode, OrgNodeWithChildren, buildOrgTree, getStatusColor } from '../types/org';
+import { ORG_DATA, OrgNode, OrgNodeWithChildren, buildOrgTree } from '../types/org';
+import OrgNodeComponent from './OrgNode';
 import { useAgentSessions } from '../hooks/useAgentSessions';
 
 interface OrganizationChartProps {
@@ -10,11 +11,10 @@ interface OrganizationChartProps {
   onNodeClick?: (node: OrgNode) => void;
 }
 
-// Card dimensions
-const CARD_W = 160;
-const CARD_H = 90;
-const H_GAP = 32;   // horizontal gap between siblings
-const V_GAP = 72;   // vertical gap between levels
+const CARD_W = 280;
+const CARD_H = 180;
+const H_GAP = 40;
+const V_GAP = 80;
 
 interface PositionedNode extends OrgNodeWithChildren {
   x: number;
@@ -32,17 +32,15 @@ function calcSubtreeWidth(node: OrgNodeWithChildren): number {
 function positionTree(node: OrgNodeWithChildren, x: number, y: number): PositionedNode {
   const subtreeWidth = calcSubtreeWidth(node);
   const positioned: PositionedNode = { ...node, x, y, subtreeWidth, children: [] };
-
   if (node.children.length > 0) {
     const totalChildWidth = node.children.reduce((sum, c) => sum + calcSubtreeWidth(c), 0)
       + H_GAP * (node.children.length - 1);
     let childX = x + subtreeWidth / 2 - totalChildWidth / 2;
-
     positioned.children = node.children.map(child => {
-      const childSubtree = calcSubtreeWidth(child);
-      const positioned_child = positionTree(child, childX, y + CARD_H + V_GAP);
-      childX += childSubtree + H_GAP;
-      return positioned_child;
+      const sw = calcSubtreeWidth(child);
+      const pc = positionTree(child, childX, y + CARD_H + V_GAP);
+      childX += sw + H_GAP;
+      return pc;
     });
   }
   return positioned;
@@ -52,117 +50,42 @@ function collectAll(node: PositionedNode): PositionedNode[] {
   return [node, ...node.children.flatMap(c => collectAll(c as PositionedNode))];
 }
 
-function collectEdges(node: PositionedNode): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+interface EdgeInfo { x1: number; y1: number; x2: number; y2: number; color: string; }
+function collectEdges(node: PositionedNode): EdgeInfo[] {
   return node.children.flatMap(child => {
     const c = child as PositionedNode;
     return [
-      { x1: node.x + CARD_W / 2, y1: node.y + CARD_H, x2: c.x + CARD_W / 2, y2: c.y },
+      { x1: node.x + CARD_W / 2, y1: node.y + CARD_H, x2: c.x + CARD_W / 2, y2: c.y, color: c.color },
       ...collectEdges(c),
     ];
   });
 }
 
-function NodeCard({ node, onClick, selected }: { node: PositionedNode; onClick: () => void; selected: boolean }) {
-  const statusColor = getStatusColor(node.status);
-  const isTopLevel = node.reportsTo === null;
-  const isDeptHead = node.reportsTo === 'opie';
-
-  return (
-    <g onClick={onClick} style={{ cursor: 'pointer' }}>
-      {/* Glow */}
-      {selected && (
-        <rect
-          x={node.x - 4} y={node.y - 4}
-          width={CARD_W + 8} height={CARD_H + 8}
-          rx={14} fill="none"
-          stroke={node.color} strokeWidth={2}
-          opacity={0.5}
-          filter="url(#glow)"
-        />
-      )}
-      {/* Card background */}
-      <rect
-        x={node.x} y={node.y}
-        width={CARD_W} height={CARD_H}
-        rx={12}
-        fill={selected ? `${node.color}25` : isTopLevel ? 'rgba(255,215,0,0.08)' : isDeptHead ? `${node.color}12` : 'rgba(255,255,255,0.04)'}
-        stroke={selected ? node.color : node.color + '50'}
-        strokeWidth={selected ? 2 : 1}
-      />
-      {/* Status bar at bottom */}
-      <rect
-        x={node.x + 12} y={node.y + CARD_H - 6}
-        width={CARD_W - 24} height={3}
-        rx={2}
-        fill={statusColor + '60'}
-      />
-      {/* Status dot */}
-      <circle cx={node.x + CARD_W - 16} cy={node.y + 14} r={5} fill={statusColor} />
-      {/* Avatar */}
-      <text x={node.x + 16} y={node.y + 30} fontSize={22} textAnchor="start" dominantBaseline="middle">{node.avatar}</text>
-      {/* Name */}
-      <text
-        x={node.x + 44} y={node.y + 22}
-        fontSize={isTopLevel ? 13 : isDeptHead ? 12 : 11}
-        fontWeight={isDeptHead || isTopLevel ? 700 : 600}
-        fill="#ffffff"
-        textAnchor="start"
-        dominantBaseline="middle"
-      >
-        {node.name}
-      </text>
-      {/* Role */}
-      <text
-        x={node.x + 44} y={node.y + 38}
-        fontSize={9}
-        fill={node.color}
-        textAnchor="start"
-        dominantBaseline="middle"
-        opacity={0.9}
-      >
-        {node.role.length > 20 ? node.role.slice(0, 19) + '…' : node.role}
-      </text>
-      {/* Model */}
-      <text
-        x={node.x + 12} y={node.y + 62}
-        fontSize={8.5}
-        fill="rgba(255,255,255,0.35)"
-        textAnchor="start"
-        dominantBaseline="middle"
-      >
-        {node.model.length > 26 ? node.model.slice(0, 25) + '…' : node.model}
-      </text>
-    </g>
-  );
-}
-
 export default function OrganizationChart({ isMobile = false, isTablet = false, onNodeClick }: OrganizationChartProps) {
-  const [zoom, setZoom] = useState(isMobile ? 0.55 : 0.82);
+  const [zoom, setZoom] = useState(isMobile ? 0.45 : 0.7);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  // Per-node drag overrides: nodeId -> {x, y}
+  const [nodeOverrides, setNodeOverrides] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggingNode, setDraggingNode] = useState<{ id: string; startMouse: { x: number; y: number }; startPos: { x: number; y: number } } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
   const { nodes: agentNodes } = useAgentSessions(5000, true);
 
-  const orgData = useMemo(() => {
-    return ORG_DATA.map(orgNode => {
-      if (!orgNode.agentIds) return orgNode;
-      if (orgNode.agentIds.includes('*')) {
-        const anyWorking = agentNodes.some(a => a.status === 'working');
-        return { ...orgNode, status: (anyWorking ? 'busy' : 'active') as OrgNode['status'] };
-      }
-      const matching = agentNodes.filter(a => orgNode.agentIds!.includes(a.id));
-      if (matching.length > 0) {
-        const anyWorking = matching.some(a => a.status === 'working');
-        const anyConnected = matching.some(a => a.status === 'connected');
-        return { ...orgNode, status: (anyWorking ? 'busy' : anyConnected ? 'active' : 'idle') as OrgNode['status'] };
-      }
-      return orgNode;
-    });
-  }, [agentNodes]);
+  const orgData = useMemo(() => ORG_DATA.map(orgNode => {
+    if (!orgNode.agentIds) return orgNode;
+    if (orgNode.agentIds.includes('*')) {
+      const anyWorking = agentNodes.some(a => a.status === 'working');
+      return { ...orgNode, status: (anyWorking ? 'busy' : 'active') as OrgNode['status'] };
+    }
+    const matching = agentNodes.filter(a => orgNode.agentIds!.includes(a.id));
+    if (matching.length > 0) {
+      const anyWorking = matching.some(a => a.status === 'working');
+      const anyConnected = matching.some(a => a.status === 'connected');
+      return { ...orgNode, status: (anyWorking ? 'busy' : anyConnected ? 'active' : 'idle') as OrgNode['status'] };
+    }
+    return orgNode;
+  }), [agentNodes]);
 
   const orgTree = useMemo(() => buildOrgTree(orgData), [orgData]);
 
@@ -176,97 +99,127 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
     });
   }, [orgTree]);
 
-  const allNodes = useMemo(() => positionedTrees.flatMap(collectAll), [positionedTrees]);
-  const allEdges = useMemo(() => positionedTrees.flatMap(collectEdges), [positionedTrees]);
+  const baseNodes = useMemo(() => positionedTrees.flatMap(collectAll), [positionedTrees]);
+
+  // Apply per-node position overrides
+  const allNodes = useMemo(() => baseNodes.map(n => ({
+    ...n,
+    x: nodeOverrides[n.id]?.x ?? n.x,
+    y: nodeOverrides[n.id]?.y ?? n.y,
+  })), [baseNodes, nodeOverrides]);
+
+  // Edges always use current (possibly overridden) positions
+  const allEdges = useMemo(() => {
+    const posMap = Object.fromEntries(allNodes.map(n => [n.id, { x: n.x, y: n.y }]));
+    const edges: EdgeInfo[] = [];
+    function walk(node: PositionedNode) {
+      node.children.forEach(child => {
+        const c = child as PositionedNode;
+        const pPos = posMap[node.id] ?? { x: node.x, y: node.y };
+        const cPos = posMap[c.id] ?? { x: c.x, y: c.y };
+        edges.push({ x1: pPos.x + CARD_W / 2, y1: pPos.y + CARD_H, x2: cPos.x + CARD_W / 2, y2: cPos.y, color: c.color });
+        walk(c as PositionedNode);
+      });
+    }
+    positionedTrees.forEach(walk);
+    return edges;
+  }, [allNodes, positionedTrees]);
 
   const bounds = useMemo(() => {
-    if (!allNodes.length) return { minX: 0, minY: 0, maxX: 800, maxY: 400 };
-    const xs = allNodes.map(n => n.x);
-    const ys = allNodes.map(n => n.y);
+    if (!allNodes.length) return { minX: 0, minY: 0, maxX: 1200, maxY: 600 };
     return {
-      minX: Math.min(...xs) - 32,
-      minY: Math.min(...ys) - 32,
-      maxX: Math.max(...xs) + CARD_W + 32,
-      maxY: Math.max(...ys) + CARD_H + 32,
+      minX: Math.min(...allNodes.map(n => n.x)) - 60,
+      minY: Math.min(...allNodes.map(n => n.y)) - 60,
+      maxX: Math.max(...allNodes.map(n => n.x)) + CARD_W + 60,
+      maxY: Math.max(...allNodes.map(n => n.y)) + CARD_H + 60,
     };
   }, [allNodes]);
 
   const svgW = bounds.maxX - bounds.minX;
   const svgH = bounds.maxY - bounds.minY;
 
-  // Center on mount
-  useEffect(() => {
-    if (containerRef.current) {
-      const cw = containerRef.current.clientWidth;
-      const ch = containerRef.current.clientHeight;
-      setPan({
-        x: (cw - svgW * zoom) / 2,
-        y: Math.max(24, (ch - svgH * zoom) / 2),
-      });
-    }
-  }, [svgW, svgH, zoom]);
+  const centerView = useCallback((z?: number) => {
+    if (!containerRef.current) return;
+    const cw = containerRef.current.clientWidth;
+    const ch = containerRef.current.clientHeight;
+    const newZoom = z ?? zoom;
+    setPan({ x: (cw - svgW * newZoom) / 2, y: Math.max(24, (ch - svgH * newZoom) / 2) });
+  }, [zoom, svgW, svgH]);
 
+  useEffect(() => { centerView(zoom); }, [svgW, svgH]);
+
+  // Zoom with scroll
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(z => Math.min(2.5, Math.max(0.3, z * delta)));
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    setZoom(z => Math.min(2, Math.max(0.2, z * delta)));
   }, []);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as SVGElement).tagName === 'rect' || (e.target as SVGElement).tagName === 'text' || (e.target as SVGElement).tagName === 'circle') return;
+  // Canvas pan (only when not dragging a node)
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    if (draggingNode) return;
     setIsPanning(true);
     setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  }, [pan]);
+  }, [draggingNode, pan]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
+    if (draggingNode) {
+      const dx = (e.clientX - draggingNode.startMouse.x) / zoom;
+      const dy = (e.clientY - draggingNode.startMouse.y) / zoom;
+      setNodeOverrides(prev => ({
+        ...prev,
+        [draggingNode.id]: { x: draggingNode.startPos.x + dx, y: draggingNode.startPos.y + dy },
+      }));
+      return;
+    }
     if (!isPanning) return;
     setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-  }, [isPanning, panStart]);
+  }, [draggingNode, isPanning, panStart, zoom]);
 
-  const handleMouseUp = useCallback(() => setIsPanning(false), []);
+  const handleCanvasMouseUp = useCallback(() => {
+    setIsPanning(false);
+    setDraggingNode(null);
+  }, []);
 
-  const resetView = useCallback(() => {
-    if (containerRef.current) {
-      const cw = containerRef.current.clientWidth;
-      const ch = containerRef.current.clientHeight;
-      const newZoom = isMobile ? 0.55 : 0.82;
-      setZoom(newZoom);
-      setPan({ x: (cw - svgW * newZoom) / 2, y: Math.max(24, (ch - svgH * newZoom) / 2) });
-    }
-  }, [isMobile, svgW, svgH]);
+  // Node drag start
+  const handleNodeMouseDown = useCallback((e: React.MouseEvent, node: PositionedNode) => {
+    e.stopPropagation();
+    setDraggingNode({
+      id: node.id,
+      startMouse: { x: e.clientX, y: e.clientY },
+      startPos: { x: node.x, y: node.y },
+    });
+  }, []);
 
-  const selectedData = selectedNode ? allNodes.find(n => n.id === selectedNode) : null;
+  const resetLayout = useCallback(() => {
+    setNodeOverrides({});
+    const newZoom = isMobile ? 0.45 : 0.7;
+    setZoom(newZoom);
+    setTimeout(() => centerView(newZoom), 50);
+  }, [isMobile, centerView]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '12px' : '24px', paddingTop: isMobile ? '72px' : '24px' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '12px' : '24px', paddingTop: isMobile ? '72px' : '24px', minHeight: isMobile ? 500 : 600 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexShrink: 0 }}>
         <div>
           <h2 style={{ color: '#fff', fontSize: isMobile ? 18 : 22, fontWeight: 700, margin: 0 }}>🏢 Organization</h2>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>{allNodes.length} agents · drag to pan · scroll to zoom</p>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, margin: '3px 0 0' }}>
+            {allNodes.length} agents · scroll to zoom · drag canvas to pan · drag cards to reposition
+          </p>
         </div>
-        {/* Zoom Controls */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {[
-            { label: '−', action: () => setZoom(z => Math.max(0.3, z - 0.15)) },
-            { label: '⊙', action: resetView },
-            { label: '+', action: () => setZoom(z => Math.min(2.5, z + 0.15)) },
+            { label: '−', action: () => { const z = Math.max(0.2, zoom - 0.1); setZoom(z); } },
+            { label: '⊙', action: resetLayout, title: 'Reset layout' },
+            { label: '+', action: () => { const z = Math.min(2, zoom + 0.1); setZoom(z); } },
           ].map(btn => (
-            <button
-              key={btn.label}
-              onClick={btn.action}
-              style={{
-                width: 36, height: 36, borderRadius: 8,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: '#fff', fontSize: btn.label === '⊙' ? 18 : 20,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >{btn.label}</button>
+            <button key={btn.label} onClick={btn.action} title={btn.title}
+              style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: btn.label === '⊙' ? 16 : 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {btn.label}
+            </button>
           ))}
-          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 40 }}>
-            {Math.round(zoom * 100)}%
-          </span>
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 38, textAlign: 'right' }}>{Math.round(zoom * 100)}%</span>
         </div>
       </div>
 
@@ -274,82 +227,65 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
       <div
         ref={containerRef}
         onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseUp}
         style={{
-          flex: 1, overflow: 'hidden', borderRadius: 16,
-          background: 'rgba(255,255,255,0.02)',
+          flex: 1, overflow: 'hidden', borderRadius: 16, position: 'relative',
+          background: 'rgba(255,255,255,0.015)',
           border: '1px solid rgba(255,255,255,0.06)',
-          cursor: isPanning ? 'grabbing' : 'grab',
-          position: 'relative', minHeight: isMobile ? 400 : 500,
+          cursor: draggingNode ? 'grabbing' : isPanning ? 'grabbing' : 'grab',
+          minHeight: isMobile ? 400 : 500,
         }}
       >
-        <svg
-          width={svgW}
-          height={svgH}
-          style={{ position: 'absolute', left: pan.x, top: pan.y, transform: `scale(${zoom})`, transformOrigin: '0 0', overflow: 'visible' }}
-        >
-          <defs>
-            <filter id="glow">
-              <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-
-          {/* Edges */}
+        {/* SVG edges layer */}
+        <svg style={{ position: 'absolute', left: pan.x, top: pan.y, width: svgW * zoom, height: svgH * zoom, overflow: 'visible', pointerEvents: 'none' }}>
           {allEdges.map((e, i) => {
-            const midY = (e.y1 + e.y2) / 2;
+            const x1 = (e.x1 - bounds.minX) * zoom;
+            const y1 = (e.y1 - bounds.minY) * zoom;
+            const x2 = (e.x2 - bounds.minX) * zoom;
+            const y2 = (e.y2 - bounds.minY) * zoom;
+            const midY = (y1 + y2) / 2;
             return (
-              <path
-                key={i}
-                d={`M ${e.x1 - bounds.minX} ${e.y1 - bounds.minY} C ${e.x1 - bounds.minX} ${midY - bounds.minY}, ${e.x2 - bounds.minX} ${midY - bounds.minY}, ${e.x2 - bounds.minX} ${e.y2 - bounds.minY}`}
-                stroke="rgba(255,255,255,0.15)"
-                strokeWidth={1.5}
-                fill="none"
+              <path key={i}
+                d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                stroke={e.color + '60'} strokeWidth={1.5} fill="none"
               />
             );
           })}
-
-          {/* Nodes */}
-          {allNodes.map(node => (
-            <NodeCard
-              key={node.id}
-              node={{ ...node, x: node.x - bounds.minX, y: node.y - bounds.minY }}
-              selected={selectedNode === node.id}
-              onClick={() => setSelectedNode(prev => prev === node.id ? null : node.id)}
-            />
-          ))}
         </svg>
-      </div>
 
-      {/* Selected node detail */}
-      {selectedData && (
-        <div style={{
-          marginTop: 16, padding: '16px 20px', borderRadius: 12, flexShrink: 0,
-          background: `${selectedData.color}10`,
-          border: `1px solid ${selectedData.color}40`,
-          display: 'flex', alignItems: 'center', gap: 16,
-        }}>
-          <span style={{ fontSize: 32 }}>{selectedData.avatar}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>{selectedData.name} — {selectedData.title}</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>
-              {selectedData.skills.join(' · ')}
+        {/* HTML node cards */}
+        {allNodes.map(node => {
+          const x = pan.x + (node.x - bounds.minX) * zoom;
+          const y = pan.y + (node.y - bounds.minY) * zoom;
+          return (
+            <div
+              key={node.id}
+              onMouseDown={(e) => handleNodeMouseDown(e, node)}
+              style={{
+                position: 'absolute',
+                left: x, top: y,
+                transformOrigin: '0 0',
+                transform: `scale(${zoom})`,
+                width: CARD_W,
+                cursor: draggingNode?.id === node.id ? 'grabbing' : 'grab',
+                userSelect: 'none',
+                transition: draggingNode?.id === node.id ? 'none' : 'box-shadow 0.15s',
+                filter: draggingNode?.id === node.id ? `drop-shadow(0 8px 24px ${node.color}50)` : 'none',
+                zIndex: draggingNode?.id === node.id ? 100 : 1,
+              }}
+            >
+              <OrgNodeComponent
+                node={node}
+                onNodeClick={onNodeClick}
+                compact={false}
+              />
             </div>
-          </div>
-          <div style={{
-            background: getStatusColor(selectedData.status) + '20',
-            color: getStatusColor(selectedData.status),
-            padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-          }}>{selectedData.status}</div>
-          <button
-            onClick={() => setSelectedNode(null)}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}
-          >×</button>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
