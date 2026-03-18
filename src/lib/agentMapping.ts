@@ -140,6 +140,24 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     position: { x: 90, y: 55 },
     color: '#ec4899',
   },
+  {
+    id: 'scout',
+    name: 'Scout',
+    emoji: '🔍',
+    specialistFiles: ['scout-agent.md'],
+    sessionPatterns: ['scout', 'lead-gen', 'scrape', 'job-board'],
+    position: { x: 70, y: 55 },
+    color: '#34d399',
+  },
+  {
+    id: 'ops-guardian',
+    name: 'Ops Guardian',
+    emoji: '🛡️',
+    specialistFiles: ['ops-guardian-agent.md'],
+    sessionPatterns: ['ops-guardian', 'ops', 'infra', 'config'],
+    position: { x: 30, y: 55 },
+    color: '#0ea5e9',
+  },
 ];
 
 // Get all agent IDs
