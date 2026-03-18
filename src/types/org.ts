@@ -25,6 +25,7 @@ export interface OrgNodeWithChildren extends OrgNode {
 
 // Organization structure data - WesCo Team
 export const ORG_DATA: OrgNode[] = [
+  // ── TOP ─────────────────────────────────────────────────────────────────────
   {
     id: 'wes',
     name: 'WES',
@@ -36,85 +37,25 @@ export const ORG_DATA: OrgNode[] = [
     reportsTo: null,
     status: 'active',
     avatar: '👑',
-    color: '#FFD700' // gold
+    color: '#FFD700',
   },
   {
     id: 'opie',
-    name: 'OPIE',
+    name: 'OPIE (G)',
     title: 'Chief Operations Officer',
-    role: 'COO',
-    model: 'Claude Opus 4.6',
-    costPer1M: 15,
-    skills: ['Operations', 'Coordination', 'Strategy', 'Quality Control'],
+    role: 'COO — Orchestrator',
+    model: 'Claude Sonnet 4.6',
+    costPer1M: 3,
+    skills: ['Orchestration', 'Coordination', 'Strategy', 'All Departments'],
     reportsTo: 'wes',
     status: 'busy',
-    avatar: '🎯',
-    color: '#9333EA', // purple
+    avatar: '🤖',
+    color: '#9333EA',
     activeSessions: 3,
     currentTask: 'Coordinating agent deployment',
-    agentIds: ['*'],  // Coordinator: reflects all agent activity
+    agentIds: ['*'],
   },
-  {
-    id: 'sonny',
-    name: 'SONNY',
-    title: 'Lead Engineer',
-    role: 'Engineering Lead',
-    model: 'Claude Sonnet 5',
-    costPer1M: 3,
-    skills: ['Coding', 'Architecture', 'DevOps', 'AI/ML'],
-    reportsTo: 'opie',
-    status: 'busy',
-    avatar: '🔧',
-    color: '#10B981', // green
-    activeSessions: 2,
-    currentTask: 'Building Organization Chart feature',
-    agentIds: ['code'],
-  },
-  {
-    id: 'atlas',
-    name: 'ATLAS',
-    title: 'Research Director',
-    role: 'Research Lead',
-    model: 'Claude Sonnet 4',
-    costPer1M: 3,
-    skills: ['Research', 'Analysis', 'Data Science', 'Market Intelligence'],
-    reportsTo: 'opie',
-    status: 'active',
-    avatar: '🔍',
-    color: '#3B82F6', // blue
-    activeSessions: 1,
-    agentIds: ['research', 'analyst'],
-  },
-  {
-    id: 'glint',
-    name: 'GLINT',
-    title: 'Communications Lead',
-    role: 'Content & Comms',
-    model: 'Claude Sonnet 4',
-    costPer1M: 3,
-    skills: ['Content Creation', 'Marketing', 'LinkedIn', 'Copywriting'],
-    reportsTo: 'opie',
-    status: 'idle',
-    avatar: '✨',
-    color: '#F59E0B', // orange
-    activeSessions: 0,
-    agentIds: ['content', 'outreach'],
-  },
-  {
-    id: 'spark',
-    name: 'SPARK',
-    title: 'Operations Associate',
-    role: 'Quick Tasks & Support',
-    model: 'Kimi K2.5',
-    costPer1M: 0,
-    skills: ['Quick Tasks', 'Support', 'Documentation', 'Maintenance'],
-    reportsTo: 'opie',
-    status: 'active',
-    avatar: '⚡',
-    color: '#06B6D4', // cyan
-    activeSessions: 1,
-    agentIds: ['qa', 'sales', 'proposal'],
-  },
+  // ── DEPARTMENT HEADS ────────────────────────────────────────────────────────
   {
     id: 'elon',
     name: 'ELON',
@@ -141,7 +82,7 @@ export const ORG_DATA: OrgNode[] = [
     status: 'idle',
     avatar: '📣',
     color: '#f97316',
-    agentIds: ['content-writer', 'analyst'],
+    agentIds: ['content-writer'],
   },
   {
     id: 'warren',
@@ -157,6 +98,7 @@ export const ORG_DATA: OrgNode[] = [
     color: '#22c55e',
     agentIds: ['scout', 'outreach', 'call-debrief'],
   },
+  // ── WORKERS UNDER ELON ──────────────────────────────────────────────────────
   {
     id: 'ops-guardian-node',
     name: 'OPS GUARDIAN',
@@ -185,6 +127,7 @@ export const ORG_DATA: OrgNode[] = [
     color: '#6366f1',
     agentIds: ['analyst', 'research'],
   },
+  // ── WORKERS UNDER GARY ──────────────────────────────────────────────────────
   {
     id: 'content-writer-node',
     name: 'CONTENT WRITER',
@@ -199,6 +142,7 @@ export const ORG_DATA: OrgNode[] = [
     color: '#f59e0b',
     agentIds: ['content-writer'],
   },
+  // ── WORKERS UNDER WARREN ────────────────────────────────────────────────────
   {
     id: 'scout-node',
     name: 'SCOUT',
@@ -240,7 +184,7 @@ export const ORG_DATA: OrgNode[] = [
     avatar: '📞',
     color: '#ec4899',
     agentIds: ['call-debrief'],
-  }
+  },
 ];
 
 export function buildOrgTree(nodes: OrgNode[]): OrgNodeWithChildren[] {
