@@ -9,8 +9,9 @@ import ScheduleView from '../../components/content-dashboard/ScheduleView'
 import ABTestView from '../../components/content-dashboard/ABTestView'
 import AnalyticsView from '../../components/content-dashboard/AnalyticsView'
 import IntegrationsView from '../../components/content-dashboard/IntegrationsView'
+import LarryStudio from '../../components/content-dashboard/LarryStudio'
 import { supabase } from '../../lib/supabase'
-import { Activity, FileText, Calendar, GitBranch, BarChart3, Webhook, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Activity, FileText, Calendar, GitBranch, BarChart3, Webhook, Film, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useToast } from '../../hooks/useRealTimeData'
 import { ToastContainer } from '../../components/NotificationCenter'
 
@@ -170,6 +171,7 @@ export default function ContentCommandCenter() {
     { id: 'ab-tests', label: 'A/B Tests', icon: GitBranch },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'integrations', label: 'Integrations', icon: Webhook },
+    { id: "larry", label: "Larry Studio", icon: Film },
   ]
 
   return (

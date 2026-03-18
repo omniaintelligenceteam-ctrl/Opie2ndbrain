@@ -16,6 +16,10 @@ const CARD_H = 180;
 const H_GAP = 40;
 const V_GAP = 80;
 
+const RESIZE_STORAGE_KEY = 'organization-chart-size-v1';
+const MIN_PANEL_WIDTH = 400;
+const MIN_PANEL_HEIGHT = 300;
+
 interface PositionedNode extends OrgNodeWithChildren {
   x: number;
   y: number;
@@ -51,6 +55,8 @@ function collectAll(node: PositionedNode): PositionedNode[] {
 }
 
 interface EdgeInfo { x1: number; y1: number; x2: number; y2: number; color: string; }
+type ResizeDirection = 'right' | 'bottom' | 'corner';
+
 function collectEdges(node: PositionedNode): EdgeInfo[] {
   return node.children.flatMap(child => {
     const c = child as PositionedNode;
@@ -69,7 +75,10 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
   // Per-node drag overrides: nodeId -> {x, y}
   const [nodeOverrides, setNodeOverrides] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<{ id: string; startMouse: { x: number; y: number }; startPos: { x: number; y: number } } | null>(null);
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
+  const [activeResize, setActiveResize] = useState<ResizeDirection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{ dir: ResizeDirection; startX: number; startY: number; startW: number; startH: number } | null>(null);
   const { nodes: agentNodes } = useAgentSessions(5000, true);
 
   const orgData = useMemo(() => ORG_DATA.map(orgNode => {
@@ -191,15 +200,103 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
     });
   }, []);
 
+  // Load saved size from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RESIZE_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.width >= MIN_PANEL_WIDTH && parsed.height >= MIN_PANEL_HEIGHT) {
+          setPanelSize(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Resize handlers
+  const startResize = useCallback((e: React.MouseEvent, dir: ResizeDirection) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    resizeRef.current = {
+      dir,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: rect.width,
+      startH: rect.height,
+    };
+    setActiveResize(dir);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const { dir: d, startX, startY, startW, startH } = resizeRef.current;
+      const maxW = window.innerWidth - 80;
+      const maxH = window.innerHeight - 120;
+      let newW = panelSize?.width ?? startW;
+      let newH = panelSize?.height ?? startH;
+      if (d === 'right' || d === 'corner') {
+        newW = Math.max(MIN_PANEL_WIDTH, Math.min(maxW, startW + (ev.clientX - startX)));
+      }
+      if (d === 'bottom' || d === 'corner') {
+        newH = Math.max(MIN_PANEL_HEIGHT, Math.min(maxH, startH + (ev.clientY - startY)));
+      }
+      setPanelSize({ width: newW, height: newH });
+    };
+
+    const onUp = () => {
+      resizeRef.current = null;
+      setActiveResize(null);
+      // Save to localStorage
+      setPanelSize(prev => {
+        if (prev) {
+          try { localStorage.setItem(RESIZE_STORAGE_KEY, JSON.stringify(prev)); } catch {}
+        }
+        return prev;
+      });
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [panelSize]);
+
   const resetLayout = useCallback(() => {
     setNodeOverrides({});
+    setPanelSize(null);
+    try { localStorage.removeItem(RESIZE_STORAGE_KEY); } catch {}
     const newZoom = isMobile ? 0.45 : 0.7;
     setZoom(newZoom);
     setTimeout(() => centerView(newZoom), 50);
   }, [isMobile, centerView]);
 
+  // Grip dot style for resize handles
+  const gripDots = (vertical: boolean) => {
+    const dots = [];
+    for (let i = 0; i < 3; i++) {
+      dots.push(
+        <span key={i} style={{
+          display: 'block',
+          width: 3, height: 3,
+          borderRadius: '50%',
+          background: activeResize ? 'rgba(99,102,241,0.8)' : 'rgba(255,255,255,0.25)',
+          margin: vertical ? '2px 0' : '0 2px',
+          transition: 'background 0.15s',
+        }} />
+      );
+    }
+    return dots;
+  };
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '12px' : '24px', paddingTop: isMobile ? '72px' : '24px', minHeight: isMobile ? 500 : 600 }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      padding: isMobile ? '12px' : '24px', paddingTop: isMobile ? '72px' : '24px',
+      ...(panelSize ? { width: panelSize.width, height: panelSize.height } : { height: '100%', minHeight: isMobile ? 500 : 600 }),
+      position: 'relative',
+    }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexShrink: 0 }}>
         <div>
@@ -285,6 +382,57 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
             </div>
           );
         })}
+      </div>
+
+      {/* Right resize handle */}
+      <div
+        onMouseDown={(e) => startResize(e, 'right')}
+        style={{
+          position: 'absolute', right: 0, top: '20%', height: '60%', width: 12,
+          cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'column', borderRadius: '0 8px 8px 0', zIndex: 10,
+          background: activeResize === 'right' ? 'rgba(99,102,241,0.15)' : 'transparent',
+          transition: 'background 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(99,102,241,0.1)'; }}
+        onMouseLeave={(e) => { if (activeResize !== 'right') (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+      >
+        {gripDots(true)}
+      </div>
+
+      {/* Bottom resize handle */}
+      <div
+        onMouseDown={(e) => startResize(e, 'bottom')}
+        style={{
+          position: 'absolute', bottom: 0, left: '20%', width: '60%', height: 12,
+          cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: '0 0 8px 8px', zIndex: 10,
+          background: activeResize === 'bottom' ? 'rgba(99,102,241,0.15)' : 'transparent',
+          transition: 'background 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(99,102,241,0.1)'; }}
+        onMouseLeave={(e) => { if (activeResize !== 'bottom') (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+      >
+        {gripDots(false)}
+      </div>
+
+      {/* Corner resize handle (bottom-right) */}
+      <div
+        onMouseDown={(e) => startResize(e, 'corner')}
+        style={{
+          position: 'absolute', bottom: 0, right: 0, width: 20, height: 20,
+          cursor: 'nwse-resize', borderRadius: '0 0 8px 0', zIndex: 11,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: activeResize === 'corner' ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)',
+          transition: 'background 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(99,102,241,0.15)'; }}
+        onMouseLeave={(e) => { if (activeResize !== 'corner') (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)'; }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4 }}>
+          <line x1="9" y1="1" x2="1" y2="9" stroke="white" strokeWidth="1.5" />
+          <line x1="9" y1="5" x2="5" y2="9" stroke="white" strokeWidth="1.5" />
+        </svg>
       </div>
     </div>
   );
