@@ -14,6 +14,8 @@ const PUBLIC_ROUTES = [
   '/api/telegram/webhook', // Telegram webhook endpoint (external service access)
   '/api/content-dashboard/:path*', // Content dashboard internal APIs
   '/api/notifications',            // Client-side polling (no auth headers)
+  '/api/sidebar/:path*',           // Sidebar SSE stream + polling (browser client, no secrets)
+  '/api/agents',                   // Agent list (display only)
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
