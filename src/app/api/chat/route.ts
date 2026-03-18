@@ -5,6 +5,7 @@ import { TOOLS, getToolsPrompt, executeTool } from '@/lib/tools';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ExecutionPlanStore, type ToolCall } from '@/lib/execution-plans';
 import { gatewayChatClient, shouldUseGateway, type ChatMessage } from '@/lib/gateway-chat';
+import { streamViaRelay, relayHealth, MAIN_SESSION } from '@/lib/relay-client';
 import { saveToSharedContext, getSharedContextPrompt } from '@/lib/shared-context';
 
 // Force Node.js runtime for full env var access
@@ -125,86 +126,62 @@ const GATEWAY_TOOLS_FOR_ANTHROPIC: Anthropic.Tool[] = [
   },
 ];
 
-// Opie via Anthropic with gateway tools wired in
+/**
+ * streamOpenClaw — routes through the Opie Relay (opie-relay.js)
+ * which has operator.admin scope on the OpenClaw gateway.
+ *
+ * The actual AI reasoning, tool use (exec, file I/O, web_search,
+ * memory_search, sessions_spawn, Discord, cron, etc.) all happens
+ * inside the OpenClaw main agent. Opie is just the UI.
+ *
+ * Message is assembled from the last user turn in `messages` array.
+ * Conversation history is injected as context in the message itself
+ * so the agent has full context even without persistent session history.
+ */
 async function* streamOpenClaw(messages: Array<{role: string, content: any}>, sessionId: string) {
+  // Extract last user message
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (!lastUserMessage) {
     yield `data: ${JSON.stringify({ error: 'No user message' })}\n\n`;
+    yield 'data: [DONE]\n\n';
     return;
   }
 
   const userText = typeof lastUserMessage.content === 'string'
     ? lastUserMessage.content
     : Array.isArray(lastUserMessage.content)
-      ? lastUserMessage.content.map((p: any) => p?.text || '').filter(Boolean).join('\n')
+      ? lastUserMessage.content.map((p: any) => p?.text || p?.image_url ? (p?.text || '[image]') : '').filter(Boolean).join('\n')
       : String(lastUserMessage.content || '');
 
-  // Route through Anthropic with gateway tools wired in as native tool_use
+  // Build conversation context from recent history (last 8 turns)
+  const historyTurns = messages
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .slice(-9, -1) // exclude the last user message we already have
+    .map(m => {
+      const text = typeof m.content === 'string' ? m.content
+        : Array.isArray(m.content) ? m.content.map((p: any) => p?.text || '').filter(Boolean).join('\n')
+        : String(m.content || '');
+      return `${m.role === 'user' ? 'User' : 'Assistant'}: ${text}`;
+    })
+    .join('\n\n');
+
+  // Compose the full message for the agent
+  const fullMessage = historyTurns
+    ? `[Context from recent conversation]\n${historyTurns}\n\n[New message]\n${userText}`
+    : userText;
+
+  console.log('[streamOpenClaw] Routing via relay, message length:', fullMessage.length);
+
   try {
-    const apiMessages: Anthropic.MessageParam[] = messages
-      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-      .map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: typeof m.content === 'string' ? m.content : userText,
-      }));
-
-    const systemPrompt = `You are Opie, Wes's AI second brain. You have access to tools including web search, memory search, and live system status from the OpenClaw agent system. Be helpful, direct, and practical. When you use tools, summarize results clearly.`;
-
-    // Agentic loop: handle tool calls
-    let iteration = 0;
-    const maxIterations = 8;
-    let currentMessages: Anthropic.MessageParam[] = [...apiMessages];
-
-    while (iteration < maxIterations) {
-      iteration++;
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6-20251101',
-        max_tokens: 2048,
-        system: systemPrompt,
-        messages: currentMessages,
-        tools: GATEWAY_TOOLS_FOR_ANTHROPIC,
-      });
-
-      // Stream text chunks
-      let hasText = false;
-      for (const block of response.content) {
-        if (block.type === 'text' && block.text) {
-          hasText = true;
-          // Stream word by word for smooth UX
-          for (const word of block.text.split(' ')) {
-            yield `data: ${JSON.stringify({ choices: [{ delta: { content: word + ' ' } }] })}\n\n`;
-          }
-        }
-      }
-
-      // If no tool calls, we're done
-      if (response.stop_reason !== 'tool_use') {
-        yield `data: [DONE]\n\n`;
-        return;
-      }
-
-      // Execute tool calls
-      const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const toolUse of toolUseBlocks) {
-        yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n🔧 *${toolUse.name}…*\n` } }] })}\n\n`;
-        const result = await invokeGatewayToolForChat(toolUse.name, toolUse.input as Record<string, any>);
-        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: result });
-      }
-
-      // Add assistant + tool results to message history
-      currentMessages = [
-        ...currentMessages,
-        { role: 'assistant', content: response.content },
-        { role: 'user', content: toolResults },
-      ];
+    // Stream via relay → OpenClaw gateway → main agent (all tools available)
+    for await (const chunk of streamViaRelay(fullMessage, MAIN_SESSION, 90_000)) {
+      yield chunk;
     }
-
-    yield `data: [DONE]\n\n`;
   } catch (error) {
-    console.error("[OpenClaw/Anthropic] Error:", error);
-    yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'OpenClaw failed' })}\n\n`;
+    console.error('[streamOpenClaw] Relay failed:', error);
+    // Fallback message so the user knows what happened
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: `⚠️ Gateway connection issue: ${error instanceof Error ? error.message : 'unknown error'}. Try again or check relay status.` } }] })}\n\n`;
+    yield 'data: [DONE]\n\n';
   }
 }
 
