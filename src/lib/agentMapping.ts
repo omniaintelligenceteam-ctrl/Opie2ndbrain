@@ -85,6 +85,61 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     position: { x: 55, y: 90 },
     color: '#f97316', // orange-red
   },
+  // ── DEPARTMENT HEADS ──────────────────────────────────────
+  {
+    id: 'elon',
+    name: 'Elon (CTO)',
+    emoji: '🚀',
+    specialistFiles: ['elon-agent.md'],
+    sessionPatterns: ['elon', 'infra', 'plugin', 'cron', 'gateway', 'system'],
+    position: { x: 50, y: 5 },
+    color: '#06b6d4',
+  },
+  {
+    id: 'gary',
+    name: 'Gary (CMO)',
+    emoji: '📣',
+    specialistFiles: ['gary-agent.md'],
+    sessionPatterns: ['gary', 'marketing', 'content', 'brand', 'social', 'copy'],
+    position: { x: 20, y: 20 },
+    color: '#f97316',
+  },
+  {
+    id: 'warren',
+    name: 'Warren (CRO)',
+    emoji: '💰',
+    specialistFiles: ['warren-agent.md'],
+    sessionPatterns: ['warren', 'revenue', 'pipeline', 'deal', 'outreach', 'crm'],
+    position: { x: 80, y: 20 },
+    color: '#22c55e',
+  },
+  {
+    id: 'content-writer',
+    name: 'Content Writer',
+    emoji: '✍️',
+    specialistFiles: ['content-writer-agent.md'],
+    sessionPatterns: ['content-writer', 'copywrite', 'draft'],
+    position: { x: 10, y: 40 },
+    color: '#f59e0b',
+  },
+  {
+    id: 'outreach-agent',
+    name: 'Outreach',
+    emoji: '📧',
+    specialistFiles: ['outreach-agent.md'],
+    sessionPatterns: ['outreach-agent', 'cold-email'],
+    position: { x: 70, y: 40 },
+    color: '#8b5cf6',
+  },
+  {
+    id: 'call-debrief',
+    name: 'Call Debrief',
+    emoji: '📞',
+    specialistFiles: ['call-debrief-agent.md'],
+    sessionPatterns: ['call-debrief', 'transcript'],
+    position: { x: 90, y: 55 },
+    color: '#ec4899',
+  },
 ];
 
 // Get all agent IDs
