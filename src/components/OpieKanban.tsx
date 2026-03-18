@@ -15,6 +15,7 @@ import { useActiveAgents, useAgentSessions } from '../hooks/useAgentSessions';
 import { AGENT_NODES } from '../lib/agentMapping';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
 import { useVoiceEngine } from '../hooks/useVoiceEngine';
+import { useVoiceSettings, TTS_PROVIDERS, getVoicesForProvider, getPushToTalkKeyLabel } from '../hooks/useVoiceSettings';
 import { KanbanBoard } from './KanbanBoard';
 import { styles } from './kanbanStyles';
 import KanbanColumn from './KanbanColumnInline';
@@ -559,11 +560,12 @@ export default function OpieKanban(): React.ReactElement {
     return handleSendRef.current(cleaned);
   }, [cleanVoiceGrammar]);
 
+  const voiceSettings = useVoiceSettings();
   const voiceEngine = useVoiceEngine({
     onSend: handleVoiceSend,
     autoSpeak: true,
-    ttsProvider: 'elevenlabs',
-    ttsVoice: 'MClEFoImJXBTgLwdLI5n', // ElevenLabs default voice
+    ttsProvider: voiceSettings.ttsProvider,
+    ttsVoice: voiceSettings.ttsVoice,
   });
 
   // ─── Plan Approval Handlers ────────────────────────────────────
@@ -2678,13 +2680,61 @@ export default function OpieKanban(): React.ReactElement {
                     {soundsEnabled ? '🔔 On' : '🔕 Muted'}
                   </button>
                 </div>
+                {/* TTS Provider */}
                 <div style={styles.settingItem}>
-                  <span>TTS Voice</span>
-                  <span style={styles.settingValue}>Default</span>
+                  <span>Voice Provider</span>
+                  <select
+                    value={voiceSettings.ttsProvider}
+                    onChange={e => voiceSettings.setTTSProvider(e.target.value as any)}
+                    style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    {TTS_PROVIDERS.map(p => (
+                      <option key={p.id} value={p.id} style={{ background: '#1a1a2e' }}>{p.label} — {p.note}</option>
+                    ))}
+                  </select>
                 </div>
+                {/* TTS Voice */}
+                {Object.keys(getVoicesForProvider(voiceSettings.ttsProvider)).length > 0 && (
+                  <div style={styles.settingItem}>
+                    <span>Voice</span>
+                    <select
+                      value={voiceSettings.ttsVoice}
+                      onChange={e => voiceSettings.setTTSVoice(e.target.value)}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      {Object.entries(getVoicesForProvider(voiceSettings.ttsProvider)).map(([id, label]) => (
+                        <option key={id} value={id} style={{ background: '#1a1a2e' }}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {voiceSettings.ttsProvider === 'azure' && (
+                  <div style={{ ...styles.settingItem, flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Browse all Azure voices →</span>
+                    <a href="https://speech.microsoft.com/portal/voicegallery" target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: '#667eea', textDecoration: 'none' }}>
+                      speech.microsoft.com/portal/voicegallery ↗
+                    </a>
+                  </div>
+                )}
+                {/* PTT Mode */}
                 <div style={styles.settingItem}>
-                  <span>Speech Speed</span>
-                  <span style={styles.settingValue}>1.0x</span>
+                  <span>Push-to-Talk Key</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button
+                      onKeyDown={e => { e.preventDefault(); voiceSettings.setPushToTalkKey(e.code); }}
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', minWidth: 60 }}
+                      title="Click then press any key to set PTT key"
+                    >
+                      {getPushToTalkKeyLabel(voiceSettings.pushToTalkKey)}
+                    </button>
+                    <button
+                      onClick={voiceSettings.togglePushToTalk}
+                      style={{ background: voiceSettings.pushToTalkEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: voiceSettings.pushToTalkEnabled ? '#22c55e' : 'rgba(255,255,255,0.5)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}
+                    >
+                      {voiceSettings.pushToTalkEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div style={styles.settingsCard}>
