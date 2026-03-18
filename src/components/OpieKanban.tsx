@@ -1751,6 +1751,26 @@ export default function OpieKanban(): React.ReactElement {
                         </div>
                       )}
                     </div>
+
+                    {/* OpenClaw bridge status indicator */}
+                    <div
+                      title={statusLoading ? 'Checking OpenClaw bridge…' : (liveStatus?.gateway?.connected ? 'OpenClaw bridge ON' : 'OpenClaw bridge OFF (fallback mode)')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
+                        background: liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
+                      }}
+                    >
+                      <span>{liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
+                      <span>{liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
+                    </div>
                   </div>
                 </div>
                 {/* Quote of the day bar */}
