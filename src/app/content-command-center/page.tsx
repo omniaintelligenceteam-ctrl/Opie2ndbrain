@@ -362,6 +362,7 @@ export default function ContentCommandCenter() {
           {activeTab === 'integrations' && (
             <IntegrationsView showToast={showToast} />
           )}
+{activeTab === "larry" && (            <LarryStudio supabase={supabase} showToast={showToast} />          )}
         </div>
       </main>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

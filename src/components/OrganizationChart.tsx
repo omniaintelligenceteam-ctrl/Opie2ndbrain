@@ -77,6 +77,8 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
   const [draggingNode, setDraggingNode] = useState<{ id: string; startMouse: { x: number; y: number }; startPos: { x: number; y: number } } | null>(null);
   const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
   const [activeResize, setActiveResize] = useState<ResizeDirection | null>(null);
+  const [saveFlash, setSaveFlash] = useState(false);
+  const [hasUnsaved, setHasUnsaved] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ dir: ResizeDirection; startX: number; startY: number; startW: number; startH: number } | null>(null);
   const { nodes: agentNodes } = useAgentSessions(5000, true);
@@ -179,6 +181,7 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
         ...prev,
         [draggingNode.id]: { x: draggingNode.startPos.x + dx, y: draggingNode.startPos.y + dy },
       }));
+      setHasUnsaved(true);
       return;
     }
     if (!isPanning) return;
@@ -243,18 +246,12 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
         newH = Math.max(MIN_PANEL_HEIGHT, Math.min(maxH, startH + (ev.clientY - startY)));
       }
       setPanelSize({ width: newW, height: newH });
+      setHasUnsaved(true);
     };
 
     const onUp = () => {
       resizeRef.current = null;
       setActiveResize(null);
-      // Save to localStorage
-      setPanelSize(prev => {
-        if (prev) {
-          try { localStorage.setItem(RESIZE_STORAGE_KEY, JSON.stringify(prev)); } catch {}
-        }
-        return prev;
-      });
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -263,10 +260,40 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
     window.addEventListener('mouseup', onUp);
   }, [panelSize]);
 
+  const saveLayout = useCallback(() => {
+    try {
+      if (panelSize) localStorage.setItem(RESIZE_STORAGE_KEY, JSON.stringify(panelSize));
+      localStorage.setItem('org-chart-node-overrides', JSON.stringify(nodeOverrides));
+      localStorage.setItem('org-chart-zoom', String(zoom));
+      localStorage.setItem('org-chart-pan', JSON.stringify(pan));
+    } catch {}
+    setHasUnsaved(false);
+    setSaveFlash(true);
+    setTimeout(() => setSaveFlash(false), 1500);
+  }, [panelSize, nodeOverrides, zoom, pan]);
+
+  // Load saved node overrides, zoom, pan on mount
+  useEffect(() => {
+    try {
+      const savedOverrides = localStorage.getItem('org-chart-node-overrides');
+      if (savedOverrides) setNodeOverrides(JSON.parse(savedOverrides));
+      const savedZoom = localStorage.getItem('org-chart-zoom');
+      if (savedZoom) setZoom(parseFloat(savedZoom));
+      const savedPan = localStorage.getItem('org-chart-pan');
+      if (savedPan) setPan(JSON.parse(savedPan));
+    } catch {}
+  }, []);
+
   const resetLayout = useCallback(() => {
     setNodeOverrides({});
     setPanelSize(null);
-    try { localStorage.removeItem(RESIZE_STORAGE_KEY); } catch {}
+    setHasUnsaved(false);
+    try {
+      localStorage.removeItem(RESIZE_STORAGE_KEY);
+      localStorage.removeItem('org-chart-node-overrides');
+      localStorage.removeItem('org-chart-zoom');
+      localStorage.removeItem('org-chart-pan');
+    } catch {}
     const newZoom = isMobile ? 0.45 : 0.7;
     setZoom(newZoom);
     setTimeout(() => centerView(newZoom), 50);
@@ -317,6 +344,22 @@ export default function OrganizationChart({ isMobile = false, isTablet = false, 
             </button>
           ))}
           <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 38, textAlign: 'right' }}>{Math.round(zoom * 100)}%</span>
+          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+          <button
+            onClick={saveLayout}
+            title="Save current layout"
+            style={{
+              height: 34, paddingInline: 12, borderRadius: 8,
+              background: saveFlash ? 'rgba(34,197,94,0.25)' : hasUnsaved ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)',
+              border: `1px solid ${saveFlash ? 'rgba(34,197,94,0.5)' : hasUnsaved ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.12)'}`,
+              color: saveFlash ? '#22c55e' : '#fff',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              transition: 'all 0.2s',
+            }}
+          >
+            {saveFlash ? '✓ Saved' : hasUnsaved ? '💾 Save' : '💾'}
+          </button>
         </div>
       </div>
 

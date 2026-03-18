@@ -31,6 +31,9 @@ import {
   Settings2,
   Search,
   MessageSquare,
+  Facebook,
+  Instagram,
+  Linkedin,
 } from 'lucide-react'
 import type { Toast } from '../../hooks/useRealTimeData'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -164,6 +167,11 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
   const [comments, setComments] = useState<{ id: string; author: string; content: string; created_at: string }[]>([])
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
+
+  // Platform and media generation state
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('instagram')
+  const [mediaGenerating, setMediaGenerating] = useState(false)
+  const [generatedMedia, setGeneratedMedia] = useState<{ type: 'image' | 'video'; url: string; jobId: string } | null>(null)
   const [researchExpanded, setResearchExpanded] = useState(false)
   const [researchTimeout, setResearchTimeout] = useState(false)
   const researchPollingStartRef = useRef<number>(0)
@@ -1608,6 +1616,59 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Platform Selector */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.5)',
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.03em',
+                  marginBottom: '8px',
+                }}>
+                  Platform
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {[
+                    { id: 'facebook', label: 'Facebook', icon: Facebook },
+                    { id: 'instagram', label: 'Instagram', icon: Instagram },
+                    { id: 'tiktok', label: 'TikTok', icon: Video },
+                    { id: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+                    { id: 'email', label: 'Email', icon: Mail },
+                  ].map((platform) => {
+                    const Icon = platform.icon
+                    const isSelected = selectedPlatform === platform.id
+                    return (
+                      <button
+                        key={platform.id}
+                        onClick={() => setSelectedPlatform(platform.id)}
+                        disabled={creating}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: isSelected
+                            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                            : 'transparent',
+                          color: isSelected ? '#fff' : 'rgba(255,255,255,0.5)',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <Icon size={16} />
+                        {platform.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Topic */}
               <div>
                 <label style={{
@@ -1642,6 +1703,183 @@ export default function ContentStudio({ supabase, onRefresh, showToast }: Conten
                     boxSizing: 'border-box' as const,
                   }}
                 />
+              </div>
+
+              {/* Media Generation */}
+              <div style={{
+                background: 'rgba(15, 15, 26, 0.7)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '14px',
+                padding: '16px',
+              }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.5)',
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.03em',
+                  marginBottom: '12px',
+                }}>
+                  AI Media Generation
+                </label>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                  <button
+                    onClick={async () => {
+                      if (!createForm.topic) return
+                      setMediaGenerating(true)
+                      setGeneratedMedia(null)
+                      try {
+                        const aspectRatios: Record<string, string> = {
+                          instagram: '1:1',
+                          tiktok: '9:16',
+                          facebook: '16:9',
+                          linkedin: '1.91:1',
+                          email: '16:9',
+                        }
+                        const response = await fetch('/api/content-dashboard/generate-media', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            topic: createForm.topic,
+                            platform: selectedPlatform,
+                            aspectRatio: aspectRatios[selectedPlatform] || '1:1',
+                            mediaType: 'image',
+                          }),
+                        })
+                        if (response.ok) {
+                          const data = await response.json()
+                          setGeneratedMedia({ type: 'image', url: data.url, jobId: data.jobId })
+                        }
+                      } catch (err) {
+                        console.error('Failed to generate image:', err)
+                      } finally {
+                        setMediaGenerating(false)
+                      }
+                    }}
+                    disabled={mediaGenerating || !createForm.topic}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px 20px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                      color: '#fff',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      opacity: mediaGenerating || !createForm.topic ? 0.5 : 1,
+                    }}
+                  >
+                    <ImageIcon size={18} />
+                    Generate Image
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!createForm.topic) return
+                      setMediaGenerating(true)
+                      setGeneratedMedia(null)
+                      try {
+                        const aspectRatios: Record<string, string> = {
+                          instagram: '1:1',
+                          tiktok: '9:16',
+                          facebook: '16:9',
+                          linkedin: '1.91:1',
+                          email: '16:9',
+                        }
+                        const response = await fetch('/api/content-dashboard/generate-media', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            topic: createForm.topic,
+                            platform: selectedPlatform,
+                            aspectRatio: aspectRatios[selectedPlatform] || '1:1',
+                            mediaType: 'video',
+                          }),
+                        })
+                        if (response.ok) {
+                          const data = await response.json()
+                          setGeneratedMedia({ type: 'video', url: data.url, jobId: data.jobId })
+                        }
+                      } catch (err) {
+                        console.error('Failed to generate video:', err)
+                      } finally {
+                        setMediaGenerating(false)
+                      }
+                    }}
+                    disabled={mediaGenerating || !createForm.topic}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px 20px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                      color: '#fff',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      opacity: mediaGenerating || !createForm.topic ? 0.5 : 1,
+                    }}
+                  >
+                    <Video size={18} />
+                    Generate Video
+                  </button>
+                </div>
+
+                {/* Media Preview */}
+                {mediaGenerating && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '32px',
+                    gap: '12px',
+                  }}>
+                    <Loader size={32} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' }}>
+                      Generating media...
+                    </span>
+                  </div>
+                )}
+                {generatedMedia && !mediaGenerating && (
+                  <div style={{
+                    background: 'rgba(15, 15, 26, 0.8)',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                  }}>
+                    {generatedMedia.type === 'image' ? (
+                      <img
+                        src={generatedMedia.url}
+                        alt="Generated content"
+                        style={{
+                          width: '100%',
+                          height: 'auto',
+                          display: 'block',
+                        }}
+                      />
+                    ) : (
+                      <video
+                        src={generatedMedia.url}
+                        controls
+                        style={{
+                          width: '100%',
+                          height: 'auto',
+                          display: 'block',
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Industry / Niche */}

@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
         approvedContent: approved,
         queuedTopics: creating,
         avgAgentHealth,
-        scheduledPosts: 0, // No scheduling system yet
+        scheduledPosts: 0, // TODO: query content_assets where status=scheduled
         timestamp: new Date().toISOString(),
       },
     })
