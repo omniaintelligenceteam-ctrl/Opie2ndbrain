@@ -15,6 +15,5 @@ CREATE TABLE IF NOT EXISTS public.larry_jobs (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add index for faster queries
 CREATE INDEX IF NOT EXISTS idx_larry_jobs_status ON public.larry_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_larry_jobs_created_at ON public.larry_jobs(created_at DESC);

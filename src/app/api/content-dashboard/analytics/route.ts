@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       bundlesResult,
       completedResult,
       failedResult,
+      scheduledResult,
     ] = await Promise.all([
       supabase
         .from('workflows')
@@ -58,6 +59,10 @@ export async function GET(request: NextRequest) {
         .from('workflows')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'failed'),
+      supabase
+        .from('content_assets')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'scheduled'),
     ])
 
     const active = activeResult.count || 0
@@ -66,6 +71,7 @@ export async function GET(request: NextRequest) {
     const creating = bundlesResult.count || 0
     const completed = completedResult.count || 0
     const failed = failedResult.count || 0
+    const scheduledCount = scheduledResult.count || 0
 
     // Calculate agent health as completion rate
     const totalFinished = completed + failed
@@ -81,7 +87,7 @@ export async function GET(request: NextRequest) {
         approvedContent: approved,
         queuedTopics: creating,
         avgAgentHealth,
-        scheduledPosts: 0, // TODO: query content_assets where status=scheduled
+        scheduledPosts: scheduledCount,
         timestamp: new Date().toISOString(),
       },
     })
