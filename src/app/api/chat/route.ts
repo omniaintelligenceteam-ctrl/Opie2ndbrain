@@ -75,7 +75,57 @@ function createStreamResponse(generator: AsyncGenerator<string>) {
   });
 }
 
-// Call OpenClaw (non-streaming, converted to SSE)
+// Gateway tool invoker — calls real tools available on the gateway
+async function invokeGatewayToolForChat(tool: string, args: Record<string, any>): Promise<string> {
+  const res = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+    },
+    body: JSON.stringify({ tool, args }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await res.json();
+  if (data.ok && data.result) {
+    const content = data.result.content;
+    if (Array.isArray(content)) return content.map((c: any) => c.text || '').join('\n');
+    if (typeof data.result === 'string') return data.result;
+    return JSON.stringify(data.result);
+  }
+  return `Error: ${data.error?.message || 'tool failed'}`;
+}
+
+// Anthropic tool definitions for gateway-available tools
+const GATEWAY_TOOLS_FOR_ANTHROPIC: Anthropic.Tool[] = [
+  {
+    name: 'web_search',
+    description: 'Search the web for current information',
+    input_schema: { type: 'object' as const, properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] },
+  },
+  {
+    name: 'web_fetch',
+    description: 'Fetch and read content from a URL',
+    input_schema: { type: 'object' as const, properties: { url: { type: 'string', description: 'URL to fetch' } }, required: ['url'] },
+  },
+  {
+    name: 'memory_search',
+    description: 'Search Wes\'s memory/knowledge base for relevant information',
+    input_schema: { type: 'object' as const, properties: { query: { type: 'string', description: 'What to search for' } }, required: ['query'] },
+  },
+  {
+    name: 'sessions_list',
+    description: 'List active OpenClaw agent sessions',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'session_status',
+    description: 'Get current OpenClaw system status, model, token usage',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+];
+
+// Opie via Anthropic with gateway tools wired in
 async function* streamOpenClaw(messages: Array<{role: string, content: any}>, sessionId: string) {
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (!lastUserMessage) {
@@ -89,82 +139,71 @@ async function* streamOpenClaw(messages: Array<{role: string, content: any}>, se
       ? lastUserMessage.content.map((p: any) => p?.text || '').filter(Boolean).join('\n')
       : String(lastUserMessage.content || '');
 
+  // Route through Anthropic with gateway tools wired in as native tool_use
   try {
-    const response = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-      },
-      body: JSON.stringify({
-        tool: 'sessions_spawn',
-        args: {
-          task: userText,
-          label: `opie:chat:${sessionId}`,
-          timeoutSeconds: 115,
-          cleanup: 'keep',
-        },
-      }),
-    });
+    const apiMessages: Anthropic.MessageParam[] = messages
+      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+      .map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: typeof m.content === 'string' ? m.content : userText,
+      }));
 
-    if (!response.ok) {
-      const error = await response.text();
-      // Fallback: some gateways don't expose sessions_spawn; use chat-completions bridge
-      if (error.includes('Tool not available: sessions_spawn')) {
-        try {
-          const fallbackStream = await gatewayChatClient.createStreamingCompletion({
-            messages: messages.map((m: any) => ({ role: m.role as 'system' | 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : userText })),
-            model: 'openclaw:main',
-            stream: true,
-            max_tokens: 4096,
-          });
-          for await (const chunk of fallbackStream) {
-            yield chunk;
+    const systemPrompt = `You are Opie, Wes's AI second brain. You have access to tools including web search, memory search, and live system status from the OpenClaw agent system. Be helpful, direct, and practical. When you use tools, summarize results clearly.`;
+
+    // Agentic loop: handle tool calls
+    let iteration = 0;
+    const maxIterations = 8;
+    let currentMessages: Anthropic.MessageParam[] = [...apiMessages];
+
+    while (iteration < maxIterations) {
+      iteration++;
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6-20251101',
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: currentMessages,
+        tools: GATEWAY_TOOLS_FOR_ANTHROPIC,
+      });
+
+      // Stream text chunks
+      let hasText = false;
+      for (const block of response.content) {
+        if (block.type === 'text' && block.text) {
+          hasText = true;
+          // Stream word by word for smooth UX
+          for (const word of block.text.split(' ')) {
+            yield `data: ${JSON.stringify({ choices: [{ delta: { content: word + ' ' } }] })}\n\n`;
           }
-          return;
-        } catch (fallbackErr) {
-          yield `data: ${JSON.stringify({ error: `OpenClaw fallback failed: ${fallbackErr instanceof Error ? fallbackErr.message : 'unknown error'}` })}\n\n`;
-          return;
         }
       }
-      yield `data: ${JSON.stringify({ error: `OpenClaw: ${error.slice(0, 200)}` })}\n\n`;
-      return;
+
+      // If no tool calls, we're done
+      if (response.stop_reason !== 'tool_use') {
+        yield `data: [DONE]\n\n`;
+        return;
+      }
+
+      // Execute tool calls
+      const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const toolUse of toolUseBlocks) {
+        yield `data: ${JSON.stringify({ choices: [{ delta: { content: `\n🔧 *${toolUse.name}…*\n` } }] })}\n\n`;
+        const result = await invokeGatewayToolForChat(toolUse.name, toolUse.input as Record<string, any>);
+        toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: result });
+      }
+
+      // Add assistant + tool results to message history
+      currentMessages = [
+        ...currentMessages,
+        { role: 'assistant', content: response.content },
+        { role: 'user', content: toolResults },
+      ];
     }
 
-    const data = await response.json();
-    let reply = '';
-
-    if (data.ok && data.result) {
-      const result = data.result;
-      // Check for error response
-      if (result.details?.status === 'error' || result.status === 'error') {
-        const errorMsg = result.details?.error || result.error || 'Unknown error';
-        reply = `Error: ${errorMsg}`;
-      }
-      else if (result.details?.reply) reply = result.details.reply;
-      else if (result.reply) reply = result.reply;
-      else if (result.text) reply = result.text;
-      else if (typeof result === 'string') reply = result;
-    } else if (!data.ok && data.error?.message?.includes('Tool not available: sessions_spawn')) {
-      // Fallback for gateways without sessions_spawn
-      const fallbackStream = await gatewayChatClient.createStreamingCompletion({
-        messages: messages.map((m: any) => ({ role: m.role as 'system' | 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : userText })),
-        model: 'openclaw:main',
-        stream: true,
-        max_tokens: 4096,
-      });
-      for await (const chunk of fallbackStream) {
-        yield chunk;
-      }
-      return;
-    }
-
-    // Stream the complete reply as one chunk
-    yield `data: ${JSON.stringify({ choices: [{ delta: { content: reply } }] })}\n\n`;
     yield `data: [DONE]\n\n`;
-
   } catch (error) {
-    console.error("[OpenClaw] Error:", error);
+    console.error("[OpenClaw/Anthropic] Error:", error);
     yield `data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'OpenClaw failed' })}\n\n`;
   }
 }
