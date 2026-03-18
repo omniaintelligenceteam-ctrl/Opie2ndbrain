@@ -2,29 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import WorkflowHub from '../../components/content-dashboard/WorkflowHub'
 import ContentStudio from '../../components/content-dashboard/ContentStudio'
-import DashboardHeader from '../../components/content-dashboard/DashboardHeader'
-import ScheduleView from '../../components/content-dashboard/ScheduleView'
-import ABTestView from '../../components/content-dashboard/ABTestView'
-import AnalyticsView from '../../components/content-dashboard/AnalyticsView'
-import IntegrationsView from '../../components/content-dashboard/IntegrationsView'
-import LarryStudio from '../../components/content-dashboard/LarryStudio'
 import { supabase } from '../../lib/supabase'
-import { Activity, FileText, Calendar, GitBranch, BarChart3, Webhook, Film, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useToast } from '../../hooks/useRealTimeData'
 import { ToastContainer } from '../../components/NotificationCenter'
 
-interface DashboardStats {
-  activeWorkflows: number
-  queuedWorkflows: number
-  approvedContent: number
-  queuedTopics: number
-  avgAgentHealth: number
-  scheduledPosts: number
-}
-
-// Sidebar persistence
 function getSidebarState(): boolean {
   if (typeof window === 'undefined') return true
   const saved = localStorage.getItem('ccc-sidebar-expanded')
@@ -37,7 +20,6 @@ function saveSidebarState(expanded: boolean): void {
   }
 }
 
-// ─── Sidebar Styles (matching OpieKanban/kanbanStyles.ts) ────────────────────
 const sidebarStyles = {
   sidebar: {
     position: 'fixed' as const,
@@ -105,109 +87,28 @@ const sidebarStyles = {
 }
 
 const NAV_LINKS = [
-  { href: '/', label: 'Dashboard', icon: '🏠', id: 'dashboard' },
-  { href: '/content-command-center', label: 'Content Center', icon: '📡', id: 'content-center' },
-  { href: '/content-command-center?tab=workflows', label: 'Workflow Hub', icon: '🧩', id: 'workflow-hub' },
+  { href: '/', label: 'Dashboard', icon: '??', id: 'dashboard' },
+  { href: '/content-command-center', label: 'Content Center', icon: '??', id: 'content-center' },
+  { href: '/workflow-hub', label: 'Workflow Hub', icon: '??', id: 'workflow-hub' },
 ]
 
-const TAB_IDS = ['workflows', 'content', 'schedule', 'ab-tests', 'analytics', 'integrations', 'larry'] as const
-type TabId = (typeof TAB_IDS)[number]
-
 export default function ContentCommandCenter() {
-  const [activeTab, setActiveTab] = useState<TabId>('workflows')
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const { toasts, showToast, dismissToast } = useToast()
 
-  // Load sidebar state on mount
   useEffect(() => {
     setSidebarExpanded(getSidebarState())
   }, [])
 
   const toggleSidebar = () => {
-    const newState = !sidebarExpanded
-    setSidebarExpanded(newState)
-    saveSidebarState(newState)
+    const next = !sidebarExpanded
+    setSidebarExpanded(next)
+    saveSidebarState(next)
   }
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const syncTabFromUrl = () => {
-      const requestedTab = new URLSearchParams(window.location.search).get('tab')
-      if (requestedTab && TAB_IDS.includes(requestedTab as TabId)) {
-        setActiveTab(requestedTab as TabId)
-      }
-    }
-    syncTabFromUrl()
-    window.addEventListener('popstate', syncTabFromUrl)
-    return () => window.removeEventListener('popstate', syncTabFromUrl)
-  }, [])
-
-  const handleTabChange = (tabId: TabId) => {
-    setActiveTab(tabId)
-    if (typeof window !== 'undefined') {
-      const nextParams = new URLSearchParams(window.location.search)
-      nextParams.set('tab', tabId)
-      window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}`)
-    }
-  }
-
-  // Fetch dashboard stats
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/content-dashboard/analytics')
-
-      const data = await response.json()
-      if (data.success) {
-        setStats(data.data)
-        setError(null)
-      } else {
-        throw new Error(data.error || 'Failed to fetch stats')
-      }
-    } catch (err: any) {
-      console.error('Failed to fetch dashboard stats:', err)
-
-      setStats({
-        activeWorkflows: 0,
-        queuedWorkflows: 0,
-        approvedContent: 0,
-        queuedTopics: 0,
-        avgAgentHealth: 0.0,
-        scheduledPosts: 0
-      })
-
-      setError('Dashboard temporarily using cached data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchStats()
-    const interval = setInterval(fetchStats, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const tabs = [
-    { id: 'workflows', label: 'Workflows', icon: Activity },
-    { id: 'content', label: 'Content Studio', icon: FileText },
-    { id: 'schedule', label: 'Schedule', icon: Calendar },
-    { id: 'ab-tests', label: 'A/B Tests', icon: GitBranch },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'integrations', label: 'Integrations', icon: Webhook },
-    { id: "larry", label: "Larry Studio", icon: Film },
-  ]
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a14' }}>
-      {/* ─── Sidebar ──────────────────────────────────────────────── */}
-      <aside style={{
-        ...sidebarStyles.sidebar,
-        width: sidebarExpanded ? '240px' : '72px',
-      }}>
-        {/* Logo / Brand */}
+      <aside style={{ ...sidebarStyles.sidebar, width: sidebarExpanded ? '240px' : '72px' }}>
         <div style={{
           padding: sidebarExpanded ? '24px 20px' : '24px 12px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -227,33 +128,18 @@ export default function ContentCommandCenter() {
             boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)',
             flexShrink: 0,
           }}>
-            🧠
+            ??
           </div>
           {sidebarExpanded && (
-            <span style={{
-              color: '#fff',
-              fontSize: '1.2rem',
-              fontWeight: 700,
-              letterSpacing: '-0.02em',
-              background: 'linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
+            <span style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
               Opie 2nd Brain
             </span>
           )}
         </div>
 
-        {/* Navigation */}
         <nav style={{ flex: 1, padding: sidebarExpanded ? '12px 14px' : '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
           {NAV_LINKS.map((link) => {
-            const isActive =
-              link.id === 'workflow-hub'
-                ? activeTab === 'workflows'
-                : link.id === 'content-center'
-                  ? activeTab !== 'workflows'
-                  : false
+            const isActive = link.id === 'content-center'
             return (
               <Link
                 key={link.id}
@@ -265,137 +151,43 @@ export default function ContentCommandCenter() {
                 }}
                 title={!sidebarExpanded ? link.label : undefined}
               >
-                <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>
-                  {link.icon}
-                </span>
-                {sidebarExpanded && (
-                  <span style={{ flex: 1, fontWeight: 500 }}>{link.label}</span>
-                )}
+                <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>{link.icon}</span>
+                {sidebarExpanded && <span style={{ flex: 1, fontWeight: 500 }}>{link.label}</span>}
               </Link>
             )
           })}
         </nav>
 
-        {/* Collapse Toggle */}
-        <div style={{
-          padding: '8px 14px',
-          display: 'flex',
-          justifyContent: sidebarExpanded ? 'flex-end' : 'center',
-        }}>
-          <button
-            onClick={toggleSidebar}
-            style={sidebarStyles.collapseBtn}
-            aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
+        <div style={{ padding: '8px 14px', display: 'flex', justifyContent: sidebarExpanded ? 'flex-end' : 'center' }}>
+          <button onClick={toggleSidebar} style={sidebarStyles.collapseBtn} aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}>
             {sidebarExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
           </button>
         </div>
 
-        {/* Footer */}
         <div style={sidebarStyles.footer}>
-          {sidebarExpanded ? (
-            <span style={sidebarStyles.footerText}>Omnia Intelligence</span>
-          ) : (
-            <span style={{ fontSize: '18px', opacity: 0.5 }}>🌟</span>
-          )}
+          {sidebarExpanded ? <span style={sidebarStyles.footerText}>Omnia Intelligence</span> : <span style={{ fontSize: '18px', opacity: 0.5 }}>??</span>}
         </div>
       </aside>
 
-      {/* ─── Main Content ─────────────────────────────────────────── */}
-      <main style={{
-        flex: 1,
-        marginLeft: sidebarExpanded ? '240px' : '72px',
-        transition: 'margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-        minHeight: '100vh',
-        overflow: 'auto',
-      }}>
-        <div style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          padding: '32px 40px',
-          color: 'var(--text-primary)',
-        }}>
-          {/* Dashboard Header */}
-          <DashboardHeader
-            stats={stats}
-            loading={loading}
-            error={error}
-            onRefresh={fetchStats}
-          />
-
-          {/* ─── Premium Tab Navigation ───────────────────────────── */}
+      <main style={{ flex: 1, marginLeft: sidebarExpanded ? '240px' : '72px', transition: 'margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1)', minHeight: '100vh', overflow: 'auto' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 40px', color: 'var(--text-primary)' }}>
           <div style={{
-            marginBottom: '36px',
-            padding: '6px',
-            borderRadius: '14px',
-            background: 'rgba(255,255,255,0.03)',
+            marginBottom: '20px',
+            padding: '20px 24px',
+            borderRadius: '16px',
+            background: 'rgba(255,255,255,0.02)',
             border: '1px solid rgba(255,255,255,0.06)',
-            display: 'inline-flex',
-            gap: '4px',
           }}>
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id as TabId)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 24px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    letterSpacing: '-0.01em',
-                    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                    ...(isActive ? {
-                      background: 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.15) 100%)',
-                      color: '#fff',
-                      boxShadow: 'inset 0 0 0 1px rgba(102,126,234,0.25), 0 2px 12px rgba(102,126,234,0.15)',
-                    } : {
-                      background: 'transparent',
-                      color: 'rgba(255,255,255,0.5)',
-                    }),
-                  }}
-                >
-                  <Icon size={16} />
-                  {tab.label}
-                </button>
-              )
-            })}
+            <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 700, color: '#8b5cf6' }}>Content Maker System</h1>
+            <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.55)' }}>
+              Content Center is now focused only on content creation workflows and production.
+            </p>
           </div>
 
-          {/* Tab Content */}
-          {activeTab === 'workflows' && (
-            <WorkflowHub supabase={supabase} showToast={showToast} />
-          )}
-
-          {activeTab === 'content' && (
-            <ContentStudio supabase={supabase} onRefresh={fetchStats} showToast={showToast} />
-          )}
-
-          {activeTab === 'schedule' && (
-            <ScheduleView supabase={supabase} showToast={showToast} />
-          )}
-
-          {activeTab === 'ab-tests' && (
-            <ABTestView supabase={supabase} showToast={showToast} />
-          )}
-
-          {activeTab === 'analytics' && (
-            <AnalyticsView showToast={showToast} />
-          )}
-
-          {activeTab === 'integrations' && (
-            <IntegrationsView showToast={showToast} />
-          )}
-{activeTab === "larry" && (            <LarryStudio supabase={supabase} showToast={showToast} />          )}
+          <ContentStudio supabase={supabase} showToast={showToast} />
         </div>
       </main>
+
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
