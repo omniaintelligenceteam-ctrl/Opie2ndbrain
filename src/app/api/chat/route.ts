@@ -76,12 +76,18 @@ function createStreamResponse(generator: AsyncGenerator<string>) {
 }
 
 // Call OpenClaw (non-streaming, converted to SSE)
-async function* streamOpenClaw(messages: Array<{role: string, content: string}>, sessionId: string) {
+async function* streamOpenClaw(messages: Array<{role: string, content: any}>, sessionId: string) {
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (!lastUserMessage) {
     yield `data: ${JSON.stringify({ error: 'No user message' })}\n\n`;
     return;
   }
+
+  const userText = typeof lastUserMessage.content === 'string'
+    ? lastUserMessage.content
+    : Array.isArray(lastUserMessage.content)
+      ? lastUserMessage.content.map((p: any) => p?.text || '').filter(Boolean).join('\n')
+      : String(lastUserMessage.content || '');
 
   try {
     const response = await fetch(`${OPENCLAW_GATEWAY_URL}/tools/invoke`, {
@@ -93,7 +99,7 @@ async function* streamOpenClaw(messages: Array<{role: string, content: string}>,
       body: JSON.stringify({
         tool: 'sessions_spawn',
         args: {
-          task: lastUserMessage.content,
+          task: userText,
           label: `opie:chat:${sessionId}`,
           timeoutSeconds: 115,
           cleanup: 'keep',
@@ -1103,16 +1109,11 @@ export async function POST(req: NextRequest) {
     ];
 
     try {
-      const stream = await gatewayChatClient.createStreamingCompletion({
-        messages: gatewayMessages,
-        model: "openclaw:main",
-        stream: true,
-        max_tokens: 4096,
-      });
-
-      return createStreamResponse(stream);
+      // Use tool bridge directly so Opie gets full OpenClaw powers (tools/subagents/memory)
+      const generator = streamOpenClaw(gatewayMessages as Array<{ role: string; content: string }>, sessionId);
+      return createStreamResponse(generator);
     } catch (error) {
-      console.error('[Chat] OpenClaw gateway failed, falling back:', error);
+      console.error('[Chat] OpenClaw tool bridge failed, falling back:', error);
     }
   }
 
