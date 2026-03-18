@@ -415,8 +415,25 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.error('[VoiceEngine] TTS API error:', res.status, errData);
-        dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
+        console.warn('[VoiceEngine] TTS API error:', res.status, errData, '— falling back to browser speechSynthesis');
+        // Fallback: browser Web Speech API (works with zero API keys)
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          const cleanText = text.replace(/[*_`#>]/g, '').trim();
+          const utt = new SpeechSynthesisUtterance(cleanText);
+          utt.rate = 1.0;
+          utt.pitch = 1.0;
+          utt.volume = 1.0;
+          // Pick a natural English voice if available
+          const voices = window.speechSynthesis.getVoices();
+          const preferred = voices.find(v => v.lang === 'en-US' && v.localService) || voices.find(v => v.lang.startsWith('en'));
+          if (preferred) utt.voice = preferred;
+          utt.onend = () => dispatch({ type: 'TTS_END' });
+          utt.onerror = (e) => dispatch({ type: 'TTS_ERROR', error: e.error });
+          dispatch({ type: 'TTS_START' });
+          window.speechSynthesis.speak(utt);
+        } else {
+          dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
+        }
         return;
       }
 

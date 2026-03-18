@@ -24,7 +24,19 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TTS] Generating speech: provider=${provider}, chars=${text.length}, text="${text.slice(0, 200)}"`);
 
-    switch (provider) {
+    // Auto-select best available provider based on configured keys
+    const azureKey = process.env.AZURE_SPEECH_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const elevenKey = process.env.ELEVENLABS_API_KEY;
+
+    // If provider is 'auto' or default 'azure' with no key, pick best available
+    const effectiveProvider = (provider === 'auto' || (provider === 'azure' && !azureKey))
+      ? (openaiKey ? 'openai' : elevenKey ? 'elevenlabs' : 'edge')
+      : provider;
+
+    console.log(`[TTS] effective provider: ${effectiveProvider} (requested: ${provider})`);
+
+    switch (effectiveProvider) {
       case 'openai':
         return await generateOpenAI(text, voice || 'nova');
       case 'elevenlabs':
