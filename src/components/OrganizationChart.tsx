@@ -1,78 +1,8 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { useMemo } from 'react';
-import { ORG_DATA, OrgNode, OrgNodeWithChildren, buildOrgTree, getStatusIndicator } from '../types/org';
-import OrgNodeComponent from './OrgNode';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { ORG_DATA, OrgNode, OrgNodeWithChildren, buildOrgTree, getStatusColor } from '../types/org';
 import { useAgentSessions } from '../hooks/useAgentSessions';
-
-// Hook for spawned agents
-function useSpawnedAgents(refreshInterval: number = 5000) {
-  const [agents, setAgents] = React.useState([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/tools/spawn?action=list');
-        if (response.ok) {
-          const data = await response.json();
-          setAgents(data.agents || []);
-          setError(null);
-        } else {
-          setError('Failed to fetch agents');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAgents();
-    const interval = setInterval(fetchAgents, refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval]);
-
-  return { agents, loading, error };
-}
-
-// Hook for browser sessions
-function useBrowserSessions(refreshInterval: number = 5000) {
-  const [sessions, setSessions] = React.useState([]);
-  const [status, setStatus] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const fetchSessions = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/tools/browser?action=status');
-        if (response.ok) {
-          const data = await response.json();
-          setSessions(data.local_sessions || []);
-          setStatus(data.gateway_status);
-          setError(data.gateway_error);
-        } else {
-          setError('Failed to fetch browser status');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSessions();
-    const interval = setInterval(fetchSessions, refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval]);
-
-  return { sessions, status, loading, error };
-}
 
 interface OrganizationChartProps {
   isMobile?: boolean;
@@ -80,347 +10,346 @@ interface OrganizationChartProps {
   onNodeClick?: (node: OrgNode) => void;
 }
 
-export default function OrganizationChart({ 
-  isMobile = false, 
-  isTablet = false,
-  onNodeClick 
-}: OrganizationChartProps): React.ReactElement {
+// Card dimensions
+const CARD_W = 160;
+const CARD_H = 90;
+const H_GAP = 32;   // horizontal gap between siblings
+const V_GAP = 72;   // vertical gap between levels
+
+interface PositionedNode extends OrgNodeWithChildren {
+  x: number;
+  y: number;
+  subtreeWidth: number;
+}
+
+function calcSubtreeWidth(node: OrgNodeWithChildren): number {
+  if (node.children.length === 0) return CARD_W;
+  const childrenWidth = node.children.reduce((sum, c) => sum + calcSubtreeWidth(c), 0)
+    + H_GAP * (node.children.length - 1);
+  return Math.max(CARD_W, childrenWidth);
+}
+
+function positionTree(node: OrgNodeWithChildren, x: number, y: number): PositionedNode {
+  const subtreeWidth = calcSubtreeWidth(node);
+  const positioned: PositionedNode = { ...node, x, y, subtreeWidth, children: [] };
+
+  if (node.children.length > 0) {
+    const totalChildWidth = node.children.reduce((sum, c) => sum + calcSubtreeWidth(c), 0)
+      + H_GAP * (node.children.length - 1);
+    let childX = x + subtreeWidth / 2 - totalChildWidth / 2;
+
+    positioned.children = node.children.map(child => {
+      const childSubtree = calcSubtreeWidth(child);
+      const positioned_child = positionTree(child, childX, y + CARD_H + V_GAP);
+      childX += childSubtree + H_GAP;
+      return positioned_child;
+    });
+  }
+  return positioned;
+}
+
+function collectAll(node: PositionedNode): PositionedNode[] {
+  return [node, ...node.children.flatMap(c => collectAll(c as PositionedNode))];
+}
+
+function collectEdges(node: PositionedNode): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+  return node.children.flatMap(child => {
+    const c = child as PositionedNode;
+    return [
+      { x1: node.x + CARD_W / 2, y1: node.y + CARD_H, x2: c.x + CARD_W / 2, y2: c.y },
+      ...collectEdges(c),
+    ];
+  });
+}
+
+function NodeCard({ node, onClick, selected }: { node: PositionedNode; onClick: () => void; selected: boolean }) {
+  const statusColor = getStatusColor(node.status);
+  const isTopLevel = node.reportsTo === null;
+  const isDeptHead = node.reportsTo === 'opie';
+
+  return (
+    <g onClick={onClick} style={{ cursor: 'pointer' }}>
+      {/* Glow */}
+      {selected && (
+        <rect
+          x={node.x - 4} y={node.y - 4}
+          width={CARD_W + 8} height={CARD_H + 8}
+          rx={14} fill="none"
+          stroke={node.color} strokeWidth={2}
+          opacity={0.5}
+          filter="url(#glow)"
+        />
+      )}
+      {/* Card background */}
+      <rect
+        x={node.x} y={node.y}
+        width={CARD_W} height={CARD_H}
+        rx={12}
+        fill={selected ? `${node.color}25` : isTopLevel ? 'rgba(255,215,0,0.08)' : isDeptHead ? `${node.color}12` : 'rgba(255,255,255,0.04)'}
+        stroke={selected ? node.color : node.color + '50'}
+        strokeWidth={selected ? 2 : 1}
+      />
+      {/* Status bar at bottom */}
+      <rect
+        x={node.x + 12} y={node.y + CARD_H - 6}
+        width={CARD_W - 24} height={3}
+        rx={2}
+        fill={statusColor + '60'}
+      />
+      {/* Status dot */}
+      <circle cx={node.x + CARD_W - 16} cy={node.y + 14} r={5} fill={statusColor} />
+      {/* Avatar */}
+      <text x={node.x + 16} y={node.y + 30} fontSize={22} textAnchor="start" dominantBaseline="middle">{node.avatar}</text>
+      {/* Name */}
+      <text
+        x={node.x + 44} y={node.y + 22}
+        fontSize={isTopLevel ? 13 : isDeptHead ? 12 : 11}
+        fontWeight={isDeptHead || isTopLevel ? 700 : 600}
+        fill="#ffffff"
+        textAnchor="start"
+        dominantBaseline="middle"
+      >
+        {node.name}
+      </text>
+      {/* Role */}
+      <text
+        x={node.x + 44} y={node.y + 38}
+        fontSize={9}
+        fill={node.color}
+        textAnchor="start"
+        dominantBaseline="middle"
+        opacity={0.9}
+      >
+        {node.role.length > 20 ? node.role.slice(0, 19) + '…' : node.role}
+      </text>
+      {/* Model */}
+      <text
+        x={node.x + 12} y={node.y + 62}
+        fontSize={8.5}
+        fill="rgba(255,255,255,0.35)"
+        textAnchor="start"
+        dominantBaseline="middle"
+      >
+        {node.model.length > 26 ? node.model.slice(0, 25) + '…' : node.model}
+      </text>
+    </g>
+  );
+}
+
+export default function OrganizationChart({ isMobile = false, isTablet = false, onNodeClick }: OrganizationChartProps) {
+  const [zoom, setZoom] = useState(isMobile ? 0.55 : 0.82);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  
-  const {
-    nodes: agentNodes,
-    activeCount,
-    loading,
-    error,
-  } = useAgentSessions(5000, true);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const {
-    agents: spawnedAgents,
-    loading: agentsLoading,
-    error: agentsError,
-  } = useSpawnedAgents(5000);
+  const { nodes: agentNodes } = useAgentSessions(5000, true);
 
-  const {
-    sessions: browserSessions,
-    status: browserStatus,
-    loading: browserLoading,
-    error: browserError,
-  } = useBrowserSessions(5000);
-
-  // Merge with real-time data via agentIds mapping
   const orgData = useMemo(() => {
     return ORG_DATA.map(orgNode => {
-      if (!orgNode.agentIds) return orgNode; // WES — no agent mapping
-
-      // OPIE special case: coordinator status
+      if (!orgNode.agentIds) return orgNode;
       if (orgNode.agentIds.includes('*')) {
         const anyWorking = agentNodes.some(a => a.status === 'working');
-        const anyConnected = agentNodes.some(a => a.status === 'connected');
-        const totalSessions = agentNodes.reduce((sum, a) => sum + (a.activeSessions || 0), 0);
-
-        let status: OrgNode['status'];
-        if (anyWorking) status = 'talking';
-        else if (anyConnected) status = 'thinking';
-        else status = 'idle';
-
-        return { ...orgNode, status, activeSessions: totalSessions };
+        return { ...orgNode, status: (anyWorking ? 'busy' : 'active') as OrgNode['status'] };
       }
-
-      // Normal mapping: find matching agents by agentIds
-      const matchingAgents = agentNodes.filter(a => orgNode.agentIds!.includes(a.id));
-      if (matchingAgents.length > 0) {
-        const anyWorking = matchingAgents.some(a => a.status === 'working');
-        const anyConnected = matchingAgents.some(a => a.status === 'connected');
-        const totalSessions = matchingAgents.reduce((sum, a) => sum + (a.activeSessions || 0), 0);
-
-        return {
-          ...orgNode,
-          status: (anyWorking ? 'busy' : anyConnected ? 'active' : 'idle') as OrgNode['status'],
-          activeSessions: totalSessions,
-        };
+      const matching = agentNodes.filter(a => orgNode.agentIds!.includes(a.id));
+      if (matching.length > 0) {
+        const anyWorking = matching.some(a => a.status === 'working');
+        const anyConnected = matching.some(a => a.status === 'connected');
+        return { ...orgNode, status: (anyWorking ? 'busy' : anyConnected ? 'active' : 'idle') as OrgNode['status'] };
       }
-
       return orgNode;
     });
   }, [agentNodes]);
 
   const orgTree = useMemo(() => buildOrgTree(orgData), [orgData]);
 
-  const handleNodeClick = useCallback((node: OrgNode) => {
-    setSelectedNode(node.id === selectedNode ? null : node.id);
-    onNodeClick?.(node);
-  }, [onNodeClick, selectedNode]);
+  const positionedTrees = useMemo(() => {
+    let offsetX = 0;
+    return orgTree.map(root => {
+      const sw = calcSubtreeWidth(root);
+      const tree = positionTree(root, offsetX, 0);
+      offsetX += sw + H_GAP * 2;
+      return tree;
+    });
+  }, [orgTree]);
 
-  const workingCount = orgData.filter(n => n.status === 'busy' || n.status === 'talking' || n.status === 'working').length;
+  const allNodes = useMemo(() => positionedTrees.flatMap(collectAll), [positionedTrees]);
+  const allEdges = useMemo(() => positionedTrees.flatMap(collectEdges), [positionedTrees]);
 
-  const renderOrgNode = (nodeWithChildren: OrgNodeWithChildren, level: number = 0): React.ReactElement => {
-    const hasChildren = nodeWithChildren.children.length > 0;
-    
-    return (
-      <div
-        key={nodeWithChildren.id}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          position: 'relative',
-        }}
-      >
-        <div style={{ marginBottom: hasChildren ? '24px' : 0 }}>
-          <OrgNodeComponent 
-            node={nodeWithChildren} 
-            onNodeClick={handleNodeClick}
-            compact={isMobile || isTablet}
-          />
-        </div>
+  const bounds = useMemo(() => {
+    if (!allNodes.length) return { minX: 0, minY: 0, maxX: 800, maxY: 400 };
+    const xs = allNodes.map(n => n.x);
+    const ys = allNodes.map(n => n.y);
+    return {
+      minX: Math.min(...xs) - 32,
+      minY: Math.min(...ys) - 32,
+      maxX: Math.max(...xs) + CARD_W + 32,
+      maxY: Math.max(...ys) + CARD_H + 32,
+    };
+  }, [allNodes]);
 
-        {/* Connection line down */}
-        {hasChildren && (
-          <div
-            style={{
-              width: '2px',
-              height: '20px',
-              background: 'linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1))',
-              marginBottom: '8px',
-            }}
-          />
-        )}
+  const svgW = bounds.maxX - bounds.minX;
+  const svgH = bounds.maxY - bounds.minY;
 
-        {/* Children */}
-        {hasChildren && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '16px' : '20px',
-              alignItems: isMobile ? 'center' : 'flex-start',
-            }}
-          >
-            {!isMobile && nodeWithChildren.children.length > 1 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  height: '2px',
-                  width: `${(nodeWithChildren.children.length - 1) * 240}px`,
-                  background: 'rgba(255,255,255,0.2)',
-                }}
-              />
-            )}
+  // Center on mount
+  useEffect(() => {
+    if (containerRef.current) {
+      const cw = containerRef.current.clientWidth;
+      const ch = containerRef.current.clientHeight;
+      setPan({
+        x: (cw - svgW * zoom) / 2,
+        y: Math.max(24, (ch - svgH * zoom) / 2),
+      });
+    }
+  }, [svgW, svgH, zoom]);
 
-            {nodeWithChildren.children.map(child => renderOrgNode(child, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoom(z => Math.min(2.5, Math.max(0.3, z * delta)));
+  }, []);
 
-  if (loading && agentNodes.length === 0) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: '300px',
-        color: 'rgba(255,255,255,0.6)'
-      }}>
-        Loading organization structure...
-      </div>
-    );
-  }
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as SVGElement).tagName === 'rect' || (e.target as SVGElement).tagName === 'text' || (e.target as SVGElement).tagName === 'circle') return;
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+  }, [isPanning, panStart]);
+
+  const handleMouseUp = useCallback(() => setIsPanning(false), []);
+
+  const resetView = useCallback(() => {
+    if (containerRef.current) {
+      const cw = containerRef.current.clientWidth;
+      const ch = containerRef.current.clientHeight;
+      const newZoom = isMobile ? 0.55 : 0.82;
+      setZoom(newZoom);
+      setPan({ x: (cw - svgW * newZoom) / 2, y: Math.max(24, (ch - svgH * newZoom) / 2) });
+    }
+  }, [isMobile, svgW, svgH]);
+
+  const selectedData = selectedNode ? allNodes.find(n => n.id === selectedNode) : null;
 
   return (
-    <div style={{ padding: isMobile ? '16px' : '24px' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: isMobile ? '12px' : '24px', paddingTop: isMobile ? '72px' : '24px' }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <h1 style={{ color: '#fff', fontSize: '1.75rem', fontWeight: 700, margin: '0 0 8px 0' }}>
-          🏢 Organization Structure
-        </h1>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', margin: 0 }}>
-          Team hierarchy and real-time agent status
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexShrink: 0 }}>
+        <div>
+          <h2 style={{ color: '#fff', fontSize: isMobile ? 18 : 22, fontWeight: 700, margin: 0 }}>🏢 Organization</h2>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>{allNodes.length} agents · drag to pan · scroll to zoom</p>
+        </div>
+        {/* Zoom Controls */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {[
+            { label: '−', action: () => setZoom(z => Math.max(0.3, z - 0.15)) },
+            { label: '⊙', action: resetView },
+            { label: '+', action: () => setZoom(z => Math.min(2.5, z + 0.15)) },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              onClick={btn.action}
+              style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: '#fff', fontSize: btn.label === '⊙' ? 18 : 20,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >{btn.label}</button>
+          ))}
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, minWidth: 40 }}>
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        gap: '12px', 
-        marginBottom: '32px',
-        flexWrap: 'wrap'
-      }}>
-        {[
-          { label: 'Total', value: orgData.length, color: '#3B82F6' },
-          { label: 'Active', value: orgData.filter(n => n.status === 'active' || n.status === 'thinking').length, color: '#10B981' },
-          { label: 'Working', value: workingCount, color: '#F59E0B' },
-          { label: 'Idle', value: orgData.filter(n => n.status === 'idle').length, color: '#6B7280' },
-        ].map(stat => (
-          <div
-            key={stat.label}
-            style={{
-              background: `${stat.color}15`,
-              border: `1px solid ${stat.color}30`,
-              borderRadius: '8px',
-              padding: '8px 16px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '18px', fontWeight: 700, color: stat.color }}>
-              {stat.value}
-            </div>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' }}>
-              {stat.label}
-            </div>
-          </div>
-        ))}
+      {/* Canvas */}
+      <div
+        ref={containerRef}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{
+          flex: 1, overflow: 'hidden', borderRadius: 16,
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          cursor: isPanning ? 'grabbing' : 'grab',
+          position: 'relative', minHeight: isMobile ? 400 : 500,
+        }}
+      >
+        <svg
+          width={svgW}
+          height={svgH}
+          style={{ position: 'absolute', left: pan.x, top: pan.y, transform: `scale(${zoom})`, transformOrigin: '0 0', overflow: 'visible' }}
+        >
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          {/* Edges */}
+          {allEdges.map((e, i) => {
+            const midY = (e.y1 + e.y2) / 2;
+            return (
+              <path
+                key={i}
+                d={`M ${e.x1 - bounds.minX} ${e.y1 - bounds.minY} C ${e.x1 - bounds.minX} ${midY - bounds.minY}, ${e.x2 - bounds.minX} ${midY - bounds.minY}, ${e.x2 - bounds.minX} ${e.y2 - bounds.minY}`}
+                stroke="rgba(255,255,255,0.15)"
+                strokeWidth={1.5}
+                fill="none"
+              />
+            );
+          })}
+
+          {/* Nodes */}
+          {allNodes.map(node => (
+            <NodeCard
+              key={node.id}
+              node={{ ...node, x: node.x - bounds.minX, y: node.y - bounds.minY }}
+              selected={selectedNode === node.id}
+              onClick={() => setSelectedNode(prev => prev === node.id ? null : node.id)}
+            />
+          ))}
+        </svg>
       </div>
 
-      {/* Extended Capabilities Panel */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '16px', 
-        marginBottom: '32px', 
-        justifyContent: 'center',
-        flexWrap: 'wrap' 
-      }}>
-        {/* Spawned Agents Panel */}
+      {/* Selected node detail */}
+      {selectedData && (
         <div style={{
-          background: 'rgba(139, 69, 255, 0.1)',
-          border: '1px solid rgba(139, 69, 255, 0.3)',
-          borderRadius: '12px',
-          padding: '16px',
-          minWidth: '200px',
+          marginTop: 16, padding: '16px 20px', borderRadius: 12, flexShrink: 0,
+          background: `${selectedData.color}10`,
+          border: `1px solid ${selectedData.color}40`,
+          display: 'flex', alignItems: 'center', gap: 16,
         }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            marginBottom: '12px' 
-          }}>
-            <div style={{ fontSize: '20px' }}>🤖</div>
-            <div>
-              <div style={{ color: '#8B45FF', fontSize: '14px', fontWeight: 600 }}>
-                Sub-Agents
-              </div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
-                {spawnedAgents.length} spawned
-              </div>
+          <span style={{ fontSize: 32 }}>{selectedData.avatar}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>{selectedData.name} — {selectedData.title}</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>
+              {selectedData.skills.join(' · ')}
             </div>
           </div>
-          
-          {spawnedAgents.length > 0 ? (
-            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-              {spawnedAgents.slice(0, 3).map((agent: any) => (
-                <div key={agent.id} style={{ 
-                  marginBottom: '8px', 
-                  padding: '6px 8px',
-                  background: 'rgba(139, 69, 255, 0.1)',
-                  borderRadius: '6px',
-                  fontSize: '12px'
-                }}>
-                  <div style={{ color: '#fff', fontWeight: 500 }}>{agent.name}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    {agent.status} • {agent.task.slice(0, 30)}...
-                  </div>
-                </div>
-              ))}
-              {spawnedAgents.length > 3 && (
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
-                  +{spawnedAgents.length - 3} more
-                </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
-              No active sub-agents
-            </div>
-          )}
+          <div style={{
+            background: getStatusColor(selectedData.status) + '20',
+            color: getStatusColor(selectedData.status),
+            padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+          }}>{selectedData.status}</div>
+          <button
+            onClick={() => setSelectedNode(null)}
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}
+          >×</button>
         </div>
-
-        {/* Browser Sessions Panel */}
-        <div style={{
-          background: 'rgba(34, 197, 94, 0.1)',
-          border: '1px solid rgba(34, 197, 94, 0.3)',
-          borderRadius: '12px',
-          padding: '16px',
-          minWidth: '200px',
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            marginBottom: '12px' 
-          }}>
-            <div style={{ fontSize: '20px' }}>🌐</div>
-            <div>
-              <div style={{ color: '#22C55E', fontSize: '14px', fontWeight: 600 }}>
-                Browser
-              </div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
-                {browserSessions.filter((s: any) => s.status === 'ready').length} active
-              </div>
-            </div>
-          </div>
-          
-          {browserSessions.length > 0 ? (
-            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-              {browserSessions.slice(0, 3).map((session: any) => (
-                <div key={session.id} style={{ 
-                  marginBottom: '8px', 
-                  padding: '6px 8px',
-                  background: 'rgba(34, 197, 94, 0.1)',
-                  borderRadius: '6px',
-                  fontSize: '12px'
-                }}>
-                  <div style={{ color: '#fff', fontWeight: 500 }}>
-                    {session.status === 'ready' ? '🟢' : session.status === 'navigating' ? '🟡' : '🔴'} 
-                    {session.title || 'Browser Tab'}
-                  </div>
-                  <div style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    {session.url ? new URL(session.url).hostname : 'No URL'}
-                  </div>
-                </div>
-              ))}
-              {browserSessions.length > 3 && (
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>
-                  +{browserSessions.length - 3} more
-                </div>
-              )}
-            </div>
-          ) : browserStatus ? (
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
-              Browser ready
-            </div>
-          ) : (
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
-              No browser sessions
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Organization Tree */}
-      <div style={{ display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-        <div style={{ minWidth: isMobile ? 'auto' : '900px' }}>
-          {orgTree.map(root => renderOrgNode(root))}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ 
-        textAlign: 'center', 
-        marginTop: '32px',
-        padding: '12px',
-        background: 'rgba(255,255,255,0.05)',
-        borderRadius: '8px',
-        fontSize: '12px',
-        color: 'rgba(255,255,255,0.5)'
-      }}>
-        {loading ? 'Syncing...' : `Last updated: ${new Date().toLocaleTimeString()}`}
-        {error && <span style={{ color: '#ef4444', marginLeft: '8px' }}>⚠️ {error}</span>}
-      </div>
+      )}
     </div>
   );
 }
