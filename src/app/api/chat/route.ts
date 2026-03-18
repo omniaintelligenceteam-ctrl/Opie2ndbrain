@@ -29,9 +29,9 @@ const anthropic = new Anthropic({
 
 const MODELS = {
   kimi: { provider: 'ollama' as const, model: 'kimi-k2.5:cloud' },
-  opus: { provider: 'anthropic' as const, model: 'claude-opus-4-5-20250514' },
-  sonnet: { provider: 'anthropic' as const, model: 'claude-sonnet-4-20250514' },
-  haiku: { provider: 'anthropic' as const, model: 'claude-3-5-haiku-20241022' },
+  opus: { provider: 'anthropic' as const, model: 'claude-opus-4-6-20251101' },
+  sonnet: { provider: 'anthropic' as const, model: 'claude-sonnet-4-6-20251101' },
+  haiku: { provider: 'anthropic' as const, model: 'claude-haiku-4-5-20251101' },
 };
 
 type ModelAlias = keyof typeof MODELS;
@@ -440,7 +440,7 @@ Available tools: ${Object.keys(TOOLS).join(', ')}`;
       });
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-6-20251101',
         max_tokens: 1024,
         system: 'You are a helpful assistant that creates execution plans in JSON format. Always return valid JSON only.',
         messages: apiMessages,

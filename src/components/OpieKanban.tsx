@@ -97,9 +97,9 @@ function saveSidebarState(expanded: boolean): void {
 // AI model options (was in FloatingChat, now here since we removed that import)
 const AI_MODELS: { id: AIModel; name: string; description: string }[] = [
   { id: 'kimi', name: 'Kimi K2', description: 'Default - fast and capable' },
-  { id: 'opus', name: 'Claude Opus', description: 'Most capable, best for complex tasks' },
-  { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced performance and speed' },
-  { id: 'haiku', name: 'Claude Haiku', description: 'Fast and cost-effective' },
+  { id: 'opus', name: 'Claude Opus 4.6', description: 'Most capable, best for complex tasks' },
+  { id: 'sonnet', name: 'Claude Sonnet 4.6', description: 'Balanced performance and speed' },
+  { id: 'haiku', name: 'Claude Haiku 4.5', description: 'Fast and cost-effective' },
 ];
 
 // Daily motivational quotes (rotates by day of year)
