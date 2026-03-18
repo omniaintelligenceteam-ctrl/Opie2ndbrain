@@ -138,50 +138,30 @@ export async function gatewayHealth(): Promise<{ connected: boolean; latency: nu
   }
   
   try {
-    // Use /tools/invoke with session_status - most reliable endpoint
-    const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-      },
-      body: JSON.stringify({
-        tool: 'session_status',
-        args: {},
-      }),
+    // Use relay /health endpoint — it confirms both relay AND gateway connection
+    const res = await fetch(`${GATEWAY_URL}/health`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
     
     const latency = Date.now() - start;
     
-    // Check if response is JSON
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      // Gateway is up but may have auth issues or wrong endpoint
-      return { 
-        connected: false, 
-        latency, 
-        reason: 'Gateway returned non-JSON response' 
-      };
+    if (!res.ok) {
+      return { connected: false, latency, reason: `Relay HTTP ${res.status}` };
     }
     
     const data = await res.json();
     
-    if (res.ok && data.ok) {
-      return { 
-        connected: true, 
-        latency,
-        model: data.result?.model,
-        sessions: data.result?.activeSessions,
-      };
+    // Relay /health returns { ok: true, connected: true } when gateway WS is live
+    if (data.ok && data.connected) {
+      return { connected: true, latency };
     }
     
-    // Gateway responded but with error
     return {
-      connected: res.status !== 401 && res.status !== 403, // Auth errors = not connected
+      connected: false,
       latency,
-      reason: data.error?.message || `HTTP ${res.status}`,
+      reason: data.connected === false ? 'Relay up but gateway WebSocket disconnected' : 'Relay health check failed',
     };
   } catch (error) {
     const latency = Date.now() - start;
