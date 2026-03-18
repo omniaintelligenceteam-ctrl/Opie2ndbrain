@@ -1,98 +1,34 @@
 // Agent Mapping Configuration
-// Maps real specialist agents to orchestration diagram nodes
+// Maps real registered agents to orchestration diagram nodes
 
 export interface AgentNodeConfig {
   id: string;
   name: string;
   emoji: string;
-  specialistFiles: string[]; // Matches against agent filenames in /agents/specialists/
-  sessionPatterns: string[]; // Regex patterns to match session labels
-  position: { x: number; y: number }; // Position on the orchestration diagram (percentage)
+  specialistFiles: string[];
+  sessionPatterns: string[];
+  position: { x: number; y: number };
   color: string;
 }
 
-// Visual orchestration nodes and their mappings to real agents
+// Your real 14 registered agents
 export const AGENT_NODES: AgentNodeConfig[] = [
   {
-    id: 'research',
-    name: 'Research',
-    emoji: '🔍',
-    specialistFiles: ['research-agent.md', 'atlas-research-agent.md', 'forward-thinking-agent.md'],
-    sessionPatterns: ['research', 'atlas', 'analysis', 'investigate'],
-    position: { x: 20, y: 10 },
-    color: '#3b82f6', // blue
+    id: 'main',
+    name: 'Main (G)',
+    emoji: '🧠',
+    specialistFiles: ['SOUL.md', 'IDENTITY.md'],
+    sessionPatterns: ['main', 'orchestrat'],
+    position: { x: 50, y: 5 },
+    color: '#a855f7',
   },
-  {
-    id: 'code',
-    name: 'Code',
-    emoji: '💻',
-    specialistFiles: ['code-agent.md', 'codeforge-agent.md'],
-    sessionPatterns: ['code', 'develop', 'engineer', 'programming', 'codeforge'],
-    position: { x: 75, y: 10 },
-    color: '#22c55e', // green
-  },
-  {
-    id: 'proposal',
-    name: 'Proposal',
-    emoji: '📝',
-    specialistFiles: ['proposal-agent.md', 'director-agent.md'],
-    sessionPatterns: ['proposal', 'estimate', 'quote', 'bid'],
-    position: { x: 10, y: 30 },
-    color: '#8b5cf6', // purple
-  },
-  {
-    id: 'content',
-    name: 'Content',
-    emoji: '✍️',
-    specialistFiles: ['content-agent.md', 'writing-agent.md', 'lumina-content-agent.md', 'humanizer-agent.md'],
-    sessionPatterns: ['content', 'write', 'blog', 'article', 'copy', 'lumina'],
-    position: { x: 90, y: 40 },
-    color: '#f59e0b', // orange
-  },
-  {
-    id: 'sales',
-    name: 'Sales',
-    emoji: '💰',
-    specialistFiles: ['sales-agent.md', 'hunter-sales-agent.md', 'negotiator-agent.md'],
-    sessionPatterns: ['sales', 'lead', 'crm', 'hunter', 'negotiat'],
-    position: { x: 5, y: 55 },
-    color: '#22d3ee', // cyan
-  },
-  {
-    id: 'analyst',
-    name: 'Analyst',
-    emoji: '📊',
-    specialistFiles: ['analyst-agent.md', 'synthesis-agent.md', 'decision-intelligence-agent.md'],
-    sessionPatterns: ['analyst', 'data', 'metric', 'report', 'synthesis', 'decision'],
-    position: { x: 85, y: 75 },
-    color: '#ec4899', // pink
-  },
-  {
-    id: 'qa',
-    name: 'QA',
-    emoji: '✅',
-    specialistFiles: ['devils-advocate-agent.md', 'accountability-agent.md'],
-    sessionPatterns: ['qa', 'test', 'review', 'quality', 'verify', 'advocate'],
-    position: { x: 20, y: 85 },
-    color: '#84cc16', // lime
-  },
-  {
-    id: 'outreach',
-    name: 'Outreach',
-    emoji: '📧',
-    specialistFiles: ['network-intelligence-agent.md', 'stakeholder-orchestrator-agent.md', 'emotional-intelligence-agent.md'],
-    sessionPatterns: ['outreach', 'email', 'communication', 'network', 'stakeholder'],
-    position: { x: 55, y: 90 },
-    color: '#f97316', // orange-red
-  },
-  // ── DEPARTMENT HEADS ──────────────────────────────────────
   {
     id: 'elon',
     name: 'Elon (CTO)',
     emoji: '🚀',
     specialistFiles: ['elon-agent.md'],
     sessionPatterns: ['elon', 'infra', 'plugin', 'cron', 'gateway', 'system'],
-    position: { x: 50, y: 5 },
+    position: { x: 50, y: 20 },
     color: '#06b6d4',
   },
   {
@@ -101,7 +37,7 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     emoji: '📣',
     specialistFiles: ['gary-agent.md'],
     sessionPatterns: ['gary', 'marketing', 'content', 'brand', 'social', 'copy'],
-    position: { x: 20, y: 20 },
+    position: { x: 20, y: 30 },
     color: '#f97316',
   },
   {
@@ -110,8 +46,35 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     emoji: '💰',
     specialistFiles: ['warren-agent.md'],
     sessionPatterns: ['warren', 'revenue', 'pipeline', 'deal', 'outreach', 'crm'],
-    position: { x: 80, y: 20 },
+    position: { x: 80, y: 30 },
     color: '#22c55e',
+  },
+  {
+    id: 'scout',
+    name: 'Scout',
+    emoji: '🔍',
+    specialistFiles: ['scout-agent.md'],
+    sessionPatterns: ['scout', 'lead-gen', 'scrape', 'job-board'],
+    position: { x: 10, y: 50 },
+    color: '#34d399',
+  },
+  {
+    id: 'research',
+    name: 'Research',
+    emoji: '📚',
+    specialistFiles: ['research-agent.md'],
+    sessionPatterns: ['research', 'atlas', 'analysis', 'investigate'],
+    position: { x: 30, y: 50 },
+    color: '#3b82f6',
+  },
+  {
+    id: 'analyst',
+    name: 'Analyst',
+    emoji: '📊',
+    specialistFiles: ['analyst-agent.md'],
+    sessionPatterns: ['analyst', 'data', 'metric', 'report'],
+    position: { x: 50, y: 50 },
+    color: '#ec4899',
   },
   {
     id: 'content-writer',
@@ -119,16 +82,16 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     emoji: '✍️',
     specialistFiles: ['content-writer-agent.md'],
     sessionPatterns: ['content-writer', 'copywrite', 'draft'],
-    position: { x: 10, y: 40 },
+    position: { x: 70, y: 50 },
     color: '#f59e0b',
   },
   {
-    id: 'outreach-agent',
+    id: 'outreach',
     name: 'Outreach',
     emoji: '📧',
     specialistFiles: ['outreach-agent.md'],
-    sessionPatterns: ['outreach-agent', 'cold-email'],
-    position: { x: 70, y: 40 },
+    sessionPatterns: ['outreach', 'cold-email', 'email'],
+    position: { x: 90, y: 50 },
     color: '#8b5cf6',
   },
   {
@@ -137,26 +100,44 @@ export const AGENT_NODES: AgentNodeConfig[] = [
     emoji: '📞',
     specialistFiles: ['call-debrief-agent.md'],
     sessionPatterns: ['call-debrief', 'transcript'],
-    position: { x: 90, y: 55 },
+    position: { x: 20, y: 70 },
     color: '#ec4899',
-  },
-  {
-    id: 'scout',
-    name: 'Scout',
-    emoji: '🔍',
-    specialistFiles: ['scout-agent.md'],
-    sessionPatterns: ['scout', 'lead-gen', 'scrape', 'job-board'],
-    position: { x: 70, y: 55 },
-    color: '#34d399',
   },
   {
     id: 'ops-guardian',
     name: 'Ops Guardian',
     emoji: '🛡️',
     specialistFiles: ['ops-guardian-agent.md'],
-    sessionPatterns: ['ops-guardian', 'ops', 'infra', 'config'],
-    position: { x: 30, y: 55 },
+    sessionPatterns: ['ops-guardian', 'ops', 'guardian'],
+    position: { x: 40, y: 70 },
     color: '#0ea5e9',
+  },
+  {
+    id: 'memory-curator',
+    name: 'Memory Curator',
+    emoji: '🗃️',
+    specialistFiles: ['memory-curator-agent.md'],
+    sessionPatterns: ['memory-curator', 'memory', 'recall'],
+    position: { x: 60, y: 70 },
+    color: '#a78bfa',
+  },
+  {
+    id: 'sonnet',
+    name: 'Sonnet',
+    emoji: '⚡',
+    specialistFiles: ['sonnet-agent.md'],
+    sessionPatterns: ['sonnet', 'sonnet-1', 'sonnet-2'],
+    position: { x: 80, y: 70 },
+    color: '#fb923c',
+  },
+  {
+    id: 'codex',
+    name: 'Codex',
+    emoji: '💻',
+    specialistFiles: ['codex-agent.md'],
+    sessionPatterns: ['codex', 'code', 'develop', 'engineer'],
+    position: { x: 50, y: 85 },
+    color: '#22c55e',
   },
 ];
 
@@ -170,39 +151,25 @@ export function matchSessionToNode(sessionLabel: string, sessionId?: string): Ag
 
   for (const node of AGENT_NODES) {
     for (const pattern of node.sessionPatterns) {
-      // Match against label OR session ID
       if (lowerLabel.includes(pattern) || lowerId.includes(pattern)) {
         return node;
       }
     }
   }
 
-  // Fallback: try to match common task/agent patterns to a default node
-  // If it's clearly an agent/task but doesn't match specific patterns, assign to Research
-  const genericAgentPatterns = ['agent', 'task', 'subagent', 'worker', 'job', 'process'];
-  for (const pattern of genericAgentPatterns) {
-    if (lowerLabel.includes(pattern) || lowerId.includes(pattern)) {
-      return AGENT_NODES[0]; // Default to Research agent
-    }
-  }
-
   return null;
 }
 
-// Find which node a specialist file belongs to
 export function matchSpecialistToNode(filename: string): AgentNodeConfig | null {
   const lowerFilename = filename.toLowerCase();
-  
   for (const node of AGENT_NODES) {
     if (node.specialistFiles.some(f => lowerFilename.includes(f.replace('.md', '').toLowerCase()))) {
       return node;
     }
   }
-  
   return null;
 }
 
-// Agent session status type
 export type AgentStatus = 'working' | 'connected' | 'idle';
 
 export interface AgentNodeState {
@@ -217,16 +184,14 @@ export interface AgentNodeState {
   currentTask?: string;
 }
 
-// Convert raw session data to node states
 export function mapSessionsToNodes(
-  sessions: Array<{ 
-    id: string; 
-    label: string; 
+  sessions: Array<{
+    id: string;
+    label: string;
     status: string;
     startedAt?: string;
   }>
 ): AgentNodeState[] {
-  // Group sessions by node
   const nodeSessionMap = new Map<string, typeof sessions>();
 
   for (const session of sessions) {
@@ -237,26 +202,20 @@ export function mapSessionsToNodes(
       nodeSessionMap.set(node.id, existing);
     }
   }
-  
-  // Convert to node states
+
   return AGENT_NODES.map(node => {
     const nodeSessions = nodeSessionMap.get(node.id) || [];
     const activeSessions = nodeSessions.filter(s => s.status === 'running').length;
     const hasAnySessions = nodeSessions.length > 0;
-    
-    // Determine status
+
     let status: AgentStatus = 'idle';
-    if (activeSessions > 0) {
-      status = 'working';
-    } else if (hasAnySessions) {
-      status = 'connected';
-    }
-    
-    // Get most recent activity
-    const sortedSessions = [...nodeSessions].sort((a, b) => 
+    if (activeSessions > 0) status = 'working';
+    else if (hasAnySessions) status = 'connected';
+
+    const sortedSessions = [...nodeSessions].sort((a, b) =>
       new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime()
     );
-    
+
     return {
       id: node.id,
       name: node.name,

@@ -1852,6 +1852,34 @@ export default function OpieKanban(): React.ReactElement {
                 </div>
               )}
 
+              {/* OpenClaw Bridge Status Banner */}
+              <div style={{
+                flexShrink: 0,
+                padding: '6px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                background: liveStatus?.gateway?.connected
+                  ? 'rgba(34,197,94,0.07)'
+                  : 'rgba(239,68,68,0.07)',
+                borderBottom: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
+              }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
+                  color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
+                  {liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', flex: 1 }}>
+                  {liveStatus?.gateway?.connected
+                    ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
+                    : 'Fallback mode — direct model chat only, no tools or agent powers'}
+                </span>
+                {liveStatus?.gateway?.latency ? (
+                  <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
+                    {liveStatus.gateway.latency}ms
+                  </span>
+                ) : null}
+              </div>
+
               {/* Chat messages area */}
               <div
                 ref={chatContainerRef}
