@@ -38,7 +38,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   if (!SUPABASE_URL || !key) return null;
 
   _supabaseAdmin = createClient(SUPABASE_URL, key, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, storageKey: 'opie-admin-auth' },
   });
   return _supabaseAdmin;
 }
@@ -60,7 +60,7 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (!SUPABASE_URL || !key) return null;
 
   _supabaseClient = createClient(SUPABASE_URL, key, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, storageKey: 'opie-client-auth' },
   });
   return _supabaseClient;
 }
