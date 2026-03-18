@@ -359,6 +359,8 @@ export default function OpieKanban(): React.ReactElement {
   
   const chatInputRef = useRef<HTMLInputElement>(null);
   const lastExtractionCountRef = useRef(0); // Track when we last extracted memory
+  const ttsNotifiedRef = useRef(false); // Guard: prevent duplicate TTS on same response
+  const [openMicMode, setOpenMicMode] = useState(false); // always-on mic for long-winded talk
   // Message context menu (for fork/copy)
   const [msgContextMenu, setMsgContextMenu] = useState<{ x: number; y: number; messageId: string; messageText: string; isAssistant: boolean } | null>(null);
   
@@ -560,6 +562,8 @@ export default function OpieKanban(): React.ReactElement {
   const voiceEngine = useVoiceEngine({
     onSend: handleVoiceSend,
     autoSpeak: true,
+    ttsProvider: 'elevenlabs',
+    ttsVoice: 'MClEFoImJXBTgLwdLI5n', // ElevenLabs default voice
   });
 
   // ─── Plan Approval Handlers ────────────────────────────────────
@@ -846,6 +850,7 @@ export default function OpieKanban(): React.ReactElement {
     setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
+    ttsNotifiedRef.current = false; // reset TTS guard for this new response
     
     // Update user message status to sent
     setTimeout(() => {
@@ -973,8 +978,9 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // Voice engine handles TTS — notify it of the response
-        if (reply && reply !== 'No response received') {
+        // Voice engine handles TTS — notify it of the response (guard: only once)
+        if (reply && reply !== 'No response received' && !ttsNotifiedRef.current) {
+          ttsNotifiedRef.current = true;
           notifyResponse(reply);
         }
 
@@ -1056,8 +1062,9 @@ export default function OpieKanban(): React.ReactElement {
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
-        // Voice engine handles TTS — notify it of the response
-        if (reply && !data.error) {
+        // Voice engine handles TTS — notify it of the response (guard: only once)
+        if (reply && !data.error && !ttsNotifiedRef.current) {
+          ttsNotifiedRef.current = true;
           notifyResponse(reply);
         }
       }
@@ -1956,17 +1963,52 @@ export default function OpieKanban(): React.ReactElement {
                 padding: isMobile ? '12px 16px' : '12px 24px',
                 gap: '10px',
               }}>
-                {/* Mic button */}
-                <button onClick={toggleMic} style={{
-                  width: 44, height: 44, borderRadius: '50%',
-                  border: micOn ? '1px solid rgba(34,197,94,0.5)' : '1px solid rgba(255,255,255,0.15)',
-                  background: micOn ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
-                    : voiceState === 'processing' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                    : 'rgba(255,255,255,0.08)',
-                  color: '#fff', cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }} title={micOn ? 'Stop listening' : 'Start voice input'}>
-                  <Mic size={20} strokeWidth={2} />
+                {/* PTT button — hold to talk */}
+                <button
+                  onMouseDown={() => { if (!micOn) toggleMic(); }}
+                  onMouseUp={() => { if (micOn && !openMicMode) toggleMic(); }}
+                  onMouseLeave={() => { if (micOn && !openMicMode) toggleMic(); }}
+                  onTouchStart={(e) => { e.preventDefault(); if (!micOn) toggleMic(); }}
+                  onTouchEnd={(e) => { e.preventDefault(); if (micOn && !openMicMode) toggleMic(); }}
+                  style={{
+                    width: 44, height: 44, borderRadius: '50%',
+                    border: (micOn && !openMicMode) ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.15)',
+                    background: (micOn && !openMicMode)
+                      ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                      : 'rgba(255,255,255,0.06)',
+                    color: '#fff', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    boxShadow: (micOn && !openMicMode) ? '0 0 16px rgba(34,197,94,0.5)' : 'none',
+                  }}
+                  title="Push to talk (hold)"
+                >
+                  <Mic size={18} strokeWidth={2} />
+                </button>
+
+                {/* Open mic — click to toggle always-on listening */}
+                <button
+                  onClick={() => {
+                    setOpenMicMode(prev => {
+                      const next = !prev;
+                      if (next && !micOn) toggleMic();
+                      if (!next && micOn) toggleMic();
+                      return next;
+                    });
+                  }}
+                  style={{
+                    width: 44, height: 44, borderRadius: '50%',
+                    border: openMicMode ? '2px solid #f59e0b' : '1px solid rgba(255,255,255,0.15)',
+                    background: openMicMode
+                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                      : 'rgba(255,255,255,0.06)',
+                    color: '#fff', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    fontSize: 18,
+                    boxShadow: openMicMode ? '0 0 16px rgba(245,158,11,0.5)' : 'none',
+                  }}
+                  title={openMicMode ? 'Open mic ON — click to turn off' : 'Open mic — stays on for long-winded talk'}
+                >
+                  {openMicMode ? '🔴' : '🎙️'}
                 </button>
 
                 {/* Cancel processing */}
