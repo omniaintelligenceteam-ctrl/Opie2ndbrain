@@ -33,7 +33,6 @@ import StatusOrb from './StatusOrb';
 import SidebarNav from './sidebar/SidebarNav';
 import OnboardingModal, { isOnboardingComplete, getUserName, resetOnboarding } from './OnboardingModal';
 import MessageContextMenu from './MessageContextMenu';
-import DepartmentPanel from './DepartmentPanel';
 
 // ─── Lazy-loaded panels (only imported when their view is active) ────────────
 const AgentsPanel = lazy(() => import('./AgentsPanel'));
@@ -178,7 +177,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'context', label: 'Context', icon: '🧠' },
   { id: 'voice', label: 'Voice', icon: '🎤' },
   { id: 'memory', label: 'Memory', icon: '📁' },
-  { id: 'departments', label: 'Departments', icon: '🏢' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -2399,26 +2397,6 @@ export default function OpieKanban(): React.ReactElement {
         )}
 
 
-        {/* Departments View */}
-        {activeView === 'departments' && (
-          <div style={{
-            ...styles.viewContainer,
-            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
-            paddingTop: isMobile ? '72px' : undefined,
-            paddingBottom: isMobile ? '100px' : undefined,
-          }}>
-            <div style={styles.viewHeader}>
-              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
-                🏢 Departments
-              </h1>
-              <p style={styles.viewSubtitle}>
-                {isMobile ? 'Department heads & workers' : 'Manage department heads and their workers'}
-              </p>
-            </div>
-            <DepartmentPanel />
-          </div>
-        )}
-
         {/* Voice View */}
         {activeView === 'voice' && (
           isMobile ? (
@@ -2795,6 +2773,35 @@ export default function OpieKanban(): React.ReactElement {
                 padding: '16px', 
                 background: 'rgba(255,255,255,0.05)', 
                 borderRadius: '12px',
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: '0.9rem',
+                lineHeight: 1.6,
+              }}>
+                {selectedTask.output}
+              </div>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
+      {/* All CSS classes and keyframes are in premium.css */}
+
+      {/* Onboarding Modal - first-run experience */}
+      {showOnboarding && (
+        <OnboardingModal
+          onComplete={(newName) => {
+            setUserName(newName);
+            setShowOnboarding(false);
+          }}
+          onNavigate={(view) => handleViewChange(view as ViewId)}
+        />
+      )}
+      </div>
+    </NotificationProvider>
+  );
+}
+
+// Styles are now in ./kanbanStyles.ts
                 color: 'rgba(255,255,255,0.8)',
                 fontSize: '0.9rem',
                 lineHeight: 1.6,
