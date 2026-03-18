@@ -29,6 +29,7 @@ export const TTS_PROVIDERS: VoiceProvider[] = [
 
 // Azure voices — browse at: https://speech.microsoft.com/portal/voicegallery
 export const AZURE_VOICES: Record<string, string> = {
+  'en-US-AvaMultilingualNeural': 'Ava (US Female — Dragon HD ⭐)',
   'en-US-GuyNeural':       'Guy (US Male)',
   'en-US-DavisNeural':     'Davis (US Male)',
   'en-US-JasonNeural':     'Jason (US Male)',
@@ -101,8 +102,8 @@ export interface VoiceSettings {
 export function useVoiceSettings() {
   const [pushToTalkEnabled, setPTTEnabled]   = useState(false);
   const [pushToTalkKey, setPTTKey]           = useState<PushToTalkKey>('Space');
-  const [ttsProvider, setTTSProviderState]   = useState<TTSProvider>('elevenlabs');
-  const [ttsVoice, setTTSVoiceState]         = useState<string>('MClEFoImJXBTgLwdLI5n');
+  const [ttsProvider, setTTSProviderState]   = useState<TTSProvider>('azure');
+  const [ttsVoice, setTTSVoiceState]         = useState<string>('en-US-AvaMultilingualNeural');
   const [ttsSpeed, setTTSSpeedState]         = useState<number>(1.0);
   const [mounted, setMounted]                = useState(false);
 

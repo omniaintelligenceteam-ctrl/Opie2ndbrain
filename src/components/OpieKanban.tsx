@@ -564,8 +564,8 @@ export default function OpieKanban(): React.ReactElement {
   const voiceEngine = useVoiceEngine({
     onSend: handleVoiceSend,
     autoSpeak: true,
-    ttsProvider: voiceSettings.ttsProvider,
-    ttsVoice: voiceSettings.ttsVoice,
+    ttsProvider: voiceSettings.mounted ? voiceSettings.ttsProvider : 'azure',
+    ttsVoice: voiceSettings.mounted ? voiceSettings.ttsVoice : 'en-US-AvaMultilingualNeural',
   });
 
   // ─── Plan Approval Handlers ────────────────────────────────────
