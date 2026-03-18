@@ -427,9 +427,9 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
           const voices = window.speechSynthesis.getVoices();
           const preferred = voices.find(v => v.lang === 'en-US' && v.localService) || voices.find(v => v.lang.startsWith('en'));
           if (preferred) utt.voice = preferred;
-          utt.onend = () => dispatch({ type: 'TTS_END' });
+          utt.onend = () => dispatch({ type: 'TTS_ENDED' });
           utt.onerror = (e) => dispatch({ type: 'TTS_ERROR', error: e.error });
-          dispatch({ type: 'TTS_START' });
+          dispatch({ type: 'TTS_STARTED' });
           window.speechSynthesis.speak(utt);
         } else {
           dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
