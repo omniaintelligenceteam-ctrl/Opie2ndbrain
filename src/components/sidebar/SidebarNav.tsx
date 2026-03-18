@@ -312,7 +312,17 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>📡</span>
         <span style={{ flex: 1, fontWeight: 500 }}>Content Center</span>
       </Link>
-
+      <Link
+        href="/content-command-center?tab=workflows"
+        style={{
+          ...childItemStyle,
+          textDecoration: 'none',
+          padding: '9px 16px 9px 44px',
+        }}
+      >
+        <span style={{ fontSize: '0.95rem', width: '20px', textAlign: 'center', flexShrink: 0 }}>🧩</span>
+        <span style={{ flex: 1, fontWeight: 500 }}>Workflow Hub</span>
+      </Link>
       <div style={dividerStyle} />
 
       {/* Nav groups */}
@@ -379,3 +389,4 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
 });
 
 export default SidebarNav;
+

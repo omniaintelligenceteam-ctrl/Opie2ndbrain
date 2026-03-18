@@ -107,10 +107,14 @@ const sidebarStyles = {
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard', icon: '🏠', id: 'dashboard' },
   { href: '/content-command-center', label: 'Content Center', icon: '📡', id: 'content-center' },
+  { href: '/content-command-center?tab=workflows', label: 'Workflow Hub', icon: '🧩', id: 'workflow-hub' },
 ]
 
+const TAB_IDS = ['workflows', 'content', 'schedule', 'ab-tests', 'analytics', 'integrations', 'larry'] as const
+type TabId = (typeof TAB_IDS)[number]
+
 export default function ContentCommandCenter() {
-  const [activeTab, setActiveTab] = useState('workflows')
+  const [activeTab, setActiveTab] = useState<TabId>('workflows')
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -126,6 +130,28 @@ export default function ContentCommandCenter() {
     const newState = !sidebarExpanded
     setSidebarExpanded(newState)
     saveSidebarState(newState)
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const syncTabFromUrl = () => {
+      const requestedTab = new URLSearchParams(window.location.search).get('tab')
+      if (requestedTab && TAB_IDS.includes(requestedTab as TabId)) {
+        setActiveTab(requestedTab as TabId)
+      }
+    }
+    syncTabFromUrl()
+    window.addEventListener('popstate', syncTabFromUrl)
+    return () => window.removeEventListener('popstate', syncTabFromUrl)
+  }, [])
+
+  const handleTabChange = (tabId: TabId) => {
+    setActiveTab(tabId)
+    if (typeof window !== 'undefined') {
+      const nextParams = new URLSearchParams(window.location.search)
+      nextParams.set('tab', tabId)
+      window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}`)
+    }
   }
 
   // Fetch dashboard stats
@@ -222,7 +248,12 @@ export default function ContentCommandCenter() {
         {/* Navigation */}
         <nav style={{ flex: 1, padding: sidebarExpanded ? '12px 14px' : '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
           {NAV_LINKS.map((link) => {
-            const isActive = link.id === 'content-center'
+            const isActive =
+              link.id === 'workflow-hub'
+                ? activeTab === 'workflows'
+                : link.id === 'content-center'
+                  ? activeTab !== 'workflows'
+                  : false
             return (
               <Link
                 key={link.id}
@@ -308,7 +339,7 @@ export default function ContentCommandCenter() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id as TabId)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
