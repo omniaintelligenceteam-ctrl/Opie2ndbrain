@@ -1482,27 +1482,51 @@ export default function OpieKanban(): React.ReactElement {
           zIndex: 1000,
         } : {}),
       }}>
-        {/* Opie Status Widget - Top of Sidebar */}
-        <div style={{ 
-          padding: sidebarExpanded ? '16px' : '12px',
+        {/* Compact Header with Logo + Brand */}
+        <div style={{
+          padding: sidebarExpanded ? '14px 16px' : '12px 8px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}>
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          cursor: 'pointer',
+        }}
+          onClick={() => handleViewChange('settings')}
+        >
           <Suspense fallback={null}>
-            <OpieStatusWidget 
-              size={sidebarExpanded ? "medium" : "small"}
-              showDetails={sidebarExpanded}
+            <OpieStatusWidget
+              size="small"
+              showDetails={false}
               onClick={() => handleViewChange('settings')}
             />
           </Suspense>
+          {sidebarExpanded && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                color: '#fff',
+                fontSize: '1rem',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}>
+                Opie 2nd Brain
+              </div>
+              <div style={{
+                color: 'rgba(255,255,255,0.3)',
+                fontSize: '0.7rem',
+                fontWeight: 500,
+                marginTop: '2px',
+              }}>
+                Omnia Intelligence
+              </div>
+            </div>
+          )}
         </div>
-        
-        {/* Sidebar Widgets - Calendar, Email, System Health */}
-        {!isMobile && <Suspense fallback={null}><SidebarWidgets isExpanded={sidebarExpanded} /></Suspense>}
-        
+
         {/* Collapse/Expand Toggle */}
         {!isMobile && (
           <div style={{
-            padding: '8px 14px',
+            padding: '6px 10px',
             display: 'flex',
             justifyContent: sidebarExpanded ? 'flex-end' : 'center',
           }}>
@@ -1512,7 +1536,7 @@ export default function OpieKanban(): React.ReactElement {
           </div>
         )}
 
-        {/* Navigation - grouped with progressive disclosure */}
+        {/* Navigation */}
         <SidebarNav
           activeView={activeView}
           sidebarExpanded={sidebarExpanded}
@@ -1520,31 +1544,38 @@ export default function OpieKanban(): React.ReactElement {
           getCount={getCount}
         />
 
-        {/* Quick Stats */}
+        {/* Compact Stats Bar */}
         {sidebarExpanded && (
-          <div style={styles.quickStats}>
-            <div style={styles.statRow}>
-              <span style={styles.statLabel}>Active Agents</span>
-              <span style={{ ...styles.statValue, color: '#22c55e' }}>{activeAgents.length}</span>
+          <div style={{
+            padding: '10px 14px',
+            margin: '0 10px 8px',
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: '10px',
+            border: '1px solid rgba(255,255,255,0.04)',
+            display: 'flex',
+            justifyContent: 'space-around',
+            gap: '4px',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>{activeAgents.length}</div>
+              <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', fontWeight: 500, marginTop: '1px' }}>Agents</div>
             </div>
-            <div style={styles.statRow}>
-              <span style={styles.statLabel}>Total Agents</span>
-              <span style={{ ...styles.statValue, color: '#06b6d4' }}>42</span>
+            <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f59e0b', fontVariantNumeric: 'tabular-nums' }}>{runningTasksCount}</div>
+              <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', fontWeight: 500, marginTop: '1px' }}>Tasks</div>
             </div>
-            <div style={styles.statRow}>
-              <span style={styles.statLabel}>Running Tasks</span>
-              <span style={{ ...styles.statValue, color: '#f59e0b' }}>{runningTasksCount}</span>
-            </div>
-            <div style={styles.statRow}>
-              <span style={styles.statLabel}>Cron Jobs</span>
-              <span style={{ ...styles.statValue, color: '#8b5cf6' }}>{cronCount}</span>
+            <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#8b5cf6', fontVariantNumeric: 'tabular-nums' }}>{cronCount}</div>
+              <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', fontWeight: 500, marginTop: '1px' }}>Crons</div>
             </div>
           </div>
         )}
 
         {/* Notification Bell */}
         {sidebarExpanded && (
-          <div style={{ padding: '12px 16px' }}>
+          <div style={{ padding: '6px 14px 8px' }}>
             <NotificationBell
               notifications={notifications}
               unreadCount={unreadCount}
@@ -1557,22 +1588,20 @@ export default function OpieKanban(): React.ReactElement {
         )}
 
         {/* Footer */}
-        <div style={styles.sidebarFooter}>
+        <div style={{
+          padding: '10px 16px',
+          borderTop: '1px solid rgba(255,255,255,0.04)',
+          textAlign: 'center',
+        }}>
           {sidebarExpanded ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={styles.footerText}>Omnia Intelligence</span>
-              <button
-                onClick={() => { resetOnboarding(); setShowOnboarding(true); }}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '14px', padding: '4px', borderRadius: 6 }}
-                title="Replay welcome tour"
-                aria-label="Replay welcome tour"
-              >
-                ?
-              </button>
-            </div>
-          ) : (
-            <span style={styles.footerIcon}>🌟</span>
-          )}
+            <button
+              onClick={() => { resetOnboarding(); setShowOnboarding(true); }}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '11px', padding: '4px', borderRadius: 6, width: '100%' }}
+              title="Replay welcome tour"
+            >
+              Welcome Tour
+            </button>
+          ) : null}
         </div>
       </aside>
     );

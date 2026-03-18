@@ -9,16 +9,16 @@ interface OpieStatusWidgetProps {
 }
 
 // Completely static component - never re-renders after initial mount
-const OpieStatusWidget = memo(function OpieStatusWidget({ 
+const OpieStatusWidget = memo(function OpieStatusWidget({
   size = 'medium',
-  onClick 
+  onClick
 }: OpieStatusWidgetProps) {
-  const logoSize = size === 'small' ? 120 : size === 'medium' ? 180 : 240;
-  
+  const logoSize = size === 'small' ? 36 : size === 'medium' ? 60 : 120;
+
   // Store onClick in ref to avoid re-renders from new function references
   const onClickRef = useRef(onClick);
   onClickRef.current = onClick;
-  
+
   const handleClick = useCallback(() => {
     onClickRef.current?.();
   }, []);
@@ -30,9 +30,9 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '12px',
-        minWidth: logoSize + 24,
-        minHeight: logoSize + 24,
+        width: logoSize,
+        height: logoSize,
+        flexShrink: 0,
       }}
     >
       <video
@@ -47,7 +47,7 @@ const OpieStatusWidget = memo(function OpieStatusWidget({
           width: logoSize,
           height: logoSize,
           objectFit: 'contain',
-          borderRadius: '12px',
+          borderRadius: size === 'small' ? '8px' : '12px',
         }}
       />
     </div>

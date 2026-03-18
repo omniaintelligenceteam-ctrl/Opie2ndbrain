@@ -1,15 +1,33 @@
 // src/components/sidebar/SidebarNav.tsx
-// Grouped navigation with progressive disclosure
+// Grouped navigation with Lucide icons (no broken emoji)
 'use client';
 import React, { memo, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { ViewId } from '../../hooks/useKeyboardShortcuts';
+import {
+  LayoutDashboard,
+  Radio,
+  Puzzle,
+  Bot,
+  Building2,
+  Wrench,
+  Trophy,
+  Brain,
+  ClipboardList,
+  CheckSquare,
+  Clock,
+  FolderOpen,
+  MessageCircle,
+  Crosshair,
+  Settings,
+  ChevronRight,
+} from 'lucide-react';
 
 // ─── Data types ──────────────────────────────────────────────────────
 export interface NavItem {
   id: ViewId;
   label: string;
-  icon: string;
+  icon: string; // kept for compat – renderIcon maps to Lucide
   showCount?: boolean;
 }
 
@@ -20,45 +38,70 @@ export interface NavGroup {
   children: NavItem[];
 }
 
-// ─── Navigation structure: 4 groups + settings pinned bottom ─────────
-const STANDALONE_TOP: NavItem = { id: 'dashboard', label: 'Dashboard', icon: '🏠' };
+// Map view-id → Lucide icon component
+const ICON_MAP: Record<string, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  'content-center': Radio,
+  'workflow-hub': Puzzle,
+  agents: Bot,
+  organization: Building2,
+  skills: Wrench,
+  leaderboard: Trophy,
+  context: Brain,
+  board: ClipboardList,
+  tasks: CheckSquare,
+  crons: Clock,
+  memory: FolderOpen,
+  voice: MessageCircle,
+  'model-counsel': Crosshair,
+  settings: Settings,
+};
+
+function renderIcon(id: string, size = 18) {
+  const Icon = ICON_MAP[id];
+  if (Icon) return <Icon size={size} strokeWidth={1.8} />;
+  return <LayoutDashboard size={size} strokeWidth={1.8} />;
+}
+
+// ─── Navigation structure ──────────────────────────────────────────
+const STANDALONE_TOP: NavItem = { id: 'dashboard', label: 'Dashboard', icon: '' };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: 'agents-group',
     label: 'Agents',
-    icon: '🤖',
+    icon: '',
     children: [
-      { id: 'agents', label: 'Agent List', icon: '🤖', showCount: true },
-      { id: 'organization', label: 'Organization', icon: '🏛️' },
-      { id: 'skills', label: 'Skills', icon: '🛠️' },
-      { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
-      { id: 'context', label: 'Context', icon: '🧠' },
+      { id: 'agents', label: 'Agent List', icon: '', showCount: true },
+      { id: 'organization', label: 'Organization', icon: '' },
+      { id: 'skills', label: 'Skills', icon: '' },
+      { id: 'leaderboard', label: 'Leaderboard', icon: '' },
+      { id: 'context', label: 'Context', icon: '' },
     ],
   },
   {
     id: 'work-group',
     label: 'Work',
-    icon: '📋',
+    icon: '',
     children: [
-      { id: 'board', label: 'Project Board', icon: '📋' },
-      { id: 'tasks', label: 'Tasks', icon: '✅', showCount: true },
-      { id: 'crons', label: 'Crons', icon: '⏰', showCount: true },
+      { id: 'board', label: 'Project Board', icon: '' },
+      { id: 'tasks', label: 'Tasks', icon: '', showCount: true },
+      { id: 'crons', label: 'Crons', icon: '', showCount: true },
     ],
   },
   {
     id: 'knowledge-group',
     label: 'Knowledge',
-    icon: '📚',
+    icon: '',
     children: [
-      { id: 'memory', label: 'Memory', icon: '📁' },
-      { id: 'voice', label: 'Chat', icon: '💬' },
-      { id: 'model-counsel', label: 'Model Counsel', icon: '🎯' },
+      { id: 'memory', label: 'Memory', icon: '' },
+      { id: 'voice', label: 'Chat', icon: '' },
+      { id: 'model-counsel', label: 'Model Counsel', icon: '' },
     ],
   },
 ];
 
-const SETTINGS_ITEM: NavItem = { id: 'settings', label: 'Settings', icon: '⚙️' };
+const SETTINGS_ITEM: NavItem = { id: 'settings', label: 'Settings', icon: '' };
 
 // Flat list of all nav items (for external consumers like CommandPalette)
 export const ALL_NAV_ITEMS: NavItem[] = [
@@ -75,7 +118,6 @@ function loadExpandedGroups(): Record<string, boolean> {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  // Default: all groups expanded
   return Object.fromEntries(NAV_GROUPS.map(g => [g.id, true]));
 }
 
@@ -94,6 +136,13 @@ function groupTotalCount(group: NavGroup, getCount: (id: ViewId) => number | nul
   return group.children.reduce((sum, c) => sum + (getCount(c.id) ?? 0), 0);
 }
 
+// Map group id → first child id for the icon lookup
+const GROUP_ICON_MAP: Record<string, string> = {
+  'agents-group': 'agents',
+  'work-group': 'board',
+  'knowledge-group': 'memory',
+};
+
 // ─── Props ───────────────────────────────────────────────────────────
 interface SidebarNavProps {
   activeView: ViewId;
@@ -106,13 +155,13 @@ interface SidebarNavProps {
 const navItemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: '14px',
-  padding: '12px 16px',
-  borderRadius: '12px',
+  gap: '12px',
+  padding: '10px 14px',
+  borderRadius: '10px',
   border: 'none',
   background: 'transparent',
-  color: 'rgba(255,255,255,0.55)',
-  fontSize: '0.925rem',
+  color: 'rgba(255,255,255,0.5)',
+  fontSize: '0.875rem',
   cursor: 'pointer',
   transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
   position: 'relative',
@@ -130,57 +179,56 @@ const navItemActiveStyle: React.CSSProperties = {
 
 const groupHeaderStyle: React.CSSProperties = {
   ...navItemStyle,
-  padding: '10px 16px',
-  color: 'rgba(255,255,255,0.4)',
-  fontSize: '0.8rem',
+  padding: '8px 14px',
+  color: 'rgba(255,255,255,0.35)',
+  fontSize: '0.75rem',
   fontWeight: 600,
   textTransform: 'uppercase',
-  letterSpacing: '0.04em',
+  letterSpacing: '0.05em',
 };
 
 const groupHeaderActiveStyle: React.CSSProperties = {
-  color: 'rgba(255,255,255,0.7)',
+  color: 'rgba(255,255,255,0.6)',
 };
 
 const childItemStyle: React.CSSProperties = {
   ...navItemStyle,
-  padding: '10px 16px 10px 28px',
-  fontSize: '0.875rem',
+  padding: '8px 14px 8px 24px',
+  fontSize: '0.84rem',
 };
 
 const chevronStyle: React.CSSProperties = {
-  fontSize: '0.6rem',
   transition: 'transform 0.2s ease',
-  color: 'rgba(255,255,255,0.3)',
+  color: 'rgba(255,255,255,0.25)',
 };
 
 const badgeStyle: React.CSSProperties = {
-  padding: '3px 10px',
+  padding: '2px 8px',
   borderRadius: '20px',
-  fontSize: '0.7rem',
+  fontSize: '0.65rem',
   fontWeight: 700,
   letterSpacing: '0.02em',
 };
 
 const collapsedBadgeStyle: React.CSSProperties = {
   position: 'absolute',
-  top: '6px',
-  right: '6px',
+  top: '4px',
+  right: '4px',
   background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
   color: '#000',
-  fontSize: '0.55rem',
+  fontSize: '0.5rem',
   fontWeight: 700,
-  padding: '2px 5px',
+  padding: '1px 4px',
   borderRadius: '10px',
-  minWidth: '16px',
+  minWidth: '14px',
   textAlign: 'center',
   boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
 };
 
 const dividerStyle: React.CSSProperties = {
   height: 1,
-  background: 'rgba(255,255,255,0.06)',
-  margin: '8px 16px',
+  background: 'rgba(255,255,255,0.05)',
+  margin: '6px 14px',
 };
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -192,7 +240,6 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
 }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(loadExpandedGroups);
 
-  // Persist expand state
   useEffect(() => {
     saveExpandedGroups(expandedGroups);
   }, [expandedGroups]);
@@ -205,7 +252,7 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         break;
       }
     }
-  }, [activeView]); // intentionally not depending on expandedGroups to avoid loops
+  }, [activeView]); // intentionally not depending on expandedGroups
 
   const toggleGroup = useCallback((groupId: string) => {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -245,8 +292,8 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         title={!sidebarExpanded ? item.label : undefined}
         aria-label={item.label}
       >
-        <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>
-          {item.icon}
+        <span style={{ width: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {renderIcon(item.id, isChild ? 16 : 18)}
         </span>
         {sidebarExpanded && (
           <>
@@ -259,22 +306,25 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
     );
   };
 
-  // --- Collapsed sidebar: show only group icons + dashboard + settings ---
+  // --- Collapsed sidebar ---
   if (!sidebarExpanded) {
     return (
-      <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
         {renderNavButton(STANDALONE_TOP)}
         <Link
           href="/content-command-center"
           style={{ ...navItemStyle, justifyContent: 'center', textDecoration: 'none' }}
-          title="Content Command Center"
+          title="Content Center"
         >
-          <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center' }}>📡</span>
+          <span style={{ width: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {renderIcon('content-center', 18)}
+          </span>
         </Link>
         <div style={dividerStyle} />
         {NAV_GROUPS.map(group => {
           const hasActiveChild = groupContainsView(group, activeView);
           const totalCount = groupTotalCount(group, getCount);
+          const iconId = GROUP_ICON_MAP[group.id] || 'dashboard';
           return (
             <button
               key={group.id}
@@ -287,7 +337,9 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
               title={group.label}
               aria-label={group.label}
             >
-              <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center' }}>{group.icon}</span>
+              <span style={{ width: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {renderIcon(iconId, 18)}
+              </span>
               {totalCount > 0 && renderCollapsedBadge(totalCount)}
             </button>
           );
@@ -298,18 +350,19 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
     );
   }
 
-  // --- Expanded sidebar: grouped navigation with expand/collapse ---
+  // --- Expanded sidebar ---
   return (
-    <nav style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
-      {/* Dashboard - standalone top */}
+    <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '1px', overflowY: 'auto' }}>
       {renderNavButton(STANDALONE_TOP)}
 
-      {/* Content Command Center - separate page */}
+      {/* Content Center */}
       <Link
         href="/content-command-center"
         style={{ ...navItemStyle, textDecoration: 'none' }}
       >
-        <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>📡</span>
+        <span style={{ width: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {renderIcon('content-center', 18)}
+        </span>
         <span style={{ flex: 1, fontWeight: 500 }}>Content Center</span>
       </Link>
       <Link
@@ -317,10 +370,12 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         style={{
           ...childItemStyle,
           textDecoration: 'none',
-          padding: '9px 16px 9px 44px',
+          paddingLeft: '38px',
         }}
       >
-        <span style={{ fontSize: '0.95rem', width: '20px', textAlign: 'center', flexShrink: 0 }}>🧩</span>
+        <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {renderIcon('workflow-hub', 16)}
+        </span>
         <span style={{ flex: 1, fontWeight: 500 }}>Workflow Hub</span>
       </Link>
       <div style={dividerStyle} />
@@ -330,10 +385,10 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         const isExpanded = expandedGroups[group.id] ?? true;
         const hasActiveChild = groupContainsView(group, activeView);
         const totalCount = groupTotalCount(group, getCount);
+        const iconId = GROUP_ICON_MAP[group.id] || 'dashboard';
 
         return (
           <div key={group.id}>
-            {/* Group header */}
             <button
               onClick={() => toggleGroup(group.id)}
               style={{
@@ -344,8 +399,8 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
               aria-expanded={isExpanded}
               aria-label={`${group.label} group`}
             >
-              <span style={{ fontSize: '1rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>
-                {group.icon}
+              <span style={{ width: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {renderIcon(iconId, 15)}
               </span>
               <span style={{ flex: 1 }}>{group.label}</span>
               {totalCount > 0 && !isExpanded && (
@@ -353,24 +408,20 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
                   ...badgeStyle,
                   background: 'rgba(102,126,234,0.15)',
                   color: 'rgba(255,255,255,0.5)',
-                  fontSize: '0.65rem',
-                  padding: '2px 8px',
+                  fontSize: '0.6rem',
+                  padding: '2px 6px',
                 }}>
                   {totalCount}
                 </span>
               )}
-              <span style={{
-                ...chevronStyle,
-                transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-              }}>
-                ▶
+              <span style={chevronStyle}>
+                <ChevronRight size={12} style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
               </span>
             </button>
 
-            {/* Children */}
             <div style={{
               overflow: 'hidden',
-              maxHeight: isExpanded ? `${group.children.length * 52}px` : '0px',
+              maxHeight: isExpanded ? `${group.children.length * 44}px` : '0px',
               transition: 'max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
               opacity: isExpanded ? 1 : 0,
             }}>
@@ -380,7 +431,6 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         );
       })}
 
-      {/* Spacer + Settings pinned bottom */}
       <div style={{ flex: 1 }} />
       <div style={dividerStyle} />
       {renderNavButton(SETTINGS_ITEM)}
@@ -389,4 +439,3 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
 });
 
 export default SidebarNav;
-
