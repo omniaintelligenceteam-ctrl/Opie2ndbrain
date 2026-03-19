@@ -19,7 +19,7 @@ const path = require('path');
 const GATEWAY_URL = 'ws://localhost:19001';
 const GATEWAY_TOKEN = 'a3ab72184283a6c817a967b4d665efe73b2485bb6770c67c';
 const RELAY_PORT = 19100;
-const MAIN_SESSION = 'agent:main:main';
+const MAIN_SESSION = 'agent:main:webchat';
 
 // ── Load device identity ────────────────────────────────────────────────────
 

@@ -27,6 +27,10 @@ export const GATEWAY_TOKEN = envOrEmpty(
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
 export const GATEWAY_CONFIGURED = Boolean(GATEWAY_URL);
 
+export function isGatewayUnavailableInProd(): boolean {
+  return IS_VERCEL && GATEWAY_URL.includes('localhost');
+}
+
 export interface GatewayFetchOptions extends RequestInit {
   timeout?: number;
   fallback?: unknown;
@@ -47,10 +51,6 @@ export interface ToolInvokeResult<T = unknown> {
     type: string;
     message: string;
   };
-}
-
-function isGatewayUnavailableInProd(): boolean {
-  return IS_VERCEL && GATEWAY_URL.includes('localhost');
 }
 
 function gatewayHeaders(extra: HeadersInit = {}): HeadersInit {
@@ -166,64 +166,29 @@ export async function gatewayHealth(): Promise<{ connected: boolean; latency: nu
   }
 
   try {
-    // Prefer an authenticated tool call because this is what the app actually relies on.
-    const toolRes = await fetch(`${GATEWAY_URL}/tools/invoke`, {
-      method: 'POST',
-      headers: gatewayHeaders(),
-      body: JSON.stringify({ tool: 'session_status', args: {} }),
+    const res = await fetch(`${GATEWAY_URL}/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
 
     const latency = Date.now() - start;
 
-    if (toolRes.ok) {
-      const contentType = toolRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await toolRes.json();
-        if (data?.ok) {
-          return {
-            connected: true,
-            latency,
-            model: data?.result?.model,
-            sessions: data?.result?.sessions,
-          };
-        }
-        return { connected: false, latency, reason: data?.error?.message || 'Gateway tool health check failed' };
-      }
-      return { connected: false, latency, reason: 'Gateway returned non-JSON response' };
+    if (!res.ok) {
+      return { connected: false, latency, reason: `Relay HTTP ${res.status}` };
     }
 
-    if (toolRes.status === 401 || toolRes.status === 403) {
-      return { connected: false, latency, reason: 'Gateway auth failed (invalid token)' };
+    const data = await res.json();
+
+    if (data?.ok && data?.connected === true) {
+      return { connected: true, latency };
     }
 
-    // Fallback: check relay health for extra diagnostics.
-    try {
-      const relayRes = await fetch(`${GATEWAY_URL}/health`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(3000),
-      });
-
-      if (!relayRes.ok) {
-        return { connected: false, latency, reason: `Gateway HTTP ${toolRes.status}` };
-      }
-
-      const relayData = await relayRes.json();
-      if (relayData?.ok && relayData?.connected === true) {
-        return { connected: false, latency, reason: 'Relay connected, but tool invocation failed' };
-      }
-
-      return {
-        connected: false,
-        latency,
-        reason: relayData?.connected === false
-          ? 'Relay up but gateway WebSocket disconnected'
-          : `Gateway HTTP ${toolRes.status}`,
-      };
-    } catch {
-      return { connected: false, latency, reason: `Gateway HTTP ${toolRes.status}` };
+    if (data?.ok && data?.connected === false) {
+      return { connected: false, latency, reason: 'Relay up but gateway WebSocket disconnected' };
     }
+
+    return { connected: false, latency, reason: 'Unexpected relay health response' };
   } catch (error) {
     return {
       connected: false,

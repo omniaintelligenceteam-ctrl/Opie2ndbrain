@@ -280,7 +280,19 @@ async function pollForAsyncResponse(
 function OpieKanbanInner(): React.ReactElement {
   // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoadingRaw] = useState(false);
+  const isLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Safety wrapper: auto-reset isLoading after 30s to prevent permanent stuck state
+  const setIsLoading = useCallback((val: boolean) => {
+    setIsLoadingRaw(val);
+    if (isLoadingTimeoutRef.current) clearTimeout(isLoadingTimeoutRef.current);
+    if (val) {
+      isLoadingTimeoutRef.current = setTimeout(() => {
+        console.warn('[Safety] isLoading stuck for 30s — auto-resetting');
+        setIsLoadingRaw(false);
+      }, 30_000);
+    }
+  }, []);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('kimi');
@@ -825,14 +837,16 @@ function OpieKanbanInner(): React.ReactElement {
 
   const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
+    console.log('[handleSend] CALLED', { text: text?.slice(0,50), input: input?.slice(0,50), messageText: messageText?.slice(0,50), isLoading, hasImage: !!image, trimmed: messageText?.trim()?.length });
     if (!messageText.trim() && !image) {
-      console.log('[Chat] handleSend blocked: empty message and no image');
+      console.log('[handleSend] BLOCKED: empty message and no image');
       return;
     }
     if (isLoading) {
-      console.warn('[Chat] handleSend blocked: isLoading is true — a previous request may be stuck');
+      console.warn('[handleSend] BLOCKED: isLoading is true — a previous request may be stuck');
       return;
     }
+    console.log('[handleSend] PASSED guard, proceeding to send');
 
     // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
     // so the browser allows audio playback when Ava responds
@@ -910,6 +924,7 @@ function OpieKanbanInner(): React.ReactElement {
     }, 130_000);
 
     try {
+      console.log('[handleSend] FETCHING /api/chat now...');
       const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2176,6 +2191,13 @@ function OpieKanbanInner(): React.ReactElement {
                   ref={chatInputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
+                  onFocus={() => {
+                    // If isLoading has been stuck, user clicking input is a signal to unstick
+                    if (isLoading) {
+                      console.warn('[Safety] User focused input while isLoading=true — resetting');
+                      setIsLoading(false);
+                    }
+                  }}
                   onPaste={async (e) => {
                     const items = e.clipboardData?.items;
                     if (!items) return;
@@ -2208,9 +2230,12 @@ function OpieKanbanInner(): React.ReactElement {
                 {/* Send button */}
                 <button
                   onClick={() => {
+                    console.log('[SendButton] CLICKED', { input, inputTrim: input?.trim(), pendingImage: !!pendingImage, isLoading });
                     if (input.trim() || pendingImage) {
                       handleSend(input, pendingImage || undefined);
                       setPendingImage(null);
+                    } else {
+                      console.log('[SendButton] BLOCKED — no input text and no pending image');
                     }
                   }}
                   style={{
