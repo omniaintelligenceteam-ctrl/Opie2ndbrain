@@ -39,7 +39,20 @@ export function useConversations(): UseConversationsReturn {
     if (isLoadedRef.current) return;
     
     loadConversations().then(loaded => {
-      setStore(loaded);
+      // Safety normalization in case persisted state has no valid active conversation ID.
+      const hasValidActive =
+        typeof loaded.activeConversationId === 'string' &&
+        loaded.conversations.some((c) => c.id === loaded.activeConversationId);
+      const normalized: ConversationStore = {
+        ...loaded,
+        activeConversationId:
+          loaded.conversations.length === 0
+            ? null
+            : hasValidActive
+              ? loaded.activeConversationId
+              : loaded.conversations[0].id,
+      };
+      setStore(normalized);
       setIsLoading(false);
       isLoadedRef.current = true;
     }).catch(error => {

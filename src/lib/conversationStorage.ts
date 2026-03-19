@@ -83,10 +83,25 @@ function loadFromLocalStorage(): ConversationStore {
       return { conversations: [], activeConversationId: null, pinnedConversationIds: [] };
     }
 
-    // Ensure pinnedConversationIds exists (migration from old format)
+    // Normalize shape + ensure active conversation is always valid when conversations exist
+    const conversations = parsed.conversations;
+    const pinnedConversationIds = parsed.pinnedConversationIds || [];
+    const hasValidActive =
+      typeof parsed.activeConversationId === 'string' &&
+      conversations.some((c) => c.id === parsed.activeConversationId);
+
+    const activeConversationId =
+      conversations.length === 0
+        ? null
+        : hasValidActive
+          ? parsed.activeConversationId
+          : conversations[0].id;
+
     return {
       ...parsed,
-      pinnedConversationIds: parsed.pinnedConversationIds || [],
+      conversations,
+      activeConversationId,
+      pinnedConversationIds,
     };
   } catch (error) {
     console.error('[ConversationStorage] Failed to load:', error);

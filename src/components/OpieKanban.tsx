@@ -851,13 +851,12 @@ export default function OpieKanban(): React.ReactElement {
       } catch { /* best-effort */ }
     }
 
-    // Ensure we have an active conversation before sending
-    if (!activeConversation) {
-      console.log('[Chat] No active conversation, creating one...');
-      createConversation();
-      // Wait a tick for state to update
-      await new Promise(r => setTimeout(r, 50));
-    }
+    // Ensure we have a concrete target conversation ID for this send.
+    // This avoids race conditions when persisted state has no active ID.
+    const targetConversationId = activeConversation?.id || createConversation().id;
+    const setTargetMessages = (
+      updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
+    ) => updateMessagesForConversation(targetConversationId, updater);
     
     const userMsg = messageText.trim();
     
@@ -871,17 +870,18 @@ export default function OpieKanban(): React.ReactElement {
       image: image,
     };
     
-    // Use ref for synchronous access to latest messages (prevents stale closure)
-    const currentMessages = messagesRef.current;
+    // Use the target conversation messages so first-send works even if activeConversation was null.
+    const targetConversation = conversations.find(c => c.id === targetConversationId);
+    const currentMessages = targetConversation?.messages || [];
     const updatedMessages = [...currentMessages, userMessage];
-    setMessages(updatedMessages);
+    setTargetMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
     ttsNotifiedRef.current = false; // reset TTS guard for this new response
     
     // Update user message status to sent
     setTimeout(() => {
-      setMessages(prev => prev.map(m =>
+      setTargetMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'sent' as const } : m
       ));
     }, 300);
@@ -936,7 +936,7 @@ export default function OpieKanban(): React.ReactElement {
         };
 
         // Update user message to delivered and add empty assistant message
-        setMessages(prev => [
+        setTargetMessages(prev => [
           ...prev.map(m => m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m),
           assistantMessage,
         ]);
@@ -968,7 +968,7 @@ export default function OpieKanban(): React.ReactElement {
                 // Check for error response first
                 if (parsed.error) {
                   fullText = `Error: ${parsed.error}`;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                   console.error('[Chat] SSE error:', parsed.error);
@@ -976,14 +976,14 @@ export default function OpieKanban(): React.ReactElement {
                 // Anthropic SSE format: content_block_delta with text
                 else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
                   fullText += parsed.delta.text;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                 }
                 // OpenAI-compatible format (Ollama)
                 else if (parsed.choices?.[0]?.delta?.content) {
                   fullText += parsed.choices[0].delta.content;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                 }
@@ -995,13 +995,13 @@ export default function OpieKanban(): React.ReactElement {
         }
 
         reply = fullText || 'No response received';
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === assistantMsgId ? { ...m, text: reply! } : m
         ));
         setIsLoading(false);
 
         // Mark user message as read
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
@@ -1069,7 +1069,7 @@ export default function OpieKanban(): React.ReactElement {
         }
 
         // Update user message to delivered
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
         ));
 
@@ -1081,11 +1081,11 @@ export default function OpieKanban(): React.ReactElement {
           timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, assistantMessage]);
+        setTargetMessages(prev => [...prev, assistantMessage]);
         setIsLoading(false);
 
         // Mark user message as read once assistant responds
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
@@ -1104,7 +1104,7 @@ export default function OpieKanban(): React.ReactElement {
       if (err?.name === 'AbortError') {
         // Check if it was a timeout vs user cancel
         const isTimeout = err?.message?.includes('timeout') || err?.name === 'AbortError';
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? {
             ...m,
             status: 'error' as const,
@@ -1121,7 +1121,7 @@ export default function OpieKanban(): React.ReactElement {
             text: 'Sorry, the request timed out. The server might be busy - please try again.',
             timestamp: new Date(),
           };
-          setMessages(prev => [...prev, timeoutMessage]);
+          setTargetMessages(prev => [...prev, timeoutMessage]);
         }
         return;
       }
@@ -1138,11 +1138,11 @@ export default function OpieKanban(): React.ReactElement {
       };
 
       // Mark user message as error
-      setMessages(prev => prev.map(m =>
+      setTargetMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'error' as const } : m
       ));
 
-      setMessages(prev => [...prev, errorMessage]);
+      setTargetMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
     }
   };

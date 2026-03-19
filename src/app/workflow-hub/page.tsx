@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import ContentStudio from '../../components/content-dashboard/ContentStudio'
-import { supabase } from '../../lib/supabase'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import WorkflowHub from '../../components/content-dashboard/WorkflowHub'
+import { supabase } from '../../lib/supabase'
 import { useToast } from '../../hooks/useRealTimeData'
 import { ToastContainer } from '../../components/NotificationCenter'
 
@@ -93,22 +92,13 @@ const NAV_LINKS = [
   { href: '/workflow-hub', label: 'Workflow Hub', icon: '??', id: 'workflow-hub' },
 ]
 
-export default function ContentCommandCenter() {
+export default function WorkflowHubPage() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const { toasts, showToast, dismissToast } = useToast()
-  const router = useRouter()
 
   useEffect(() => {
     setSidebarExpanded(getSidebarState())
   }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const tab = new URLSearchParams(window.location.search).get('tab')
-    if (tab === 'workflows') {
-      router.replace('/workflow-hub')
-    }
-  }, [router])
 
   const toggleSidebar = () => {
     const next = !sidebarExpanded
@@ -149,7 +139,7 @@ export default function ContentCommandCenter() {
 
         <nav style={{ flex: 1, padding: sidebarExpanded ? '12px 14px' : '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
           {NAV_LINKS.map((link) => {
-            const isActive = link.id === 'content-center'
+            const isActive = link.id === 'workflow-hub'
             return (
               <Link
                 key={link.id}
@@ -180,21 +170,8 @@ export default function ContentCommandCenter() {
       </aside>
 
       <main style={{ flex: 1, marginLeft: sidebarExpanded ? '240px' : '72px', transition: 'margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1)', minHeight: '100vh', overflow: 'auto' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 40px', color: 'var(--text-primary)' }}>
-          <div style={{
-            marginBottom: '20px',
-            padding: '20px 24px',
-            borderRadius: '16px',
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.06)',
-          }}>
-            <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 700, color: '#8b5cf6' }}>Content Maker System</h1>
-            <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.55)' }}>
-              Content Center is now focused only on content creation workflows and production.
-            </p>
-          </div>
-
-          <ContentStudio supabase={supabase} showToast={showToast} />
+        <div style={{ maxWidth: '1500px', margin: '0 auto', padding: '24px 24px', color: 'var(--text-primary)' }}>
+          <WorkflowHub supabase={supabase} showToast={showToast} />
         </div>
       </main>
 
@@ -202,3 +179,4 @@ export default function ContentCommandCenter() {
     </div>
   )
 }
+
