@@ -7,6 +7,12 @@ export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_G
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
 export const GATEWAY_AVAILABLE = true; // Always available through proxy
 
+// Gateway configuration checks
+export const GATEWAY_CONFIGURED = !!GATEWAY_URL && GATEWAY_URL !== '';
+export function isGatewayUnavailableInProd(): boolean {
+  return IS_VERCEL && GATEWAY_URL.includes('localhost');
+}
+
 export interface GatewayFetchOptions extends RequestInit {
   timeout?: number;
   fallback?: unknown;
@@ -127,48 +133,48 @@ export async function gatewayFetch<T = unknown>(
 
 export async function gatewayHealth(): Promise<{ connected: boolean; latency: number; reason?: string; model?: string; sessions?: number }> {
   const start = Date.now();
-  
-  // In Vercel with localhost gateway, immediately return unavailable
-  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
-    return { 
-      connected: false, 
-      latency: 0, 
-      reason: 'Gateway unavailable in production (localhost)' 
+
+  if (!GATEWAY_CONFIGURED) {
+    return { connected: false, latency: 0, reason: 'Gateway URL not configured' };
+  }
+
+  if (isGatewayUnavailableInProd()) {
+    return {
+      connected: false,
+      latency: 0,
+      reason: 'Gateway unavailable in production (localhost)',
     };
   }
-  
+
   try {
-    // Use relay /health endpoint — it confirms both relay AND gateway connection
     const res = await fetch(`${GATEWAY_URL}/health`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(5000),
     });
-    
+
     const latency = Date.now() - start;
-    
+
     if (!res.ok) {
       return { connected: false, latency, reason: `Relay HTTP ${res.status}` };
     }
-    
+
     const data = await res.json();
-    
-    // Relay /health returns { ok: true, connected: true } when gateway WS is live
-    if (data.ok && data.connected) {
+
+    if (data?.ok && data?.connected === true) {
       return { connected: true, latency };
     }
-    
+
+    if (data?.ok && data?.connected === false) {
+      return { connected: false, latency, reason: 'Relay up but gateway WebSocket disconnected' };
+    }
+
+    return { connected: false, latency, reason: 'Unexpected relay health response' };
+  } catch (error) {
     return {
       connected: false,
-      latency,
-      reason: data.connected === false ? 'Relay up but gateway WebSocket disconnected' : 'Relay health check failed',
-    };
-  } catch (error) {
-    const latency = Date.now() - start;
-    return { 
-      connected: false, 
-      latency, 
-      reason: error instanceof Error ? error.message : 'Connection failed' 
+      latency: Date.now() - start,
+      reason: error instanceof Error ? error.message : 'Connection failed',
     };
   }
 }

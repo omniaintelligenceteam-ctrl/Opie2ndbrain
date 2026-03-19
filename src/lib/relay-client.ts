@@ -13,7 +13,7 @@ export const RELAY_BASE =
   'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
 
 // Which OpenClaw agent session to target (can override per-request)
-export const MAIN_SESSION = 'agent:main:main';
+export const MAIN_SESSION = 'agent:opie:opie';
 
 /** Check if the relay is up and connected to gateway */
 export async function relayHealth(): Promise<{ ok: boolean; connected: boolean; latency: number }> {
