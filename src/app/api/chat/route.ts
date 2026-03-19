@@ -1101,11 +1101,14 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = interactionMode === 'execute' ? EXECUTE_PROMPT : PLAN_PROMPT;
 
-  // UNIFIED MODE: Route through OpenClaw gateway
+  // UNIFIED MODE: Route through OpenClaw relay
   // No more Plan/Execute split - OpenClaw handles everything
   // Agent asks "EXECUTE?" before destructive actions
-  if (shouldUseGateway()) {
-    console.log('[Chat] Unified mode: Using OpenClaw gateway');
+  // NOTE: We check relay health (not shouldUseGateway) because streamOpenClaw
+  // uses the relay (Tailscale), which doesn't need GATEWAY_TOKEN.
+  const relay = await relayHealth();
+  if (relay.ok && relay.connected) {
+    console.log('[Chat] Unified mode: Using OpenClaw relay (latency:', relay.latency + 'ms)');
     
     // Load shared context from Supabase (bridges Dashboard ↔ Telegram)
     let sharedContextPrompt = '';
