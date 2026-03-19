@@ -280,7 +280,19 @@ async function pollForAsyncResponse(
 function OpieKanbanInner(): React.ReactElement {
   // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoadingRaw] = useState(false);
+  const isLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Safety wrapper: auto-reset isLoading after 30s to prevent permanent stuck state
+  const setIsLoading = useCallback((val: boolean) => {
+    setIsLoadingRaw(val);
+    if (isLoadingTimeoutRef.current) clearTimeout(isLoadingTimeoutRef.current);
+    if (val) {
+      isLoadingTimeoutRef.current = setTimeout(() => {
+        console.warn('[Safety] isLoading stuck for 30s — auto-resetting');
+        setIsLoadingRaw(false);
+      }, 30_000);
+    }
+  }, []);
   const [sessionId, setSessionId] = useState<string>('');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('plan');
   const [selectedModel, setSelectedModel] = useState<AIModel>('kimi');
@@ -2163,6 +2175,13 @@ function OpieKanbanInner(): React.ReactElement {
                   ref={chatInputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
+                  onFocus={() => {
+                    // If isLoading has been stuck, user clicking input is a signal to unstick
+                    if (isLoading) {
+                      console.warn('[Safety] User focused input while isLoading=true — resetting');
+                      setIsLoading(false);
+                    }
+                  }}
                   onPaste={async (e) => {
                     const items = e.clipboardData?.items;
                     if (!items) return;
