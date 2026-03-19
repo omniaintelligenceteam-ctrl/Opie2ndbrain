@@ -825,7 +825,12 @@ function OpieKanbanInner(): React.ReactElement {
 
   const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
-    if ((!messageText.trim() && !image) || isLoading) return;
+    console.log('[handleSend] CALLED', { text: text?.slice(0,50), input: input?.slice(0,50), messageText: messageText?.slice(0,50), isLoading, hasImage: !!image, trimmed: messageText?.trim()?.length });
+    if ((!messageText.trim() && !image) || isLoading) {
+      console.log('[handleSend] BLOCKED by guard', { emptyText: !messageText.trim(), noImage: !image, isLoading });
+      return;
+    }
+    console.log('[handleSend] PASSED guard, proceeding to send');
 
     // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
     // so the browser allows audio playback when Ava responds
@@ -894,6 +899,7 @@ function OpieKanbanInner(): React.ReactElement {
     }, 120_000); // 120 second timeout
 
     try {
+      console.log('[handleSend] FETCHING /api/chat now...');
       const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2189,9 +2195,12 @@ function OpieKanbanInner(): React.ReactElement {
                 {/* Send button */}
                 <button
                   onClick={() => {
+                    console.log('[SendButton] CLICKED', { input, inputTrim: input?.trim(), pendingImage: !!pendingImage, isLoading });
                     if (input.trim() || pendingImage) {
                       handleSend(input, pendingImage || undefined);
                       setPendingImage(null);
+                    } else {
+                      console.log('[SendButton] BLOCKED — no input text and no pending image');
                     }
                   }}
                   style={{
