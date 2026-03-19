@@ -12,6 +12,7 @@ import { useSystemStatus } from '../contexts/SystemStatusContext';
 import { extractMemory, shouldExtractMemory } from '@/lib/memoryExtraction';
 import { useMemoryRefresh } from '../hooks/useMemoryRefresh';
 import { useActiveAgents, useAgentSessions } from '../hooks/useAgentSessions';
+import { SidebarDataProvider } from '../hooks/useSidebarData';
 import { AGENT_NODES } from '../lib/agentMapping';
 import { useAgentPersonality } from '../contexts/AgentPersonalityContext';
 import { useVoiceEngine } from '../hooks/useVoiceEngine';
@@ -276,7 +277,7 @@ async function pollForAsyncResponse(
 
 // KanbanColumn is now in ./KanbanColumnInline.tsx
 
-export default function OpieKanban(): React.ReactElement {
+function OpieKanbanInner(): React.ReactElement {
   // Note: messages are now managed by useConversations hook
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -2992,6 +2993,15 @@ export default function OpieKanban(): React.ReactElement {
       )}
       </div>
     </NotificationProvider>
+  );
+}
+
+// Wrap with SidebarDataProvider so all convenience hooks share ONE SSE connection
+export default function OpieKanban(): React.ReactElement {
+  return (
+    <SidebarDataProvider>
+      <OpieKanbanInner />
+    </SidebarDataProvider>
   );
 }
 

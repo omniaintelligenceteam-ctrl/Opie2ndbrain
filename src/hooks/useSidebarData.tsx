@@ -493,8 +493,21 @@ export function useSidebarDataContext() {
 // Convenience hooks for specific data
 // ============================================================================
 
+// ============================================================================
+// Convenience hooks — ALL read from context to avoid duplicate SSE connections
+// Requires SidebarDataProvider to be mounted above in the tree.
+// Falls back to a fresh useSidebarData() if context is missing (dev safety).
+// ============================================================================
+
+function useSidebarDataSafe() {
+  const ctx = useContext(SidebarDataContext);
+  // If context not available (e.g. rendered outside provider), fall back.
+  // This should not happen in production but avoids hard crashes in tests/stories.
+  return ctx ?? useSidebarData(); // eslint-disable-line react-hooks/rules-of-hooks
+}
+
 export function useSidebarSessions() {
-  const { sessions, nodes, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarData();
+  const { sessions, nodes, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarDataSafe();
   return {
     sessions,
     nodes,
@@ -509,7 +522,7 @@ export function useSidebarSessions() {
 }
 
 export function useSidebarTasks() {
-  const { tasks, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarData();
+  const { tasks, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarDataSafe();
   return {
     tasks,
     runningTasks: stats.runningTasks,
@@ -524,7 +537,7 @@ export function useSidebarTasks() {
 }
 
 export function useSidebarCrons() {
-  const { crons, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarData();
+  const { crons, stats, loading, error, connectionType, lastUpdated, refresh } = useSidebarDataSafe();
   return {
     crons,
     enabledCrons: stats.enabledCrons,
@@ -538,7 +551,7 @@ export function useSidebarCrons() {
 }
 
 export function useSidebarStats() {
-  const { stats, gateway, loading, connectionType, lastUpdated } = useSidebarData();
+  const { stats, gateway, loading, connectionType, lastUpdated } = useSidebarDataSafe();
   return {
     stats,
     gateway,
