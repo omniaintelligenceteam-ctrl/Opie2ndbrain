@@ -825,7 +825,14 @@ function OpieKanbanInner(): React.ReactElement {
 
   const handleSend = async (text?: string, image?: string): Promise<string | void> => {
     const messageText = text || input;
-    if ((!messageText.trim() && !image) || isLoading) return;
+    if (!messageText.trim() && !image) {
+      console.log('[Chat] handleSend blocked: empty message and no image');
+      return;
+    }
+    if (isLoading) {
+      console.warn('[Chat] handleSend blocked: isLoading is true — a previous request may be stuck');
+      return;
+    }
 
     // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
     // so the browser allows audio playback when Ava responds
@@ -879,6 +886,8 @@ function OpieKanbanInner(): React.ReactElement {
     setInput('');
     setIsLoading(true);
     ttsNotifiedRef.current = false; // reset TTS guard for this new response
+
+    console.log('[Chat] Message sent:', { id: userMessage.id, text: userMsg.slice(0, 80), conversationId: targetConversationId, totalMessages: updatedMessages.length });
     
     // Update user message status to sent
     setTimeout(() => {
@@ -892,6 +901,13 @@ function OpieKanbanInner(): React.ReactElement {
     const timeoutId = setTimeout(() => {
       abortController.abort();
     }, 120_000); // 120 second timeout
+
+    // Safety net: if isLoading somehow stays true for 130s (longer than abort timeout),
+    // force-reset it so the user can send again
+    const safetyResetId = setTimeout(() => {
+      console.warn('[Chat] Safety reset: isLoading force-reset after 130s');
+      setIsLoading(false);
+    }, 130_000);
 
     try {
       const res = await apiFetch('/api/chat', {
@@ -1040,6 +1056,7 @@ function OpieKanbanInner(): React.ReactElement {
           
           // Don't continue with normal response handling - the plan UI will take over
           setIsLoading(false);
+          clearTimeout(safetyResetId);
           return;
         }
 
@@ -1097,9 +1114,11 @@ function OpieKanbanInner(): React.ReactElement {
         }
       }
 
+      clearTimeout(safetyResetId);
       return reply || undefined;
     } catch (err: any) {
       clearTimeout(timeoutId);
+      clearTimeout(safetyResetId);
 
       // If user interrupted while thinking, don't show error - just mark as cancelled
       if (err?.name === 'AbortError') {
@@ -2603,14 +2622,22 @@ function OpieKanbanInner(): React.ReactElement {
                 <input 
                   value={input} 
                   onChange={e => setInput(e.target.value)} 
-                  onKeyDown={e => { if (e.key === 'Enter') handleSend(input); }} 
-                  placeholder="Type a message..." 
-                  style={styles.textInput} 
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim()) handleSend(input);
+                    }
+                  }}
+                  placeholder="Type a message..."
+                  style={styles.textInput}
                 />
-                <button 
-                  onClick={() => handleSend(input)} 
-                  style={styles.sendButton}
-                  disabled={isLoading}
+                <button
+                  onClick={() => { if (input.trim()) handleSend(input); }}
+                  style={{
+                    ...styles.sendButton,
+                    opacity: input.trim() && !isLoading ? 1 : 0.5,
+                  }}
+                  disabled={isLoading || !input.trim()}
                 >
                   {isLoading ? '...' : 'Send'}
                 </button>

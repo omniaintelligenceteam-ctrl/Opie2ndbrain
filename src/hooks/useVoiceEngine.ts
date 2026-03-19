@@ -418,19 +418,52 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         console.warn('[VoiceEngine] TTS API error:', res.status, errData, '— falling back to browser speechSynthesis');
         // Fallback: browser Web Speech API (works with zero API keys)
         if (typeof window !== 'undefined' && window.speechSynthesis) {
-          const cleanText = text.replace(/[*_`#>]/g, '').trim();
-          const utt = new SpeechSynthesisUtterance(cleanText);
-          utt.rate = 1.0;
-          utt.pitch = 1.0;
-          utt.volume = 1.0;
-          // Pick a natural English voice if available
+          // Chrome bug: getVoices() returns [] on first call. Must wait for voiceschanged.
+          const speakWithFallback = () => {
+            const cleanText = text.replace(/[*_`#>]/g, '').trim();
+            if (!cleanText) {
+              dispatch({ type: 'TTS_ERROR', error: 'Empty text after cleaning' });
+              return;
+            }
+            // Cancel any pending speech first (Chrome won't speak if queue is stuck)
+            window.speechSynthesis.cancel();
+            const utt = new SpeechSynthesisUtterance(cleanText);
+            utt.rate = 1.0;
+            utt.pitch = 1.0;
+            utt.volume = 1.0;
+            const voices = window.speechSynthesis.getVoices();
+            const preferred = voices.find(v => v.lang === 'en-US' && v.localService) || voices.find(v => v.lang.startsWith('en'));
+            if (preferred) utt.voice = preferred;
+            utt.onend = () => dispatch({ type: 'TTS_ENDED' });
+            utt.onerror = (e) => {
+              console.error('[VoiceEngine] Browser TTS error:', e.error);
+              dispatch({ type: 'TTS_ERROR', error: e.error || 'Browser TTS failed' });
+            };
+            dispatch({ type: 'TTS_STARTED' });
+            console.log('[VoiceEngine] Using browser speechSynthesis fallback, voices available:', voices.length);
+            window.speechSynthesis.speak(utt);
+          };
+
           const voices = window.speechSynthesis.getVoices();
-          const preferred = voices.find(v => v.lang === 'en-US' && v.localService) || voices.find(v => v.lang.startsWith('en'));
-          if (preferred) utt.voice = preferred;
-          utt.onend = () => dispatch({ type: 'TTS_ENDED' });
-          utt.onerror = (e) => dispatch({ type: 'TTS_ERROR', error: e.error });
-          dispatch({ type: 'TTS_STARTED' });
-          window.speechSynthesis.speak(utt);
+          if (voices.length === 0) {
+            // Voices not loaded yet — wait for voiceschanged event (Chrome/Edge)
+            console.log('[VoiceEngine] Waiting for voices to load...');
+            const onVoicesChanged = () => {
+              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+              speakWithFallback();
+            };
+            window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+            // Safety: if voiceschanged never fires (some browsers), try anyway after 500ms
+            setTimeout(() => {
+              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+              if (window.speechSynthesis.getVoices().length === 0) {
+                console.warn('[VoiceEngine] Voices never loaded, trying speechSynthesis anyway');
+              }
+              speakWithFallback();
+            }, 500);
+          } else {
+            speakWithFallback();
+          }
         } else {
           dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
         }
@@ -505,6 +538,19 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       audio.onerror = null;
     };
   }, [dispatch, browserSupport.needsUserGesture]);
+
+  // ─── Preload speechSynthesis voices (Chrome needs this early) ──
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    // Trigger voice loading — Chrome lazily loads voices
+    window.speechSynthesis.getVoices();
+    const handler = () => {
+      const voices = window.speechSynthesis.getVoices();
+      console.log(`[VoiceEngine] Browser voices loaded: ${voices.length}`);
+    };
+    window.speechSynthesis.addEventListener('voiceschanged', handler);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', handler);
+  }, []);
 
   // ─── Initialize Speech Recognition ────────────────────────────
   useEffect(() => {
