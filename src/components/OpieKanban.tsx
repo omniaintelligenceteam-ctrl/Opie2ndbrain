@@ -1818,13 +1818,13 @@ function OpieKanbanInner(): React.ReactElement {
                         borderRadius: 8,
                         fontSize: '0.72rem',
                         fontWeight: 600,
-                        border: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
-                        background: liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                        color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
+                        border: `1px solid ${statusLoading ? 'rgba(255,255,255,0.15)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
+                        background: statusLoading ? 'rgba(255,255,255,0.05)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        color: statusLoading ? 'rgba(255,255,255,0.4)' : liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
                       }}
                     >
-                      <span>{liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
-                      <span>{liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
+                      <span>{statusLoading ? '⏳' : liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
+                      <span>{statusLoading ? 'Checking…' : liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
                     </div>
                   </div>
                 </div>
@@ -1914,19 +1914,23 @@ function OpieKanbanInner(): React.ReactElement {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                background: liveStatus?.gateway?.connected
-                  ? 'rgba(34,197,94,0.07)'
-                  : 'rgba(239,68,68,0.07)',
-                borderBottom: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
+                background: statusLoading
+                  ? 'rgba(255,255,255,0.03)'
+                  : liveStatus?.gateway?.connected
+                    ? 'rgba(34,197,94,0.07)'
+                    : 'rgba(239,68,68,0.07)',
+                borderBottom: `1px solid ${statusLoading ? 'rgba(255,255,255,0.06)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
               }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
-                  color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
-                  {liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
+                  color: statusLoading ? 'rgba(255,255,255,0.35)' : liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
+                  {statusLoading ? '⏳ CHECKING…' : liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
                 </span>
                 <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', flex: 1 }}>
-                  {liveStatus?.gateway?.connected
-                    ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
-                    : 'Fallback mode — direct model chat only, no tools or agent powers'}
+                  {statusLoading
+                    ? 'Connecting to OpenClaw gateway…'
+                    : liveStatus?.gateway?.connected
+                      ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
+                      : 'Fallback mode — direct model chat only, no tools or agent powers'}
                 </span>
                 {liveStatus?.gateway?.latency ? (
                   <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>

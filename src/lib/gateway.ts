@@ -1,11 +1,31 @@
 // Gateway configuration - centralized for all API routes
-// Uses Tailscale Funnel (public HTTPS) for production access
-export const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || process.env.MOLTBOT_GATEWAY_URL || 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
-export const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.MOLTBOT_GATEWAY_TOKEN || 'opie-token-123';
+// OPENCLAW_* takes precedence, then generic GATEWAY_* aliases, then legacy MOLTBOT_* names.
 
-// Check if we're likely in a production environment without local gateway
+const envOrEmpty = (...values: Array<string | undefined>) => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+};
+
+export const GATEWAY_URL = envOrEmpty(
+  process.env.OPENCLAW_GATEWAY_URL,
+  process.env.GATEWAY_URL,
+  process.env.OPIE_GATEWAY_URL,
+  process.env.MOLTBOT_GATEWAY_URL,
+  'http://localhost:3457'
+);
+
+export const GATEWAY_TOKEN = envOrEmpty(
+  process.env.OPENCLAW_GATEWAY_TOKEN,
+  process.env.GATEWAY_TOKEN,
+  process.env.OPIE_GATEWAY_TOKEN,
+  process.env.MOLTBOT_GATEWAY_TOKEN
+);
+
 export const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
-export const GATEWAY_AVAILABLE = true; // Always available through proxy
+export const GATEWAY_CONFIGURED = Boolean(GATEWAY_URL);
 
 export interface GatewayFetchOptions extends RequestInit {
   timeout?: number;
@@ -20,7 +40,6 @@ export class GatewayUnavailableError extends Error {
 }
 
 // Invoke a gateway tool via /tools/invoke endpoint
-// This is the proper way to interact with the gateway
 export interface ToolInvokeResult<T = unknown> {
   ok: boolean;
   result?: T;
@@ -30,44 +49,56 @@ export interface ToolInvokeResult<T = unknown> {
   };
 }
 
+function isGatewayUnavailableInProd(): boolean {
+  return IS_VERCEL && GATEWAY_URL.includes('localhost');
+}
+
+function gatewayHeaders(extra: HeadersInit = {}): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(GATEWAY_TOKEN && { Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+    ...extra,
+  };
+}
+
 export async function invokeGatewayTool<T = unknown>(
   tool: string,
   args: Record<string, unknown> = {},
   options: { timeout?: number } = {}
 ): Promise<ToolInvokeResult<T>> {
   const { timeout = 10000 } = options;
-  
-  // In Vercel with localhost gateway, return error immediately
-  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
-    return { ok: false, error: { type: 'unavailable', message: 'Gateway unavailable' } };
+
+  if (!GATEWAY_CONFIGURED) {
+    return { ok: false, error: { type: 'unconfigured', message: 'Gateway URL not configured' } };
   }
-  
+
+  if (isGatewayUnavailableInProd()) {
+    return { ok: false, error: { type: 'unavailable', message: 'Gateway unavailable in production (localhost)' } };
+  }
+
   try {
     const res = await fetch(`${GATEWAY_URL}/tools/invoke`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-      },
+      headers: gatewayHeaders(),
       body: JSON.stringify({ tool, args }),
       signal: AbortSignal.timeout(timeout),
     });
-    
+
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return { ok: false, error: { type: 'invalid_response', message: 'Gateway returned non-JSON' } };
     }
-    
+
     const data = await res.json();
     return data;
   } catch (error) {
-    return { 
-      ok: false, 
-      error: { 
-        type: 'network', 
-        message: error instanceof Error ? error.message : 'Unknown error' 
-      } 
+    return {
+      ok: false,
+      error: {
+        type: 'network',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
     };
   }
 }
@@ -77,20 +108,16 @@ export async function gatewayFetch<T = unknown>(
   options: GatewayFetchOptions = {}
 ): Promise<T> {
   const { timeout = 10000, headers: customHeaders, fallback, ...rest } = options;
-  
-  // In Vercel without external gateway, return fallback immediately
-  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
-    if (fallback !== undefined) {
-      return fallback as T;
-    }
+
+  if (!GATEWAY_CONFIGURED) {
+    if (fallback !== undefined) return fallback as T;
+    throw new GatewayUnavailableError('Gateway URL not configured');
+  }
+
+  if (isGatewayUnavailableInProd()) {
+    if (fallback !== undefined) return fallback as T;
     throw new GatewayUnavailableError('Gateway unavailable in production (localhost)');
   }
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(GATEWAY_TOKEN && { 'Authorization': `Bearer ${GATEWAY_TOKEN}` }),
-    ...customHeaders,
-  };
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -98,7 +125,7 @@ export async function gatewayFetch<T = unknown>(
   try {
     const res = await fetch(`${GATEWAY_URL}${path}`, {
       ...rest,
-      headers,
+      headers: gatewayHeaders(customHeaders),
       signal: controller.signal,
     });
 
@@ -112,63 +139,96 @@ export async function gatewayFetch<T = unknown>(
     return res.json();
   } catch (error) {
     clearTimeout(timeoutId);
-    
-    // Return fallback if provided
-    if (fallback !== undefined) {
-      return fallback as T;
-    }
-    
+
+    if (fallback !== undefined) return fallback as T;
+
     if (error instanceof Error && error.name === 'AbortError') {
       throw new GatewayUnavailableError('Gateway request timed out');
     }
+
     throw error;
   }
 }
 
 export async function gatewayHealth(): Promise<{ connected: boolean; latency: number; reason?: string; model?: string; sessions?: number }> {
   const start = Date.now();
-  
-  // In Vercel with localhost gateway, immediately return unavailable
-  if (IS_VERCEL && GATEWAY_URL.includes('localhost')) {
-    return { 
-      connected: false, 
-      latency: 0, 
-      reason: 'Gateway unavailable in production (localhost)' 
-    };
+
+  if (!GATEWAY_CONFIGURED) {
+    return { connected: false, latency: 0, reason: 'Gateway URL not configured' };
   }
-  
-  try {
-    // Use relay /health endpoint — it confirms both relay AND gateway connection
-    const res = await fetch(`${GATEWAY_URL}/health`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-    });
-    
-    const latency = Date.now() - start;
-    
-    if (!res.ok) {
-      return { connected: false, latency, reason: `Relay HTTP ${res.status}` };
-    }
-    
-    const data = await res.json();
-    
-    // Relay /health returns { ok: true, connected: true } when gateway WS is live
-    if (data.ok && data.connected) {
-      return { connected: true, latency };
-    }
-    
+
+  if (isGatewayUnavailableInProd()) {
     return {
       connected: false,
-      latency,
-      reason: data.connected === false ? 'Relay up but gateway WebSocket disconnected' : 'Relay health check failed',
+      latency: 0,
+      reason: 'Gateway unavailable in production (localhost)',
     };
-  } catch (error) {
+  }
+
+  try {
+    // Prefer an authenticated tool call because this is what the app actually relies on.
+    const toolRes = await fetch(`${GATEWAY_URL}/tools/invoke`, {
+      method: 'POST',
+      headers: gatewayHeaders(),
+      body: JSON.stringify({ tool: 'session_status', args: {} }),
+      signal: AbortSignal.timeout(5000),
+    });
+
     const latency = Date.now() - start;
-    return { 
-      connected: false, 
-      latency, 
-      reason: error instanceof Error ? error.message : 'Connection failed' 
+
+    if (toolRes.ok) {
+      const contentType = toolRes.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await toolRes.json();
+        if (data?.ok) {
+          return {
+            connected: true,
+            latency,
+            model: data?.result?.model,
+            sessions: data?.result?.sessions,
+          };
+        }
+        return { connected: false, latency, reason: data?.error?.message || 'Gateway tool health check failed' };
+      }
+      return { connected: false, latency, reason: 'Gateway returned non-JSON response' };
+    }
+
+    if (toolRes.status === 401 || toolRes.status === 403) {
+      return { connected: false, latency, reason: 'Gateway auth failed (invalid token)' };
+    }
+
+    // Fallback: check relay health for extra diagnostics.
+    try {
+      const relayRes = await fetch(`${GATEWAY_URL}/health`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3000),
+      });
+
+      if (!relayRes.ok) {
+        return { connected: false, latency, reason: `Gateway HTTP ${toolRes.status}` };
+      }
+
+      const relayData = await relayRes.json();
+      if (relayData?.ok && relayData?.connected === true) {
+        return { connected: false, latency, reason: 'Relay connected, but tool invocation failed' };
+      }
+
+      return {
+        connected: false,
+        latency,
+        reason: relayData?.connected === false
+          ? 'Relay up but gateway WebSocket disconnected'
+          : `Gateway HTTP ${toolRes.status}`,
+      };
+    } catch {
+      return { connected: false, latency, reason: `Gateway HTTP ${toolRes.status}` };
+    }
+  } catch (error) {
+    return {
+      connected: false,
+      latency: Date.now() - start,
+      reason: error instanceof Error ? error.message : 'Connection failed',
     };
   }
 }

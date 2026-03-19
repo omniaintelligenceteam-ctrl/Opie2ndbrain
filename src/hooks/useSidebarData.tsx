@@ -64,6 +64,8 @@ export interface GatewayStatus {
   connected: boolean;
   latency: number;
   model?: string;
+  reason?: string;
+  configured?: boolean;
 }
 
 export interface SidebarDataState {
@@ -286,6 +288,8 @@ export function useSidebarData(enabled = true): SidebarDataState & { refresh: ()
           connected: statusRes.gateway?.connected ?? false,
           latency: statusRes.gateway?.latency ?? 0,
           model: statusRes.model,
+          reason: statusRes.gateway?.reason,
+          configured: statusRes.gateway?.configured,
         },
         stats: {
           activeAgents: statusRes.agents?.active ?? 0,
@@ -298,6 +302,7 @@ export function useSidebarData(enabled = true): SidebarDataState & { refresh: ()
         },
         timestamp: new Date().toISOString(),
         source: statusRes.gateway?.connected ? 'gateway' : 'fallback',
+        error: statusRes.gateway?.connected ? undefined : (statusRes.gateway?.reason || 'Gateway unavailable'),
       }, 'polling');
     } catch (error) {
       console.error('[Sidebar] Polling error:', error);
