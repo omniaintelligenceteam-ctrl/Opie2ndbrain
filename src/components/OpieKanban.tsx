@@ -848,60 +848,76 @@ function OpieKanbanInner(): React.ReactElement {
     }
     console.log('[handleSend] PASSED guard, proceeding to send');
 
-    // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
-    // so the browser allows audio playback when Ava responds
-    if (typeof window !== 'undefined') {
-      try {
-        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const buf = ctx.createBuffer(1, 1, 22050);
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.connect(ctx.destination);
-          src.start(0);
-          if (ctx.state === 'suspended') await ctx.resume();
-          setTimeout(() => ctx.close().catch(() => {}), 200);
-        }
-        // Also unlock the voice engine's audio element directly
-        if (voiceEngine?.audioRef?.current) {
-          voiceEngine.audioRef.current.volume = 0.001;
-          await voiceEngine.audioRef.current.play().catch(() => {});
-          voiceEngine.audioRef.current.pause();
-          voiceEngine.audioRef.current.volume = 1.0;
-        }
-      } catch { /* best-effort */ }
+    // Wrap pre-fetch setup in try/catch so crashes are visible
+    let targetConversationId: string;
+    let setTargetMessages: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+    let userMessage: ChatMessage;
+    let updatedMessages: ChatMessage[];
+    let userMsg: string;
+
+    try {
+      // Unlock audio context NOW — this runs inside a user gesture (click/Enter)
+      // so the browser allows audio playback when Ava responds
+      if (typeof window !== 'undefined') {
+        try {
+          const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtx) {
+            const ctx = new AudioCtx();
+            const buf = ctx.createBuffer(1, 1, 22050);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(ctx.destination);
+            src.start(0);
+            if (ctx.state === 'suspended') await ctx.resume();
+            setTimeout(() => ctx.close().catch(() => {}), 200);
+          }
+          // Also unlock the voice engine's audio element directly
+          if (voiceEngine?.audioRef?.current) {
+            voiceEngine.audioRef.current.volume = 0.001;
+            await voiceEngine.audioRef.current.play().catch(() => {});
+            voiceEngine.audioRef.current.pause();
+            voiceEngine.audioRef.current.volume = 1.0;
+          }
+        } catch { /* best-effort */ }
+      }
+
+      console.log('[handleSend] Audio unlock done');
+
+      // Ensure we have a concrete target conversation ID for this send.
+      // This avoids race conditions when persisted state has no active ID.
+      targetConversationId = activeConversation?.id || createConversation().id;
+      console.log('[handleSend] targetConversationId:', targetConversationId);
+
+      setTargetMessages = (
+        updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
+      ) => updateMessagesForConversation(targetConversationId, updater);
+
+      userMsg = messageText.trim();
+
+      // Create user message with proper structure
+      userMessage = {
+        id: generateMessageId(),
+        role: 'user',
+        text: userMsg || (image ? '[Image]' : ''),
+        timestamp: new Date(),
+        status: 'sending',
+        image: image,
+      };
+
+      // Use the target conversation messages so first-send works even if activeConversation was null.
+      const targetConversation = conversations.find(c => c.id === targetConversationId);
+      const currentMessages = targetConversation?.messages || [];
+      updatedMessages = [...currentMessages, userMessage];
+      setTargetMessages(updatedMessages);
+      setInput('');
+      setIsLoading(true);
+      ttsNotifiedRef.current = false; // reset TTS guard for this new response
+
+      console.log('[Chat] Message sent:', { id: userMessage.id, text: userMsg.slice(0, 80), conversationId: targetConversationId, totalMessages: updatedMessages.length });
+    } catch (setupErr) {
+      console.error('[handleSend] CRASH in setup phase:', setupErr);
+      return;
     }
-
-    // Ensure we have a concrete target conversation ID for this send.
-    // This avoids race conditions when persisted state has no active ID.
-    const targetConversationId = activeConversation?.id || createConversation().id;
-    const setTargetMessages = (
-      updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
-    ) => updateMessagesForConversation(targetConversationId, updater);
-    
-    const userMsg = messageText.trim();
-    
-    // Create user message with proper structure
-    const userMessage: ChatMessage = {
-      id: generateMessageId(),
-      role: 'user',
-      text: userMsg || (image ? '[Image]' : ''),
-      timestamp: new Date(),
-      status: 'sending',
-      image: image,
-    };
-    
-    // Use the target conversation messages so first-send works even if activeConversation was null.
-    const targetConversation = conversations.find(c => c.id === targetConversationId);
-    const currentMessages = targetConversation?.messages || [];
-    const updatedMessages = [...currentMessages, userMessage];
-    setTargetMessages(updatedMessages);
-    setInput('');
-    setIsLoading(true);
-    ttsNotifiedRef.current = false; // reset TTS guard for this new response
-
-    console.log('[Chat] Message sent:', { id: userMessage.id, text: userMsg.slice(0, 80), conversationId: targetConversationId, totalMessages: updatedMessages.length });
     
     // Update user message status to sent
     setTimeout(() => {
