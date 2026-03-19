@@ -852,13 +852,12 @@ function OpieKanbanInner(): React.ReactElement {
       } catch { /* best-effort */ }
     }
 
-    // Ensure we have an active conversation before sending
-    if (!activeConversation) {
-      console.log('[Chat] No active conversation, creating one...');
-      createConversation();
-      // Wait a tick for state to update
-      await new Promise(r => setTimeout(r, 50));
-    }
+    // Ensure we have a concrete target conversation ID for this send.
+    // This avoids race conditions when persisted state has no active ID.
+    const targetConversationId = activeConversation?.id || createConversation().id;
+    const setTargetMessages = (
+      updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
+    ) => updateMessagesForConversation(targetConversationId, updater);
     
     const userMsg = messageText.trim();
     
@@ -872,17 +871,18 @@ function OpieKanbanInner(): React.ReactElement {
       image: image,
     };
     
-    // Use ref for synchronous access to latest messages (prevents stale closure)
-    const currentMessages = messagesRef.current;
+    // Use the target conversation messages so first-send works even if activeConversation was null.
+    const targetConversation = conversations.find(c => c.id === targetConversationId);
+    const currentMessages = targetConversation?.messages || [];
     const updatedMessages = [...currentMessages, userMessage];
-    setMessages(updatedMessages);
+    setTargetMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
     ttsNotifiedRef.current = false; // reset TTS guard for this new response
     
     // Update user message status to sent
     setTimeout(() => {
-      setMessages(prev => prev.map(m =>
+      setTargetMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'sent' as const } : m
       ));
     }, 300);
@@ -937,7 +937,7 @@ function OpieKanbanInner(): React.ReactElement {
         };
 
         // Update user message to delivered and add empty assistant message
-        setMessages(prev => [
+        setTargetMessages(prev => [
           ...prev.map(m => m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m),
           assistantMessage,
         ]);
@@ -969,7 +969,7 @@ function OpieKanbanInner(): React.ReactElement {
                 // Check for error response first
                 if (parsed.error) {
                   fullText = `Error: ${parsed.error}`;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                   console.error('[Chat] SSE error:', parsed.error);
@@ -977,14 +977,14 @@ function OpieKanbanInner(): React.ReactElement {
                 // Anthropic SSE format: content_block_delta with text
                 else if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
                   fullText += parsed.delta.text;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                 }
                 // OpenAI-compatible format (Ollama)
                 else if (parsed.choices?.[0]?.delta?.content) {
                   fullText += parsed.choices[0].delta.content;
-                  setMessages(prev => prev.map(m =>
+                  setTargetMessages(prev => prev.map(m =>
                     m.id === assistantMsgId ? { ...m, text: fullText } : m
                   ));
                 }
@@ -996,13 +996,13 @@ function OpieKanbanInner(): React.ReactElement {
         }
 
         reply = fullText || 'No response received';
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === assistantMsgId ? { ...m, text: reply! } : m
         ));
         setIsLoading(false);
 
         // Mark user message as read
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
@@ -1070,7 +1070,7 @@ function OpieKanbanInner(): React.ReactElement {
         }
 
         // Update user message to delivered
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'delivered' as const } : m
         ));
 
@@ -1082,11 +1082,11 @@ function OpieKanbanInner(): React.ReactElement {
           timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, assistantMessage]);
+        setTargetMessages(prev => [...prev, assistantMessage]);
         setIsLoading(false);
 
         // Mark user message as read once assistant responds
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? { ...m, status: 'read' as const } : m
         ));
 
@@ -1105,7 +1105,7 @@ function OpieKanbanInner(): React.ReactElement {
       if (err?.name === 'AbortError') {
         // Check if it was a timeout vs user cancel
         const isTimeout = err?.message?.includes('timeout') || err?.name === 'AbortError';
-        setMessages(prev => prev.map(m =>
+        setTargetMessages(prev => prev.map(m =>
           m.id === userMessage.id ? {
             ...m,
             status: 'error' as const,
@@ -1122,7 +1122,7 @@ function OpieKanbanInner(): React.ReactElement {
             text: 'Sorry, the request timed out. The server might be busy - please try again.',
             timestamp: new Date(),
           };
-          setMessages(prev => [...prev, timeoutMessage]);
+          setTargetMessages(prev => [...prev, timeoutMessage]);
         }
         return;
       }
@@ -1139,11 +1139,11 @@ function OpieKanbanInner(): React.ReactElement {
       };
 
       // Mark user message as error
-      setMessages(prev => prev.map(m =>
+      setTargetMessages(prev => prev.map(m =>
         m.id === userMessage.id ? { ...m, status: 'error' as const } : m
       ));
 
-      setMessages(prev => [...prev, errorMessage]);
+      setTargetMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
     }
   };
@@ -1818,13 +1818,13 @@ function OpieKanbanInner(): React.ReactElement {
                         borderRadius: 8,
                         fontSize: '0.72rem',
                         fontWeight: 600,
-                        border: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
-                        background: liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                        color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
+                        border: `1px solid ${statusLoading ? 'rgba(255,255,255,0.15)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
+                        background: statusLoading ? 'rgba(255,255,255,0.05)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                        color: statusLoading ? 'rgba(255,255,255,0.4)' : liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5',
                       }}
                     >
-                      <span>{liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
-                      <span>{liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
+                      <span>{statusLoading ? '⏳' : liveStatus?.gateway?.connected ? '🟢' : '🔴'}</span>
+                      <span>{statusLoading ? 'Checking…' : liveStatus?.gateway?.connected ? 'Bridge ON' : 'Bridge OFF'}</span>
                     </div>
                   </div>
                 </div>
@@ -1914,19 +1914,23 @@ function OpieKanbanInner(): React.ReactElement {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                background: liveStatus?.gateway?.connected
-                  ? 'rgba(34,197,94,0.07)'
-                  : 'rgba(239,68,68,0.07)',
-                borderBottom: `1px solid ${liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
+                background: statusLoading
+                  ? 'rgba(255,255,255,0.03)'
+                  : liveStatus?.gateway?.connected
+                    ? 'rgba(34,197,94,0.07)'
+                    : 'rgba(239,68,68,0.07)',
+                borderBottom: `1px solid ${statusLoading ? 'rgba(255,255,255,0.06)' : liveStatus?.gateway?.connected ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'}`,
               }}>
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
-                  color: liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
-                  {liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
+                  color: statusLoading ? 'rgba(255,255,255,0.35)' : liveStatus?.gateway?.connected ? '#86efac' : '#fca5a5' }}>
+                  {statusLoading ? '⏳ CHECKING…' : liveStatus?.gateway?.connected ? '🟢 BRIDGE ON' : '🔴 BRIDGE OFF'}
                 </span>
                 <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', flex: 1 }}>
-                  {liveStatus?.gateway?.connected
-                    ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
-                    : 'Fallback mode — direct model chat only, no tools or agent powers'}
+                  {statusLoading
+                    ? 'Connecting to OpenClaw gateway…'
+                    : liveStatus?.gateway?.connected
+                      ? 'Full agent powers active — file I/O · shell · memory · web · subagents · Discord · crons'
+                      : 'Fallback mode — direct model chat only, no tools or agent powers'}
                 </span>
                 {liveStatus?.gateway?.latency ? (
                   <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>

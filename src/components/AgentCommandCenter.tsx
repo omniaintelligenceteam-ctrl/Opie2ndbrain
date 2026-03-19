@@ -978,7 +978,7 @@ export default function AgentCommandCenter({
         </div>
         <div style={{ color: '#778', fontSize: '0.55rem', fontWeight: 500 }}>
           {!gatewayConnected && !loading && (
-            <span style={{ color: '#f59e0b', marginRight: '6px' }}>OFFLINE</span>
+            <span style={{ color: '#f59e0b', marginRight: '6px' }} title={error || 'Gateway unavailable'}>OFFLINE</span>
           )}
           {connectionType === 'sse' && (
             <span style={{ color: '#22c55e', marginRight: '4px' }}>&#9889;</span>
@@ -1001,7 +1001,7 @@ export default function AgentCommandCenter({
           zIndex: 100,
         }}>
           <span>&#9888;</span>
-          <span>Gateway unavailable — {source === 'cache' ? 'showing cached data' : 'no data available'}</span>
+          <span>{error || `Gateway unavailable - ${source === 'cache' ? 'showing cached data' : 'no data available'}`}</span>
         </div>
       )}
 

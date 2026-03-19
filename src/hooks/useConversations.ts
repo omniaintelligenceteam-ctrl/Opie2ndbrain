@@ -34,18 +34,51 @@ export function useConversations(): UseConversationsReturn {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isLoadedRef = useRef(false);
 
-  // Initial load from Supabase
+  // Initial load — localStorage first, Supabase in background.
+  // 3-second safety net ensures isLoading never stays true forever.
   useEffect(() => {
     if (isLoadedRef.current) return;
-    
-    loadConversations().then(loaded => {
-      setStore(loaded);
+
+    const finish = (loaded: ConversationStore) => {
+      if (isLoadedRef.current) return; // already finished (timeout or success)
+      const hasValidActive =
+        typeof loaded.activeConversationId === 'string' &&
+        loaded.conversations.some((c) => c.id === loaded.activeConversationId);
+      const normalized: ConversationStore = {
+        ...loaded,
+        activeConversationId:
+          loaded.conversations.length === 0
+            ? null
+            : hasValidActive
+              ? loaded.activeConversationId
+              : loaded.conversations[0].id,
+      };
+      setStore(normalized);
       setIsLoading(false);
       isLoadedRef.current = true;
-    }).catch(error => {
-      console.error('[useConversations] Failed to load:', error);
-      setIsLoading(false);
-    });
+    };
+
+    // Safety net: if loadConversations hangs (Supabase DNS, network, etc.)
+    // fall through to empty state so the UI is usable.
+    const safetyTimeout = setTimeout(() => {
+      if (!isLoadedRef.current) {
+        console.warn('[useConversations] Loading timed out after 3s — falling through');
+        finish({ conversations: [], activeConversationId: null, pinnedConversationIds: [] });
+      }
+    }, 3000);
+
+    loadConversations()
+      .then(loaded => {
+        clearTimeout(safetyTimeout);
+        finish(loaded);
+      })
+      .catch(error => {
+        clearTimeout(safetyTimeout);
+        console.error('[useConversations] Failed to load:', error);
+        finish({ conversations: [], activeConversationId: null, pinnedConversationIds: [] });
+      });
+
+    return () => clearTimeout(safetyTimeout);
   }, []);
 
   // Save to localStorage immediately, Supabase debounced
@@ -203,16 +236,16 @@ export function useConversations(): UseConversationsReturn {
     });
   }, []);
 
-  // Update messages for a specific conversation (for multi-chat support)
+  // Update messages for a specific conversation (for multi-chat support).
+  // If the conversation doesn't exist yet (race with createConversation),
+  // create it inline so messages are never silently lost.
   const updateMessagesForConversation = useCallback((
     conversationId: string,
     updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])
   ): void => {
     setStore(prev => {
       const targetConv = prev.conversations.find(c => c.id === conversationId);
-      if (!targetConv) return prev;
-
-      const currentMessages = targetConv.messages || [];
+      const currentMessages = targetConv?.messages || [];
       const newMessages = typeof updater === 'function' ? updater(currentMessages) : updater;
 
       // Trim messages if over limit
@@ -220,13 +253,27 @@ export function useConversations(): UseConversationsReturn {
         ? newMessages.slice(-MAX_MESSAGES_PER_CONVERSATION)
         : newMessages;
 
+      const now = new Date().toISOString();
+
+      if (targetConv) {
+        return {
+          ...prev,
+          conversations: prev.conversations.map(c =>
+            c.id === conversationId
+              ? { ...c, messages: trimmedMessages, updatedAt: now }
+              : c
+          ),
+        };
+      }
+
+      // Conversation not yet in state (createConversation race) — create it inline
       return {
         ...prev,
-        conversations: prev.conversations.map(c =>
-          c.id === conversationId
-            ? { ...c, messages: trimmedMessages, updatedAt: new Date().toISOString() }
-            : c
-        ),
+        conversations: [
+          { id: conversationId, title: 'New conversation', createdAt: now, updatedAt: now, messages: trimmedMessages },
+          ...prev.conversations,
+        ],
+        activeConversationId: conversationId,
       };
     });
   }, []);

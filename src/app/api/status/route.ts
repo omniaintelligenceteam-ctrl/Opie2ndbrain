@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // Force Node.js runtime for full env var access
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { gatewayFetch, gatewayHealth, invokeGatewayTool, GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL } from '@/lib/gateway';
+import { gatewayFetch, gatewayHealth, invokeGatewayTool, GATEWAY_URL, GATEWAY_TOKEN, IS_VERCEL, GATEWAY_CONFIGURED } from '@/lib/gateway';
 
 const SERVER_START = Date.now();
 
@@ -18,6 +18,8 @@ interface SystemStatus {
     latency: number;
     lastPing: string;
     url: string;
+    reason?: string;
+    configured?: boolean;
   };
   voice: {
     available: boolean;
@@ -249,6 +251,8 @@ export async function GET() {
       latency: gatewayCheck.latency,
       lastPing: new Date().toISOString(),
       url: GATEWAY_URL,
+      reason: gatewayCheck.reason,
+      configured: GATEWAY_CONFIGURED,
     },
     voice: {
       available: true,
