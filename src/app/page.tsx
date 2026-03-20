@@ -244,17 +244,15 @@ function DashboardView({ relayBase }: { relayBase: string }) {
   return (
     <div style={dashStyles.grid}>
       <WeatherQuoteBar />
-      {/* The Hive — orbital agent view */}
-      <div style={dashStyles.hiveRow}><TheHive /></div>
-      {/* Ops + Loops (compact) + sidebar */}
       <div style={dashStyles.mainRow}>
-        <div style={dashStyles.opsCol}>
-          <div style={dashStyles.halfPanel}><LiveOpsFeed relayBase={relayBase} /></div>
-          <div style={dashStyles.halfPanel}><OpenLoopsPanel relayBase={relayBase} /></div>
-        </div>
-        <div style={dashStyles.sidebarCol}>
-          <SystemHealthWidget relayBase={relayBase} />
-          <MemoryActivityWidget relayBase={relayBase} />
+        {/* LEFT: The Hive — full height */}
+        <div style={dashStyles.hiveCol}><TheHive /></div>
+        {/* RIGHT: 4 monitors stacked */}
+        <div style={dashStyles.monitorsCol}>
+          <div style={dashStyles.monitorPanel}><LiveOpsFeed relayBase={relayBase} /></div>
+          <div style={dashStyles.monitorPanel}><OpenLoopsPanel relayBase={relayBase} /></div>
+          <div style={dashStyles.monitorPanel}><SystemHealthWidget relayBase={relayBase} /></div>
+          <div style={dashStyles.monitorPanel}><MemoryActivityWidget relayBase={relayBase} /></div>
         </div>
       </div>
     </div>
@@ -443,11 +441,10 @@ const styles: Record<string, React.CSSProperties> = {
 
 const dashStyles: Record<string, React.CSSProperties> = {
   grid: { display: 'flex', flexDirection: 'column', height: '100%', gap: '10px' },
-  hiveRow: { flexShrink: 0, height: '420px', overflow: 'hidden', borderRadius: 14, border: '1px solid rgba(168,85,247,0.15)' },
   mainRow: { display: 'flex', gap: '10px', flex: 1, minHeight: 0 },
-  opsCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' },
-  halfPanel: { flex: 1, minHeight: 0, overflow: 'hidden' },
-  sidebarCol: { width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' },
+  hiveCol: { flex: 1, minWidth: 0, overflow: 'hidden', borderRadius: 14, border: '1px solid rgba(168,85,247,0.15)' },
+  monitorsCol: { width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto' },
+  monitorPanel: { flex: 1, minHeight: 0, overflow: 'hidden' },
 };
 
 const tabStyles: Record<string, React.CSSProperties> = {
