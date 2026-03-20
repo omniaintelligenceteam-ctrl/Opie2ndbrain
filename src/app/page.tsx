@@ -9,12 +9,13 @@ import KanbanBoard from '@/components/ops/KanbanBoard';
 import CalendarView from '@/components/ops/CalendarView';
 import TheHive from '@/components/ops/TheHive';
 import VoiceAgent from '@/components/VoiceAgent';
+import { useVoiceSettings, TTS_PROVIDERS, getVoicesForProvider, getPushToTalkKeyLabel, type PushToTalkKey } from '@/hooks/useVoiceSettings';
 
 const RELAY_BASE = process.env.NEXT_PUBLIC_OPIE_RELAY_URL || '';
 const IS_DEMO = !RELAY_BASE;
 const FONT_MONO = "'JetBrains Mono', 'Fira Code', monospace";
 
-type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'voice';
+type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'voice' | 'settings';
 type Temp = 'all' | 'hot' | 'warm' | 'cold';
 
 type Lead = {
@@ -37,6 +38,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'crons', label: 'CRONS', icon: '⏰' },
   { id: 'costs', label: 'COSTS', icon: '💰' },
   { id: 'voice', label: 'VOICE', icon: '🎤' },
+  { id: 'settings', label: 'SETTINGS', icon: '⚙️' },
 ];
 
 /* ── Hook: responsive breakpoint ── */
@@ -218,6 +220,7 @@ export default function DashboardPage() {
           {activeTab === 'kanban' && <KanbanBoard />}
           {activeTab === 'calendar' && <CalendarView />}
           {activeTab === 'voice' && <VoiceAgent onBack={() => setActiveTab('dashboard')} />}
+          {activeTab === 'settings' && <SettingsPanel />}
         </div>
       </main>
     </div>
@@ -700,3 +703,160 @@ const statusStyleMap: Record<string, React.CSSProperties> = {
   running: { color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.1)' },
   pending: { color: '#9ca3af', borderColor: 'rgba(156,163,175,0.5)', background: 'rgba(156,163,175,0.1)' },
 };
+
+/* ═══════════════════════════════════════════════
+   SETTINGS PANEL
+   ═══════════════════════════════════════════════ */
+function SettingsPanel() {
+  const vs = useVoiceSettings();
+  const [isCapturing, setIsCapturing] = useState(false);
+  const captureRef = useRef<HTMLButtonElement>(null);
+
+  // Capture keyboard + mouse buttons for PTT hotkey
+  useEffect(() => {
+    if (!isCapturing) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopPropagation();
+      vs.setPushToTalkKey({ type: 'keyboard', code: e.code });
+      setIsCapturing(false);
+    };
+    const onMouse = (e: MouseEvent) => {
+      if (e.button === 0) return; // left click = cancel
+      e.preventDefault(); e.stopPropagation();
+      vs.setPushToTalkKey({ type: 'mouse', button: e.button });
+      setIsCapturing(false);
+    };
+    const onCtx = (e: Event) => e.preventDefault();
+    const onClickOutside = (e: MouseEvent) => {
+      if (e.button === 0 && captureRef.current && !captureRef.current.contains(e.target as Node)) {
+        setIsCapturing(false);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('mousedown', onMouse, true);
+    window.addEventListener('contextmenu', onCtx, true);
+    window.addEventListener('click', onClickOutside);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onMouse, true);
+      window.removeEventListener('contextmenu', onCtx, true);
+      window.removeEventListener('click', onClickOutside);
+    };
+  }, [isCapturing, vs]);
+
+  const voices = getVoicesForProvider(vs.ttsProvider);
+  const cardStyle: React.CSSProperties = {
+    background: 'rgba(20,20,35,0.6)', backdropFilter: 'blur(20px)',
+    borderRadius: 20, padding: 28, border: '1px solid rgba(255,255,255,0.06)',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.2)',
+  };
+  const rowStyle: React.CSSProperties = {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '14px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+    color: 'rgba(255,255,255,0.7)', fontSize: 14,
+  };
+  const btnStyle: React.CSSProperties = {
+    padding: '8px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.8)',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  };
+  const selectStyle: React.CSSProperties = {
+    ...btnStyle, minWidth: 160, appearance: 'none' as const,
+    backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath fill=\'%23999\' d=\'M6 8L1 3h10z\'/%3E%3C/svg%3E")',
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: 30,
+  };
+
+  return (
+    <div style={{ padding: 32, overflow: 'auto', height: '100%' }}>
+      <h2 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 28, letterSpacing: '-0.03em' }}>
+        ⚙️ Settings
+      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24 }}>
+
+        {/* Voice & TTS */}
+        <div style={cardStyle}>
+          <h4 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: '0 0 20px' }}>🔊 Voice & TTS</h4>
+          <div style={rowStyle}>
+            <span>TTS Provider</span>
+            <select value={vs.ttsProvider} onChange={e => vs.setTTSProvider(e.target.value as any)} style={selectStyle}>
+              {TTS_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label} — {p.note}</option>)}
+            </select>
+          </div>
+          {Object.keys(voices).length > 0 && (
+            <div style={rowStyle}>
+              <span>Voice</span>
+              <select value={vs.ttsVoice} onChange={e => vs.setTTSVoice(e.target.value)} style={selectStyle}>
+                {Object.entries(voices).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </div>
+          )}
+          <div style={rowStyle}>
+            <span>Speech Speed</span>
+            <select value={vs.ttsSpeed} onChange={e => vs.setTTSSpeed(parseFloat(e.target.value))} style={selectStyle}>
+              {[0.75, 1.0, 1.25, 1.5].map(s => <option key={s} value={s}>{s}x</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Push-to-Talk */}
+        <div style={cardStyle}>
+          <h4 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: '0 0 20px' }}>🎙️ Push-to-Talk</h4>
+          <div style={rowStyle}>
+            <span>Push-to-Talk Mode</span>
+            <button onClick={vs.togglePushToTalk} style={{
+              ...btnStyle,
+              background: vs.pushToTalkEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.04)',
+              color: vs.pushToTalkEnabled ? '#22c55e' : 'rgba(255,255,255,0.8)',
+            }}>
+              {vs.pushToTalkEnabled ? '🎙️ Enabled' : '⏺️ Disabled'}
+            </button>
+          </div>
+          {vs.pushToTalkEnabled && (
+            <div style={rowStyle}>
+              <span>PTT Hotkey</span>
+              <button
+                ref={captureRef}
+                onClick={() => setIsCapturing(true)}
+                style={{
+                  ...btnStyle,
+                  background: isCapturing ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.04)',
+                  color: isCapturing ? '#60a5fa' : 'rgba(255,255,255,0.8)',
+                  border: isCapturing ? '1px solid rgba(59,130,246,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                  minWidth: 160,
+                }}
+              >
+                {isCapturing ? '⌨️ Press any key or mouse button...' : `🎯 ${getPushToTalkKeyLabel(vs.pushToTalkKey)}`}
+              </button>
+            </div>
+          )}
+          {vs.pushToTalkEnabled && (
+            <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(59,130,246,0.08)', borderRadius: 12, border: '1px solid rgba(59,130,246,0.15)' }}>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+                <strong style={{ color: '#60a5fa' }}>Hold</strong> to talk, <strong style={{ color: '#60a5fa' }}>release</strong> to send.
+                Press while G is speaking to <strong style={{ color: '#f59e0b' }}>interrupt</strong> and add context.
+                Supports keyboard keys and mouse buttons (side, middle, right).
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Reset */}
+        <div style={cardStyle}>
+          <h4 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: '0 0 20px' }}>🔄 Reset</h4>
+          <div style={rowStyle}>
+            <span>Reset all voice settings</span>
+            <button onClick={() => {
+              vs.setPushToTalkEnabled(false);
+              vs.setPushToTalkKey({ type: 'keyboard', code: 'Space' });
+              vs.setTTSProvider('azure');
+              vs.setTTSVoice('en-US-AvaMultilingualNeural');
+              vs.setTTSSpeed(1.0);
+            }} style={{ ...btnStyle, color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+              Reset to Defaults
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
