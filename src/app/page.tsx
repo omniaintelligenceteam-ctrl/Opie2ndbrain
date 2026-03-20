@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import LiveOpsFeed from '@/components/ops/LiveOpsFeed';
 import OpenLoopsPanel from '@/components/ops/OpenLoopsPanel';
 import MemoryActivityWidget from '@/components/ops/MemoryActivityWidget';
@@ -350,30 +350,92 @@ function WeatherQuoteBar({ isMobile }: { isMobile: boolean }) {
    ═══════════════════════════════════════════════ */
 
 function DashboardView({ relayBase, isMobile }: { relayBase: string; isMobile: boolean }) {
+  const SPLIT_KEY = 'dashboard-split-v1';
+  const [splitPct, setSplitPct] = useState(() => {
+    if (isMobile) return 50;
+    try { const v = localStorage.getItem(SPLIT_KEY); if (v) return parseFloat(v); } catch {}
+    return 45;
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
+  const onSplitterDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onSplitterMove = useCallback((e: React.PointerEvent) => {
+    if (!draggingRef.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (isMobile) {
+      // Vertical split on mobile
+      const pct = ((e.clientY - rect.top) / rect.height) * 100;
+      setSplitPct(Math.min(80, Math.max(20, pct)));
+    } else {
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      setSplitPct(Math.min(80, Math.max(20, pct)));
+    }
+  }, [isMobile]);
+
+  const onSplitterUp = useCallback(() => {
+    draggingRef.current = false;
+    try { localStorage.setItem(SPLIT_KEY, String(splitPct)); } catch {}
+  }, [splitPct]);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: isMobile ? 8 : 10, overflow: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: isMobile ? 8 : 10, overflow: 'hidden' }}>
       <WeatherQuoteBar isMobile={isMobile} />
-      <div style={{
-        display: 'flex', gap: isMobile ? 8 : 10, flex: 1, minHeight: 0,
-        flexDirection: isMobile ? 'column' : 'row',
-      }}>
+      <div
+        ref={containerRef}
+        style={{
+          display: 'flex', flex: 1, minHeight: 0,
+          flexDirection: isMobile ? 'column' : 'row',
+          position: 'relative',
+        }}
+      >
         {/* Hive */}
         <div style={{
-          width: isMobile ? '100%' : '45%',
-          height: isMobile ? '350px' : 'auto',
+          [isMobile ? 'height' : 'width']: `${splitPct}%`,
           flexShrink: 0, overflow: 'hidden', borderRadius: 14,
           border: '1px solid rgba(168,85,247,0.15)',
         }}>
           <TheHive />
         </div>
+
+        {/* Splitter handle */}
+        <div
+          onPointerDown={onSplitterDown}
+          onPointerMove={onSplitterMove}
+          onPointerUp={onSplitterUp}
+          style={{
+            [isMobile ? 'width' : 'height']: '100%',
+            [isMobile ? 'height' : 'width']: '12px',
+            flexShrink: 0,
+            cursor: isMobile ? 'row-resize' : 'col-resize',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10, touchAction: 'none',
+            background: 'transparent',
+          }}
+        >
+          {/* Visual grip */}
+          <div style={{
+            [isMobile ? 'width' : 'height']: '40px',
+            [isMobile ? 'height' : 'width']: '4px',
+            background: 'rgba(168,85,247,0.4)',
+            borderRadius: 4,
+            transition: 'background 0.15s',
+          }} />
+        </div>
+
         {/* Monitors */}
         <div style={{
-          flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+          flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
           gap: 8, overflow: 'auto',
         }}>
-          <div style={{ flex: 1, minHeight: isMobile ? 200 : 0, overflow: 'hidden' }}><LiveOpsFeed relayBase={relayBase} /></div>
-          <div style={{ flex: 1, minHeight: isMobile ? 200 : 0, overflow: 'hidden' }}><OpenLoopsPanel relayBase={relayBase} /></div>
-          <div style={{ flex: 1, minHeight: isMobile ? 200 : 0, overflow: 'hidden' }}><MemoryActivityWidget relayBase={relayBase} /></div>
+          <div style={{ flex: 1, minHeight: isMobile ? 180 : 0, overflow: 'hidden' }}><LiveOpsFeed relayBase={relayBase} /></div>
+          <div style={{ flex: 1, minHeight: isMobile ? 180 : 0, overflow: 'hidden' }}><OpenLoopsPanel relayBase={relayBase} /></div>
+          <div style={{ flex: 1, minHeight: isMobile ? 180 : 0, overflow: 'hidden' }}><MemoryActivityWidget relayBase={relayBase} /></div>
         </div>
       </div>
     </div>
