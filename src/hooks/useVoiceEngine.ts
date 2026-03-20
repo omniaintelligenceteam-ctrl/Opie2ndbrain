@@ -15,7 +15,7 @@ import {
   getSpeechRecognitionClass,
   warmUpAudio,
 } from '@/lib/browserCompat';
-import { useVoiceSettings, PushToTalkKey } from './useVoiceSettings';
+import { useVoiceSettings, PushToTalkKey, DEFAULT_PTT_KEY } from './useVoiceSettings';
 
 // ─── Configuration ──────────────────────────────────────────────────
 const SILENCE_TIMEOUT_MS = 1200;   // Send after 1.2s silence
@@ -108,7 +108,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   // Push-to-talk state
   const pushToTalkKeyPressedRef = useRef(false);
   const executeSideEffectsRef = useRef<(effects: SideEffect[]) => void>(() => {});
-  const pushToTalkSettingsRef = useRef({ enabled: false, key: 'Space' as PushToTalkKey });
+  const pushToTalkSettingsRef = useRef({ enabled: false, key: DEFAULT_PTT_KEY as PushToTalkKey });
   const wasListeningBeforePushToTalkRef = useRef(false);
 
   // Keep refs in sync
@@ -122,77 +122,124 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   }
   const browserSupport = browserSupportRef.current || detectVoiceSupport();
 
-  // ─── Push-to-talk key handlers ─────────────────────────────────
-  const handlePushToTalkKeyDown = useCallback((e: KeyboardEvent) => {
-    const { enabled, key } = pushToTalkSettingsRef.current;
-    if (!enabled || !mountedRef.current) return;
+  // ─── Shared PTT press logic ────────────────────────────────────
+  const handlePTTPress = useCallback(() => {
+    if (pushToTalkKeyPressedRef.current) return; // already pressed
+    pushToTalkKeyPressedRef.current = true;
+    console.log('[VoiceEngine] Push-to-talk pressed');
 
-    // Check if the pressed key matches the push-to-talk key
-    if (e.code === key && !pushToTalkKeyPressedRef.current) {
-      // Check if user is typing in an input
-      const target = e.target as HTMLElement;
-      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-      if (isTyping) return;
+    // If G is speaking, barge-in: stop TTS → start recognition → listen
+    if (ctxRef.current.state === 'speaking') {
+      dispatch({ type: 'BARGE_IN' });
+      return;
+    }
 
-      e.preventDefault();
-      pushToTalkKeyPressedRef.current = true;
-      
-      console.log('[VoiceEngine] Push-to-talk key pressed');
-      
-      // If mic is on, start listening
-      if (ctxRef.current.micOn) {
-        // If we're in idle state, go to listening (which will trigger START_RECOGNITION)
-        if (ctxRef.current.state === 'idle') {
-          dispatch({ type: 'MIC_ON' });
-        } else if (ctxRef.current.state === 'listening') {
-          // Already listening but recognition might not be started due to push-to-talk
-          // Re-trigger START_RECOGNITION now that key is pressed
-          executeSideEffectsRef.current([{ type: 'START_RECOGNITION' }]);
-        }
-      } else {
-        // Turn on mic (will go to listening and start recognition)
+    // If G is processing, barge-in to add more context
+    if (ctxRef.current.state === 'processing') {
+      dispatch({ type: 'BARGE_IN' });
+      return;
+    }
+
+    // Normal: turn on mic or start recognition
+    if (ctxRef.current.micOn) {
+      if (ctxRef.current.state === 'idle') {
         dispatch({ type: 'MIC_ON' });
+      } else if (ctxRef.current.state === 'listening') {
+        executeSideEffectsRef.current([{ type: 'START_RECOGNITION' }]);
+      }
+    } else {
+      dispatch({ type: 'MIC_ON' });
+    }
+  }, []);
+
+  // ─── Shared PTT release logic (immediate send) ───────────────
+  const handlePTTRelease = useCallback(() => {
+    if (!pushToTalkKeyPressedRef.current) return; // wasn't pressed
+    pushToTalkKeyPressedRef.current = false;
+    console.log('[VoiceEngine] Push-to-talk released');
+
+    if (ctxRef.current.state === 'listening') {
+      // Stop recognition
+      restartingRef.current = true;
+      try { recognitionRef.current?.stop(); } catch { /* ok */ }
+      setTimeout(() => { restartingRef.current = false; }, RECOGNITION_RESTART_DELAY + 50);
+
+      // Immediately send accumulated text (don't wait for silence timer)
+      const textToSend = (ctxRef.current.pendingText || ctxRef.current.transcript || '').trim();
+      if (textToSend) {
+        dispatch({ type: 'SILENCE_DETECTED', text: textToSend });
       }
     }
   }, []);
+
+  // ─── Push-to-talk keyboard handlers ───────────────────────────
+  const handlePushToTalkKeyDown = useCallback((e: KeyboardEvent) => {
+    const { enabled, key } = pushToTalkSettingsRef.current;
+    if (!enabled || !mountedRef.current) return;
+    if (key.type !== 'keyboard' || e.code !== key.code) return;
+
+    // Don't trigger when typing in inputs
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+    e.preventDefault();
+    handlePTTPress();
+  }, [handlePTTPress]);
 
   const handlePushToTalkKeyUp = useCallback((e: KeyboardEvent) => {
     const { enabled, key } = pushToTalkSettingsRef.current;
     if (!enabled || !mountedRef.current) return;
+    if (key.type !== 'keyboard' || e.code !== key.code) return;
 
-    // Check if the released key matches the push-to-talk key
-    if (e.code === key && pushToTalkKeyPressedRef.current) {
-      e.preventDefault();
-      pushToTalkKeyPressedRef.current = false;
-      
-      console.log('[VoiceEngine] Push-to-talk key released');
-      
-      // Stop recognition but keep state as "listening" ready for next key press
-      if (recognitionRef.current && ctxRef.current.state === 'listening') {
-        // Prevent onend from restarting
-        restartingRef.current = true;
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {
-          console.warn('[VoiceEngine] Recognition stop failed:', e);
-        }
-        setTimeout(() => { restartingRef.current = false; }, RECOGNITION_RESTART_DELAY + 50);
-      }
-    }
-  }, []);
+    e.preventDefault();
+    handlePTTRelease();
+  }, [handlePTTRelease]);
 
-  // ─── Push-to-talk keyboard event listeners ────────────────────
+  // ─── Push-to-talk mouse handlers ──────────────────────────────
+  const handlePushToTalkMouseDown = useCallback((e: MouseEvent) => {
+    const { enabled, key } = pushToTalkSettingsRef.current;
+    if (!enabled || !mountedRef.current) return;
+    if (key.type !== 'mouse' || e.button !== key.button) return;
+
+    e.preventDefault();
+    handlePTTPress();
+  }, [handlePTTPress]);
+
+  const handlePushToTalkMouseUp = useCallback((e: MouseEvent) => {
+    const { enabled, key } = pushToTalkSettingsRef.current;
+    if (!enabled || !mountedRef.current) return;
+    if (key.type !== 'mouse' || e.button !== key.button) return;
+
+    e.preventDefault();
+    handlePTTRelease();
+  }, [handlePTTRelease]);
+
+  // ─── Push-to-talk event listeners (keyboard + mouse) ─────────
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Prevent context menu / browser back-forward when mouse button is PTT
+    const preventDefaults = (e: MouseEvent) => {
+      const { enabled, key } = pushToTalkSettingsRef.current;
+      if (enabled && key.type === 'mouse' && e.button === key.button) {
+        e.preventDefault();
+      }
+    };
+
     document.addEventListener('keydown', handlePushToTalkKeyDown);
     document.addEventListener('keyup', handlePushToTalkKeyUp);
+    document.addEventListener('mousedown', handlePushToTalkMouseDown);
+    document.addEventListener('mouseup', handlePushToTalkMouseUp);
+    document.addEventListener('contextmenu', preventDefaults);
 
     return () => {
       document.removeEventListener('keydown', handlePushToTalkKeyDown);
       document.removeEventListener('keyup', handlePushToTalkKeyUp);
+      document.removeEventListener('mousedown', handlePushToTalkMouseDown);
+      document.removeEventListener('mouseup', handlePushToTalkMouseUp);
+      document.removeEventListener('contextmenu', preventDefaults);
     };
-  }, [handlePushToTalkKeyDown, handlePushToTalkKeyUp]);
+  }, [handlePushToTalkKeyDown, handlePushToTalkKeyUp, handlePushToTalkMouseDown, handlePushToTalkMouseUp]);
 
   // ─── Side effect executor ──────────────────────────────────────
   const executeSideEffects = useCallback((effects: SideEffect[]) => {

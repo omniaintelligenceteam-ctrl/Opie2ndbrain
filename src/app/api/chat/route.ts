@@ -44,10 +44,11 @@ const DEFAULT_MODEL: ModelAlias = 'kimi';
 const DEFAULT_PROVIDER: Provider = 'ollama';
 
 const VOICE_INSTRUCTIONS = `[VOICE MODE] This is a voice conversation. Rules:
-- 2-3 sentences MAX. Be concise.
+- Up to 5 sentences. Be thorough but concise.
 - NO formatting: no tables, no bullets, no markdown, no lists.
 - Speak naturally like you're talking, not reading.
 - Don't dump information. Answer directly.
+- If more detail is needed, ask if the user wants to know more.
 
 User said: `;
 

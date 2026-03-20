@@ -10,7 +10,11 @@ const STORAGE_KEYS = {
   TTS_SPEED:    'opie-tts-speed',
 };
 
-export type PushToTalkKey = string;
+export type PushToTalkKey =
+  | { type: 'keyboard'; code: string }    // e.g. { type: 'keyboard', code: 'Space' }
+  | { type: 'mouse'; button: number };    // e.g. { type: 'mouse', button: 3 } (back)
+
+export const DEFAULT_PTT_KEY: PushToTalkKey = { type: 'keyboard', code: 'Space' };
 
 export type TTSProvider = 'elevenlabs' | 'azure' | 'openai' | 'edge';
 
@@ -73,8 +77,16 @@ export function getVoicesForProvider(provider: TTSProvider): Record<string, stri
   }
 }
 
-/** Convert a KeyboardEvent.code to a human-readable label */
-export function getPushToTalkKeyLabel(code: string): string {
+/** Convert a PushToTalkKey to a human-readable label */
+export function getPushToTalkKeyLabel(key: PushToTalkKey): string {
+  if (key.type === 'mouse') {
+    const mouseLabels: Record<number, string> = {
+      0: 'Left Click', 1: 'Middle Click', 2: 'Right Click',
+      3: 'Mouse Back', 4: 'Mouse Forward',
+    };
+    return mouseLabels[key.button] ?? `Mouse ${key.button}`;
+  }
+  const code = key.code;
   const labels: Record<string, string> = {
     Space: 'Space', ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift',
     ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl',
@@ -91,6 +103,23 @@ export function getPushToTalkKeyLabel(code: string): string {
   return code;
 }
 
+/** Serialize a PushToTalkKey to a string for localStorage */
+function serializePTTKey(key: PushToTalkKey): string {
+  return JSON.stringify(key);
+}
+
+/** Deserialize a localStorage string to PushToTalkKey (handles legacy plain strings) */
+function deserializePTTKey(raw: string): PushToTalkKey {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.type) {
+      return parsed as PushToTalkKey;
+    }
+  } catch { /* not JSON — legacy plain string */ }
+  // Legacy: plain string like 'Space' → migrate to new format
+  return { type: 'keyboard', code: raw };
+}
+
 export interface VoiceSettings {
   pushToTalkEnabled: boolean;
   pushToTalkKey: PushToTalkKey;
@@ -101,7 +130,7 @@ export interface VoiceSettings {
 
 export function useVoiceSettings() {
   const [pushToTalkEnabled, setPTTEnabled]   = useState(false);
-  const [pushToTalkKey, setPTTKey]           = useState<PushToTalkKey>('Space');
+  const [pushToTalkKey, setPTTKey]           = useState<PushToTalkKey>(DEFAULT_PTT_KEY);
   const [ttsProvider, setTTSProviderState]   = useState<TTSProvider>('azure');
   const [ttsVoice, setTTSVoiceState]         = useState<string>('en-US-AvaMultilingualNeural');
   const [ttsSpeed, setTTSSpeedState]         = useState<number>(1.0);
@@ -112,7 +141,7 @@ export function useVoiceSettings() {
     const pttE = localStorage.getItem(STORAGE_KEYS.PTT_ENABLED);
     if (pttE !== null) setPTTEnabled(pttE === 'true');
     const pttK = localStorage.getItem(STORAGE_KEYS.PTT_KEY);
-    if (pttK) setPTTKey(pttK);
+    if (pttK) setPTTKey(deserializePTTKey(pttK));
     const prov = localStorage.getItem(STORAGE_KEYS.TTS_PROVIDER) as TTSProvider | null;
     if (prov) setTTSProviderState(prov);
     const voice = localStorage.getItem(STORAGE_KEYS.TTS_VOICE);
@@ -136,7 +165,7 @@ export function useVoiceSettings() {
 
   const setPushToTalkKey = useCallback((key: PushToTalkKey) => {
     setPTTKey(key);
-    localStorage.setItem(STORAGE_KEYS.PTT_KEY, key);
+    localStorage.setItem(STORAGE_KEYS.PTT_KEY, serializePTTKey(key));
   }, []);
 
   const setTTSProvider = useCallback((provider: TTSProvider) => {

@@ -29,19 +29,39 @@ export function SettingsView({
   const [isCapturing, setIsCapturing] = useState(false);
   const captureRef = useRef<HTMLButtonElement>(null);
 
-  // Key capture: listen for next keypress when in capture mode
+  // Key/mouse capture: listen for next keypress or mouse button when in capture mode
   useEffect(() => {
     if (!isCapturing) return;
 
-    const handleCapture = (e: KeyboardEvent) => {
+    const handleKeyCapture = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setPushToTalkKey(e.code);
+      setPushToTalkKey({ type: 'keyboard', code: e.code });
       setIsCapturing(false);
     };
 
-    window.addEventListener('keydown', handleCapture, true);
-    return () => window.removeEventListener('keydown', handleCapture, true);
+    const handleMouseCapture = (e: MouseEvent) => {
+      // Left click (0) is excluded so users can click elsewhere to cancel
+      if (e.button === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPushToTalkKey({ type: 'mouse', button: e.button });
+      setIsCapturing(false);
+    };
+
+    const handleContextMenu = (e: Event) => {
+      e.preventDefault(); // Allow right-click to be captured
+    };
+
+    window.addEventListener('keydown', handleKeyCapture, true);
+    window.addEventListener('mousedown', handleMouseCapture, true);
+    window.addEventListener('contextmenu', handleContextMenu, true);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyCapture, true);
+      window.removeEventListener('mousedown', handleMouseCapture, true);
+      window.removeEventListener('contextmenu', handleContextMenu, true);
+    };
   }, [isCapturing, setPushToTalkKey]);
 
   // Cancel capture if user clicks outside the button
@@ -141,7 +161,7 @@ export function SettingsView({
                 animation: isCapturing ? 'pttPulse 1.5s ease-in-out infinite' : 'none',
               }}
             >
-              {isCapturing ? '⌨️ Press any key...' : `🎯 ${getPushToTalkKeyLabel(pushToTalkKey)}`}
+              {isCapturing ? '⌨️ Press any key or mouse button...' : `🎯 ${getPushToTalkKeyLabel(pushToTalkKey)}`}
             </button>
             <style>{`
               @keyframes pttPulse {

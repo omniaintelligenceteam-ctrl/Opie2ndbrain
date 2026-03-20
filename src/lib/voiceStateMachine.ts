@@ -361,17 +361,32 @@ export function transition(ctx: VoiceContext, event: VoiceEvent): VoiceTransitio
           };
 
         case 'BARGE_IN':
-        case 'SPEECH_RESULT':
-          // User interrupted — stop TTS, go back to listening
+          // PTT pressed during speaking — stop TTS, start recognition, go to listening
           effects.push({ type: 'STOP_TTS' });
           effects.push({ type: 'REVOKE_BLOB_URLS' });
-          effects.push({ type: 'LOG', message: 'Barge-in during speaking', level: 'info' });
+          effects.push({ type: 'START_RECOGNITION' });
+          effects.push({ type: 'LOG', message: 'Barge-in during speaking (PTT)', level: 'info' });
           return {
             context: {
               ...ctx,
               state: 'listening',
-              transcript: event.type === 'SPEECH_RESULT' ? event.transcript : '',
-              pendingText: event.type === 'SPEECH_RESULT' && event.isFinal ? event.transcript : '',
+              transcript: '',
+              pendingText: '',
+            },
+            sideEffects: effects,
+          };
+
+        case 'SPEECH_RESULT':
+          // User spoke into mic while TTS was playing — recognition already running
+          effects.push({ type: 'STOP_TTS' });
+          effects.push({ type: 'REVOKE_BLOB_URLS' });
+          effects.push({ type: 'LOG', message: 'Barge-in during speaking (voice)', level: 'info' });
+          return {
+            context: {
+              ...ctx,
+              state: 'listening',
+              transcript: event.transcript,
+              pendingText: event.isFinal ? event.transcript : '',
             },
             sideEffects: effects,
           };
