@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import SystemHealthWidget from '@/components/ops/SystemHealthWidget';
 import LiveOpsFeed from '@/components/ops/LiveOpsFeed';
 import OpenLoopsPanel from '@/components/ops/OpenLoopsPanel';
 import MemoryActivityWidget from '@/components/ops/MemoryActivityWidget';
@@ -40,12 +39,12 @@ type CronJob = {
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'DASHBOARD', icon: '📊' },
+  { id: 'calendar', label: 'CALENDAR', icon: '📅' },
+  { id: 'kanban', label: 'KANBAN', icon: '📌' },
   { id: 'orchestration', label: 'ORCHESTRATION', icon: '🏗️' },
   { id: 'leads', label: 'LEADS / CRM', icon: '📋' },
   { id: 'crons', label: 'CRONS', icon: '⏰' },
   { id: 'costs', label: 'COSTS', icon: '💰' },
-  { id: 'kanban', label: 'KANBAN', icon: '📌' },
-  { id: 'calendar', label: 'CALENDAR', icon: '📅' },
 ];
 
 export default function DashboardPage() {
@@ -110,7 +109,7 @@ function WeatherQuoteBar() {
 
   useEffect(() => {
     // Gilbertsville, KY coords: 36.96, -88.27
-    fetch('https://api.open-meteo.com/v1/forecast?latitude=36.96&longitude=-88.27&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=3')
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=36.96&longitude=-88.27&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=5')
       .then((r) => r.json())
       .then((data) => {
         if (!data?.daily) return;
@@ -160,6 +159,8 @@ function WeatherQuoteBar() {
           { day: 'Today', high: 68, low: 52, desc: 'Partly Cloudy', icon: '⛅' },
           { day: 'Tomorrow', high: 72, low: 55, desc: 'Clear', icon: '☀️' },
           { day: 'Sat', high: 65, low: 48, desc: 'Rain', icon: '🌧️' },
+          { day: 'Sun', high: 70, low: 50, desc: 'Sunny', icon: '☀️' },
+          { day: 'Mon', high: 63, low: 45, desc: 'Cloudy', icon: '⛅' },
         ]);
       });
 
@@ -247,11 +248,10 @@ function DashboardView({ relayBase }: { relayBase: string }) {
       <div style={dashStyles.mainRow}>
         {/* LEFT: The Hive — full height */}
         <div style={dashStyles.hiveCol}><TheHive /></div>
-        {/* RIGHT: 4 monitors stacked */}
+        {/* RIGHT: 3 monitors stacked */}
         <div style={dashStyles.monitorsCol}>
           <div style={dashStyles.monitorPanel}><LiveOpsFeed relayBase={relayBase} /></div>
           <div style={dashStyles.monitorPanel}><OpenLoopsPanel relayBase={relayBase} /></div>
-          <div style={dashStyles.monitorPanel}><SystemHealthWidget relayBase={relayBase} /></div>
           <div style={dashStyles.monitorPanel}><MemoryActivityWidget relayBase={relayBase} /></div>
         </div>
       </div>
@@ -442,8 +442,8 @@ const styles: Record<string, React.CSSProperties> = {
 const dashStyles: Record<string, React.CSSProperties> = {
   grid: { display: 'flex', flexDirection: 'column', height: '100%', gap: '10px' },
   mainRow: { display: 'flex', gap: '10px', flex: 1, minHeight: 0 },
-  hiveCol: { flex: 1, minWidth: 0, overflow: 'hidden', borderRadius: 14, border: '1px solid rgba(168,85,247,0.15)' },
-  monitorsCol: { width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto' },
+  hiveCol: { width: '45%', flexShrink: 0, overflow: 'hidden', borderRadius: 14, border: '1px solid rgba(168,85,247,0.15)' },
+  monitorsCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto' },
   monitorPanel: { flex: 1, minHeight: 0, overflow: 'hidden' },
 };
 
