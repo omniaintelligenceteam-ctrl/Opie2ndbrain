@@ -28,7 +28,6 @@ const AGENTS: Agent[] = [
   // CENTER
   { id: 'g', name: 'G', role: 'Orchestrator', emoji: '🧠', ring: 'center', color: '#a855f7', glowColor: '#c084fc', status: 'active', tasksToday: 42, lastAction: 'Delegating 2nd Brain rebuild', model: 'Claude Opus 4.6', silhouette: 'commander' },
   // INNER RING — Workers
-  { id: 'opie', name: 'Opie', role: '2nd Brain', emoji: '🤖', ring: 'inner', color: '#06b6d4', glowColor: '#22d3ee', status: 'active', tasksToday: 8, lastAction: 'Building Calendar tab', model: 'Claude Opus 4.6', silhouette: 'tech' },
   { id: 'scout', name: 'Scout', role: 'Lead Gen', emoji: '🛰️', ring: 'inner', color: '#10b981', glowColor: '#34d399', status: 'ready', tasksToday: 14, lastAction: 'Extracted 23 qualified leads', model: 'Gemini 2.5 Flash', silhouette: 'recon' },
   { id: 'research', name: 'Research', role: 'Intelligence', emoji: '🔬', ring: 'inner', color: '#8b5cf6', glowColor: '#a78bfa', status: 'idle', tasksToday: 3, lastAction: 'Competitive analysis complete', model: 'Perplexity Sonar', silhouette: 'scientist' },
   { id: 'ops', name: 'Ops Guardian', role: 'Reliability', emoji: '🛡️', ring: 'inner', color: '#ef4444', glowColor: '#f87171', status: 'active', tasksToday: 47, lastAction: 'Cron health sweep', model: 'Gemini 2.5 Flash', silhouette: 'sentinel' },
@@ -45,7 +44,6 @@ const AGENTS: Agent[] = [
 
 // Connection lines showing active delegations
 const CONNECTIONS = [
-  { from: 'g', to: 'opie', active: true },
   { from: 'g', to: 'scout', active: false },
   { from: 'g', to: 'ops', active: true },
   { from: 'g', to: 'memory', active: false },

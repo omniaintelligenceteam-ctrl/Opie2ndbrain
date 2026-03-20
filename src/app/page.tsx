@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import AgentStatusCards from '@/components/ops/AgentStatusCards';
 import SystemHealthWidget from '@/components/ops/SystemHealthWidget';
 import LiveOpsFeed from '@/components/ops/LiveOpsFeed';
 import OpenLoopsPanel from '@/components/ops/OpenLoopsPanel';
@@ -14,7 +13,7 @@ import TheHive from '@/components/ops/TheHive';
 const RELAY_BASE = process.env.NEXT_PUBLIC_OPIE_RELAY_URL || '';
 const IS_DEMO = !RELAY_BASE;
 
-type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'hive';
+type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar';
 type Temp = 'all' | 'hot' | 'warm' | 'cold';
 
 type Lead = {
@@ -47,7 +46,6 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'costs', label: 'COSTS', icon: '💰' },
   { id: 'kanban', label: 'KANBAN', icon: '📌' },
   { id: 'calendar', label: 'CALENDAR', icon: '📅' },
-  { id: 'hive', label: 'THE HIVE', icon: '🐝' },
 ];
 
 export default function DashboardPage() {
@@ -61,8 +59,8 @@ export default function DashboardPage() {
         <div style={styles.brand}>
           <span style={styles.brandEmoji}>🧠</span>
           <div>
-            <div style={styles.brandName}>OPIE OPS</div>
-            <div style={styles.brandSub}>Command Center</div>
+            <div style={styles.brandName}>OPS CENTER</div>
+            <div style={styles.brandSub}>Live Command</div>
           </div>
         </div>
 
@@ -98,7 +96,6 @@ export default function DashboardPage() {
         {activeTab === 'costs' && <CostsView />}
         {activeTab === 'kanban' && <KanbanBoard />}
         {activeTab === 'calendar' && <CalendarView />}
-        {activeTab === 'hive' && <TheHive />}
       </main>
     </div>
   );
@@ -247,15 +244,19 @@ function DashboardView({ relayBase }: { relayBase: string }) {
   return (
     <div style={dashStyles.grid}>
       <WeatherQuoteBar />
-      <div style={dashStyles.agentRow}><AgentStatusCards relayBase={relayBase} /></div>
+      {/* The Hive — orbital agent view */}
+      <div style={dashStyles.hiveRow}><TheHive /></div>
+      {/* Ops + Loops (compact) + sidebar */}
       <div style={dashStyles.mainRow}>
-        <div style={dashStyles.opsCol}><LiveOpsFeed relayBase={relayBase} /></div>
+        <div style={dashStyles.opsCol}>
+          <div style={dashStyles.halfPanel}><LiveOpsFeed relayBase={relayBase} /></div>
+          <div style={dashStyles.halfPanel}><OpenLoopsPanel relayBase={relayBase} /></div>
+        </div>
         <div style={dashStyles.sidebarCol}>
           <SystemHealthWidget relayBase={relayBase} />
           <MemoryActivityWidget relayBase={relayBase} />
         </div>
       </div>
-      <div style={dashStyles.loopsRow}><OpenLoopsPanel relayBase={relayBase} /></div>
     </div>
   );
 }
@@ -442,11 +443,11 @@ const styles: Record<string, React.CSSProperties> = {
 
 const dashStyles: Record<string, React.CSSProperties> = {
   grid: { display: 'flex', flexDirection: 'column', height: '100%', gap: '10px' },
-  agentRow: { flexShrink: 0 },
+  hiveRow: { flexShrink: 0, height: '420px', overflow: 'hidden', borderRadius: 14, border: '1px solid rgba(168,85,247,0.15)' },
   mainRow: { display: 'flex', gap: '10px', flex: 1, minHeight: 0 },
-  opsCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' },
+  opsCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '10px' },
+  halfPanel: { flex: 1, minHeight: 0, overflow: 'hidden' },
   sidebarCol: { width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' },
-  loopsRow: { flexShrink: 0, height: '180px' },
 };
 
 const tabStyles: Record<string, React.CSSProperties> = {
