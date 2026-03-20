@@ -1,207 +1,96 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
 
-function getClient() {
-  const client = getSupabaseAdmin();
-  if (!client) throw new Error('Supabase not configured');
-  return client;
-}
+type Priority = 'HIGH' | 'MEDIUM' | 'LOW';
+type ColumnId = 'todo' | 'inprogress' | 'blocked' | 'done';
 
-export interface KanbanTask {
-  id: string;
-  text: string;
-  column_id: 'todo' | 'progress' | 'done';
-  position: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface KanbanColumn {
+type Card = {
   id: string;
   title: string;
-  color: string;
-  tasks: KanbanTask[];
-}
+  description: string;
+  priority: Priority;
+  owner: string;
+  ownerEmoji: string;
+  dueDate?: string;
+  category: string;
+  note?: string;
+};
 
-// GET - Fetch all tasks grouped by column
+type Column = {
+  id: ColumnId;
+  title: string;
+  emoji: string;
+  headerColor: string;
+  cards: Card[];
+};
+
+type BoardState = { columns: Column[] };
+
+const defaultBoard: BoardState = {
+  columns: [
+    {
+      id: 'todo',
+      title: 'TO DO',
+      emoji: '📥',
+      headerColor: '#6b7280',
+      cards: [
+        { id: 'todo-1', title: 'Gmail OAuth Setup', description: 'Complete OAuth consent + token flow for Gmail integrations.', priority: 'HIGH', owner: 'Wes', ownerEmoji: '👔', category: 'Infrastructure' },
+        { id: 'todo-2', title: 'TikTok OAuth in Postiz', description: 'Connect TikTok account authorization flow in Postiz.', priority: 'MEDIUM', owner: 'Wes', ownerEmoji: '👔', category: 'Content' },
+        { id: 'todo-3', title: 'Email forwarding to G', description: 'Set forwarding rules and test message relay reliability.', priority: 'MEDIUM', owner: 'Wes', ownerEmoji: '👔', category: 'Infrastructure' },
+        { id: 'todo-4', title: 'Google client secret rotation', description: 'Rotate keys and rebind app credentials for all dependent services.', priority: 'HIGH', owner: 'Wes', ownerEmoji: '👔', category: 'Security' },
+      ],
+    },
+    {
+      id: 'inprogress',
+      title: 'IN PROGRESS',
+      emoji: '🔨',
+      headerColor: '#3b82f6',
+      cards: [
+        { id: 'inprogress-1', title: '2nd Brain Dashboard Rebuild', description: 'Rebuild the Ops Center tabbed dashboard architecture.', priority: 'HIGH', owner: 'G', ownerEmoji: '🧠', category: 'Product' },
+        { id: 'inprogress-2', title: 'Cron Error Remediation', description: 'Identify timeout patterns and stabilize failing cron routines.', priority: 'HIGH', owner: 'G', ownerEmoji: '🧠', category: 'Infrastructure' },
+        { id: 'inprogress-3', title: 'Lead Pipeline (Scout)', description: 'Improve lead extraction + dedupe + ranking cadence.', priority: 'MEDIUM', owner: 'Scout', ownerEmoji: '🛰️', category: 'Sales' },
+      ],
+    },
+    {
+      id: 'blocked',
+      title: 'BLOCKED',
+      emoji: '⏳',
+      headerColor: '#f59e0b',
+      cards: [
+        { id: 'blocked-1', title: 'OIOS Demo Redeploy', description: 'Restore demo endpoint and validate post-deploy uptime.', priority: 'HIGH', owner: 'G', ownerEmoji: '🧠', category: 'Infrastructure', note: 'Vercel 404 since Mar 13 — needs Wes' },
+        { id: 'blocked-2', title: 'Kenny @ Redwoods Follow-up', description: 'Owner handoff required before outreach can proceed.', priority: 'HIGH', owner: 'Wes', ownerEmoji: '👔', category: 'Sales' },
+        { id: 'blocked-3', title: 'Jessica Patton', description: 'Contact loop exists but detail packet is incomplete.', priority: 'MEDIUM', owner: 'Wes', ownerEmoji: '👔', category: 'Unknown', note: 'No details provided' },
+      ],
+    },
+    {
+      id: 'done',
+      title: 'DONE',
+      emoji: '✅',
+      headerColor: '#22c55e',
+      cards: [
+        { id: 'done-1', title: 'Orchestration Tab', description: 'Delivered organization chart tab with hierarchy view.', priority: 'HIGH', owner: 'G', ownerEmoji: '🧠', category: 'Product' },
+        { id: 'done-2', title: 'Agent Roster Update (12 agents)', description: 'Roster refreshed to the current 12-agent operating model.', priority: 'MEDIUM', owner: 'G', ownerEmoji: '🧠', category: 'Product' },
+        { id: 'done-3', title: 'Soul Guardian Baselines', description: 'Baselines initialized and heartbeat check validated.', priority: 'LOW', owner: 'G', ownerEmoji: '🧠', category: 'Infrastructure' },
+      ],
+    },
+  ],
+};
+
+let inMemoryBoard: BoardState = defaultBoard;
+
 export async function GET() {
-  try {
-    const supabase = getClient();
-    const { data: tasks, error } = await supabase
-      .from('kanban_tasks')
-      .select('*')
-      .order('position', { ascending: true });
-
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
-    }
-
-    // Group tasks by column with proper typing
-    const columns: KanbanColumn[] = [
-      {
-        id: 'todo',
-        title: 'To Do',
-        color: '#f59e0b',
-        tasks: tasks?.filter(task => task.column_id === 'todo') || []
-      },
-      {
-        id: 'progress', 
-        title: 'In Progress',
-        color: '#667eea',
-        tasks: tasks?.filter(task => task.column_id === 'progress') || []
-      },
-      {
-        id: 'done',
-        title: 'Done', 
-        color: '#22c55e',
-        tasks: tasks?.filter(task => task.column_id === 'done') || []
-      }
-    ];
-
-    return NextResponse.json({ columns });
-  } catch (error) {
-    console.error('Error fetching tasks:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return NextResponse.json(inMemoryBoard);
 }
 
-// POST - Add new task
 export async function POST(request: NextRequest) {
   try {
-    const { text, column_id } = await request.json();
-
-    if (!text || !column_id) {
-      return NextResponse.json(
-        { error: 'Text and column_id are required' },
-        { status: 400 }
-      );
+    const payload = await request.json();
+    if (!payload || !Array.isArray(payload.columns)) {
+      return NextResponse.json({ error: 'Invalid board state. Expected { columns: [] }' }, { status: 400 });
     }
 
-    if (!['todo', 'progress', 'done'].includes(column_id)) {
-      return NextResponse.json(
-        { error: 'Invalid column_id' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = getClient();
-    // Get the next position number for this column
-    const { data: maxPositionData } = await supabase
-      .from('kanban_tasks')
-      .select('position')
-      .eq('column_id', column_id)
-      .order('position', { ascending: false })
-      .limit(1);
-
-    const nextPosition = (maxPositionData?.[0]?.position || 0) + 1;
-
-    const { data, error } = await supabase
-      .from('kanban_tasks')
-      .insert({
-        text: text.trim(),
-        column_id,
-        position: nextPosition
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
-    }
-
-    return NextResponse.json({ task: data }, { status: 201 });
-  } catch (error) {
-    console.error('Error creating task:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-// PATCH - Update task (move between columns or update position)
-export async function PATCH(request: NextRequest) {
-  try {
-    const { id, column_id, position, text } = await request.json();
-
-    if (!id) {
-      return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
-    }
-
-    const supabase = getClient();
-    const updates: Partial<KanbanTask> = {};
-
-    if (column_id && ['todo', 'progress', 'done'].includes(column_id)) {
-      updates.column_id = column_id;
-    }
-    
-    if (typeof position === 'number') {
-      updates.position = position;
-    }
-    
-    if (text !== undefined) {
-      updates.text = text.trim();
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        { error: 'No valid updates provided' },
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabase
-      .from('kanban_tasks')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
-    }
-
-    if (!data) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ task: data });
-  } catch (error) {
-    console.error('Error updating task:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-// DELETE - Delete task by ID
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
-    }
-
-    const supabase = getClient();
-    const { data, error } = await supabase
-      .from('kanban_tasks')
-      .delete()
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 });
-    }
-
-    if (!data) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ message: 'Task deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting task:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    inMemoryBoard = payload as BoardState;
+    return NextResponse.json({ ok: true, board: inMemoryBoard });
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
   }
 }

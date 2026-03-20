@@ -1,19 +1,15 @@
 import type { Metadata, Viewport } from 'next'
-import { ThemeProvider } from '../contexts/ThemeContext'
-import { AgentPersonalityProvider } from '../contexts/AgentPersonalityContext'
-import { AgentPerformanceProvider } from '../contexts/AgentPerformanceContext'
-import { SystemStatusProvider } from '../contexts/SystemStatusContext'
 import './globals.css'
 import '../styles/premium.css'
 
 export const metadata: Metadata = {
-  title: 'Opie 2nd Brain',
-  description: 'Your AI-powered second brain and agent army commander',
+  title: 'Opie Ops Center',
+  description: 'Live Ops Command Center for Opie agent system',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Opie',
+    title: 'Opie Ops',
   },
   icons: {
     icon: '/opie-avatar.png',
@@ -25,8 +21,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  // userScalable: false, // Removed: allow users to zoom on mobile
-  themeColor: '#667eea',
+  themeColor: '#a855f7',
 }
 
 export default function RootLayout({
@@ -39,7 +34,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
         
         {/* PWA */}
         <link rel="manifest" href="/manifest.json" />
@@ -47,37 +42,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
-        
-        {/* Service Worker Registration */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('ServiceWorker registration successful');
-                    },
-                    function(err) {
-                      console.log('ServiceWorker registration failed: ', err);
-                    }
-                  );
-                });
-              }
-            `,
-          }}
-        />
       </head>
       <body>
-        <ThemeProvider>
-          <SystemStatusProvider>
-            <AgentPersonalityProvider>
-              <AgentPerformanceProvider>
-                {children}
-              </AgentPerformanceProvider>
-            </AgentPersonalityProvider>
-          </SystemStatusProvider>
-        </ThemeProvider>
+        {children}
       </body>
     </html>
   )
