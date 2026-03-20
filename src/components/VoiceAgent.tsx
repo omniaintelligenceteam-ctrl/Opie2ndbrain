@@ -29,12 +29,19 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
     setIsLoading(true);
 
     try {
+      // Send recent history so the API has conversation context
+      const recentHistory = messages.slice(-10).map(m => ({
+        role: m.role,
+        content: m.text,
+      }));
+
       const res = await fetch('/api/voice-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
           sessionId: sessionId.current,
+          history: recentHistory,
         }),
       });
 
@@ -62,7 +69,7 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [messages]);
 
   const voiceEngine = useVoiceEngine({
     onSend: sendToG,
