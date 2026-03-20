@@ -8,11 +8,12 @@ import OrganizationChart from '@/components/ops/OrganizationChart';
 import KanbanBoard from '@/components/ops/KanbanBoard';
 import CalendarView from '@/components/ops/CalendarView';
 import TheHive from '@/components/ops/TheHive';
+import VoiceAgent from '@/components/VoiceAgent';
 
 const RELAY_BASE = process.env.NEXT_PUBLIC_OPIE_RELAY_URL || '';
 const IS_DEMO = !RELAY_BASE;
 
-type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar';
+type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'voice';
 type Temp = 'all' | 'hot' | 'warm' | 'cold';
 
 type Lead = {
@@ -45,6 +46,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'leads', label: 'LEADS / CRM', icon: '📋' },
   { id: 'crons', label: 'CRONS', icon: '⏰' },
   { id: 'costs', label: 'COSTS', icon: '💰' },
+  { id: 'voice', label: 'VOICE', icon: '🎤' },
 ];
 
 export default function DashboardPage() {
@@ -95,6 +97,7 @@ export default function DashboardPage() {
         {activeTab === 'costs' && <CostsView />}
         {activeTab === 'kanban' && <KanbanBoard />}
         {activeTab === 'calendar' && <CalendarView />}
+        {activeTab === 'voice' && <VoiceAgent onBack={() => setActiveTab('dashboard')} />}
       </main>
     </div>
   );
