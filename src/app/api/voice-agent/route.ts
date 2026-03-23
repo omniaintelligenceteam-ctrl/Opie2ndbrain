@@ -7,10 +7,10 @@ export const maxDuration = 120;
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://143.198.128.209/ocgw';
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
 
-// Ollama cloud API (same provider as the main chat route)
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.com/v1';
-const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || '';
-const OLLAMA_MODEL = 'kimi-k2.5:cloud';
+// Gemini Flash — free tier, fast, no reasoning token overhead
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=`;
 
 // G's voice persona — concise, direct, ops-focused
 const G_SYSTEM = `You are G, Wes's AI operations chief for the OpenClaw multi-agent system. You run a team of AI agents on a DigitalOcean droplet.
@@ -45,7 +45,6 @@ async function getSystemContext(): Promise<string> {
   const parts: string[] = [];
 
   try {
-    // Fetch status + agents in parallel
     const [statusRes, agentsRes, sessionsRes] = await Promise.allSettled([
       fetch(`${GATEWAY_URL}/tools/invoke`, {
         method: 'POST',
@@ -110,6 +109,24 @@ async function getSystemContext(): Promise<string> {
   return parts.length > 0 ? '\n\n--- LIVE SYSTEM DATA ---\n' + parts.join('\n\n') : '';
 }
 
+// Convert conversation history to Gemini format
+function toGeminiContents(systemPrompt: string, convo: Array<{ role: string; content: string }>) {
+  // Gemini uses "user" and "model" roles, system goes in systemInstruction
+  const contents = convo.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  return {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: {
+      maxOutputTokens: 1024, // Gemini 2.5 Flash uses thinking tokens from this budget
+      temperature: 0.7,
+    },
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { message, sessionId = 'voice-default', history } = await req.json();
@@ -118,8 +135,8 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    if (!OLLAMA_API_KEY) {
-      return Response.json({ error: 'OLLAMA_API_KEY not configured' }, { status: 500 });
+    if (!GEMINI_API_KEY) {
+      return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
     console.log('[VoiceAgent] User:', message.slice(0, 100));
@@ -145,40 +162,36 @@ export async function POST(req: NextRequest) {
 
     // Fetch live system context for G's awareness
     const liveContext = await getSystemContext();
-
     const systemPrompt = G_SYSTEM + liveContext;
 
-    // Build messages array with system prompt
-    const apiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...convo,
-    ];
+    // Build Gemini request
+    const geminiBody = toGeminiContents(systemPrompt, convo);
 
-    // Call Ollama/Kimi cloud API (OpenAI-compatible)
-    const response = await fetch(`${OLLAMA_API_URL}/chat/completions`, {
+    // Call Gemini Flash API
+    const response = await fetch(`${GEMINI_URL}${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OLLAMA_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        messages: apiMessages,
-        max_tokens: 300, // Keep voice responses short
-        temperature: 0.7,
-        stream: false,
-      }),
-      signal: AbortSignal.timeout(60000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiBody),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[VoiceAgent] Ollama error:', response.status, errorText.slice(0, 200));
+      console.error('[VoiceAgent] Gemini error:', response.status, errorText.slice(0, 300));
       return Response.json({ error: `AI provider error: ${response.status}` }, { status: 502 });
     }
 
     const data = await response.json();
-    let reply = data.choices?.[0]?.message?.content || '';
+
+    // Extract text from Gemini response
+    let reply = '';
+    const candidates = data.candidates;
+    if (candidates && candidates[0]?.content?.parts) {
+      reply = candidates[0].content.parts
+        .map((p: any) => p.text || '')
+        .join('')
+        .trim();
+    }
 
     if (!reply) {
       reply = "Sorry, I didn't catch that. Say again?";

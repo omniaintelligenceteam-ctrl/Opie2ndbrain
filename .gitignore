@@ -14,3 +14,5 @@ observability/
 # Windows reserved device names
 nul
 NUL
+.env*.local
+.env.vercel-check

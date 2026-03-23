@@ -1,201 +1,149 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
-const STORAGE_KEYS = {
-  PTT_ENABLED:  'opie-push-to-talk-enabled',
-  PTT_KEY:      'opie-push-to-talk-key',
-  TTS_PROVIDER: 'opie-tts-provider',
-  TTS_VOICE:    'opie-tts-voice',
-  TTS_SPEED:    'opie-tts-speed',
-};
-
-export type PushToTalkKey =
-  | { type: 'keyboard'; code: string }    // e.g. { type: 'keyboard', code: 'Space' }
-  | { type: 'mouse'; button: number };    // e.g. { type: 'mouse', button: 3 } (back)
-
-export const DEFAULT_PTT_KEY: PushToTalkKey = { type: 'keyboard', code: 'Space' };
-
-export type TTSProvider = 'elevenlabs' | 'azure' | 'openai' | 'edge';
-
-export interface VoiceProvider {
-  id: TTSProvider;
+// ─── Available Voices ────────────────────────────────────────────────
+export interface VoiceOption {
+  id: string;
   label: string;
-  note: string;
+  gender: 'male' | 'female';
+  provider: string;
 }
 
-export const TTS_PROVIDERS: VoiceProvider[] = [
-  { id: 'elevenlabs', label: 'ElevenLabs', note: 'Best quality — realistic voices' },
-  { id: 'azure',      label: 'Azure Neural', note: 'Microsoft — 500k free/month' },
-  { id: 'openai',     label: 'OpenAI TTS',  note: 'Natural, fast' },
-  { id: 'edge',       label: 'Edge TTS',    note: 'Free, browser fallback' },
+export const AZURE_VOICES: VoiceOption[] = [
+  { id: 'en-US-AriaNeural', label: 'Aria', gender: 'female', provider: 'azure' },
+  { id: 'en-US-JennyNeural', label: 'Jenny', gender: 'female', provider: 'azure' },
+  { id: 'en-US-GuyNeural', label: 'Guy', gender: 'male', provider: 'azure' },
+  { id: 'en-US-DavisNeural', label: 'Davis', gender: 'male', provider: 'azure' },
 ];
 
-// Azure voices — browse at: https://speech.microsoft.com/portal/voicegallery
-export const AZURE_VOICES: Record<string, string> = {
-  'en-US-AvaMultilingualNeural': 'Ava (US Female — Dragon HD ⭐)',
-  'en-US-GuyNeural':       'Guy (US Male)',
-  'en-US-DavisNeural':     'Davis (US Male)',
-  'en-US-JasonNeural':     'Jason (US Male)',
-  'en-US-TonyNeural':      'Tony (US Male)',
-  'en-US-AriaNeural':      'Aria (US Female)',
-  'en-US-JennyNeural':     'Jenny (US Female)',
-  'en-US-NancyNeural':     'Nancy (US Female)',
-  'en-US-SaraNeural':      'Sara (US Female)',
-  'en-GB-RyanNeural':      'Ryan (UK Male)',
-  'en-GB-ThomasNeural':    'Thomas (UK Male)',
-  'en-AU-WilliamNeural':   'William (AU Male)',
-};
+export const OPENAI_VOICES: VoiceOption[] = [
+  { id: 'nova', label: 'Nova', gender: 'female', provider: 'openai' },
+  { id: 'alloy', label: 'Alloy', gender: 'female', provider: 'openai' },
+  { id: 'echo', label: 'Echo', gender: 'male', provider: 'openai' },
+  { id: 'fable', label: 'Fable', gender: 'male', provider: 'openai' },
+  { id: 'onyx', label: 'Onyx', gender: 'male', provider: 'openai' },
+  { id: 'shimmer', label: 'Shimmer', gender: 'female', provider: 'openai' },
+];
 
-// ElevenLabs voices
-export const ELEVENLABS_VOICES: Record<string, string> = {
-  'MClEFoImJXBTgLwdLI5n': 'Ethan (Default)',
-  'pNInz6obpgDQGcFmaJgB': 'Adam',
-  'VR6AewLTigWG4xSOukaG': 'Arnold',
-  'ErXwobaYiN019PkySvjV': 'Antoni',
-  'yoZ06aMxZJJ28mfd3POQ': 'Sam',
-  'EXAVITQu4vr4xnSDxMaL': 'Bella',
-  'ThT5KcBeYPX3keUQqHPh': 'Dorothy',
-};
+export const TTS_PROVIDERS = [
+  { id: 'azure', label: 'Azure Speech', note: '500K free/mo' },
+  { id: 'openai', label: 'OpenAI TTS', note: '$15/1M chars' },
+  { id: 'elevenlabs', label: 'ElevenLabs', note: 'Credits' },
+  { id: 'edge', label: 'Edge TTS', note: 'Free' },
+] as const;
 
-// OpenAI voices
-export const OPENAI_VOICES: Record<string, string> = {
-  'onyx':    'Onyx (Deep Male)',
-  'echo':    'Echo (Male)',
-  'fable':   'Fable (Male)',
-  'nova':    'Nova (Female)',
-  'shimmer': 'Shimmer (Female)',
-  'alloy':   'Alloy (Neutral)',
-};
+// ─── Push-to-Talk key type (backward compat with useVoiceEngine) ─────
+export type PushToTalkKey = string;
 
-export function getVoicesForProvider(provider: TTSProvider): Record<string, string> {
-  switch (provider) {
-    case 'azure':      return AZURE_VOICES;
-    case 'elevenlabs': return ELEVENLABS_VOICES;
-    case 'openai':     return OPENAI_VOICES;
-    default:           return {};
-  }
+// ─── Settings Shape ──────────────────────────────────────────────────
+export interface VoiceSettings {
+  ttsProvider: string;
+  ttsVoice: string;
+  speechSpeed: number;
+  autoSpeak: boolean;
+  pushToTalkKey: string;
+  pushToTalkLabel: string;
+  silenceTimeout: number;
 }
 
-/** Convert a PushToTalkKey to a human-readable label */
-export function getPushToTalkKeyLabel(key: PushToTalkKey): string {
-  if (key.type === 'mouse') {
+const STORAGE_KEY = 'opie-voice-settings';
+
+const DEFAULTS: VoiceSettings = {
+  ttsProvider: 'azure',
+  ttsVoice: 'en-US-AriaNeural',
+  speechSpeed: 1.0,
+  autoSpeak: true,
+  pushToTalkKey: 'Space',
+  pushToTalkLabel: 'Space',
+  silenceTimeout: 1200,
+};
+
+// ─── Friendly key labels ─────────────────────────────────────────────
+export function formatKeyLabel(code: string): string {
+  // Mouse button labels
+  if (code.startsWith('Mouse')) {
+    const btn = parseInt(code.slice(5));
     const mouseLabels: Record<number, string> = {
-      0: 'Left Click', 1: 'Middle Click', 2: 'Right Click',
-      3: 'Mouse Back', 4: 'Mouse Forward',
+      0: 'Left Click',
+      1: 'Middle Click',
+      2: 'Right Click',
+      3: 'Mouse 4',
+      4: 'Mouse 5',
+      5: 'Mouse 6',
     };
-    return mouseLabels[key.button] ?? `Mouse ${key.button}`;
+    return mouseLabels[btn] || `Mouse ${btn}`;
   }
-  const code = key.code;
-  const labels: Record<string, string> = {
-    Space: 'Space', ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift',
-    ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl',
-    AltLeft: 'Left Alt', AltRight: 'Right Alt',
-    MetaLeft: 'Left Meta', MetaRight: 'Right Meta',
-    Backquote: '`', CapsLock: 'Caps Lock', Tab: 'Tab',
-    Enter: 'Enter', Backspace: 'Backspace', Escape: 'Esc',
+
+  const map: Record<string, string> = {
+    'Space': 'Space',
+    'KeyV': 'V',
+    'KeyT': 'T',
+    'KeyM': 'M',
+    'Backquote': '`',
+    'CapsLock': 'Caps Lock',
+    'ShiftLeft': 'Left Shift',
+    'ShiftRight': 'Right Shift',
+    'ControlLeft': 'Left Ctrl',
+    'ControlRight': 'Right Ctrl',
+    'AltLeft': 'Left Alt',
+    'AltRight': 'Right Alt',
+    'F1': 'F1', 'F2': 'F2', 'F3': 'F3', 'F4': 'F4',
+    'F5': 'F5', 'F6': 'F6', 'F7': 'F7', 'F8': 'F8',
   };
-  if (labels[code]) return labels[code];
-  if (/^F\d+$/.test(code)) return code;
+  if (map[code]) return map[code];
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
-  if (code.startsWith('Numpad')) return 'Numpad ' + code.slice(6);
   return code;
 }
 
-/** Serialize a PushToTalkKey to a string for localStorage */
-function serializePTTKey(key: PushToTalkKey): string {
-  return JSON.stringify(key);
-}
-
-/** Deserialize a localStorage string to PushToTalkKey (handles legacy plain strings) */
-function deserializePTTKey(raw: string): PushToTalkKey {
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.type) {
-      return parsed as PushToTalkKey;
-    }
-  } catch { /* not JSON — legacy plain string */ }
-  // Legacy: plain string like 'Space' → migrate to new format
-  return { type: 'keyboard', code: raw };
-}
-
-export interface VoiceSettings {
-  pushToTalkEnabled: boolean;
-  pushToTalkKey: PushToTalkKey;
-  ttsProvider: TTSProvider;
-  ttsVoice: string;
-  ttsSpeed: number;
-}
-
+// ─── Hook ────────────────────────────────────────────────────────────
 export function useVoiceSettings() {
-  const [pushToTalkEnabled, setPTTEnabled]   = useState(false);
-  const [pushToTalkKey, setPTTKey]           = useState<PushToTalkKey>(DEFAULT_PTT_KEY);
-  const [ttsProvider, setTTSProviderState]   = useState<TTSProvider>('azure');
-  const [ttsVoice, setTTSVoiceState]         = useState<string>('en-US-AvaMultilingualNeural');
-  const [ttsSpeed, setTTSSpeedState]         = useState<number>(1.0);
-  const [mounted, setMounted]                = useState(false);
+  const [settings, setSettings] = useState<VoiceSettings>(DEFAULTS);
+  const [loaded, setLoaded] = useState(false);
 
+  // Load from localStorage on mount
   useEffect(() => {
-    setMounted(true);
-    const pttE = localStorage.getItem(STORAGE_KEYS.PTT_ENABLED);
-    if (pttE !== null) setPTTEnabled(pttE === 'true');
-    const pttK = localStorage.getItem(STORAGE_KEYS.PTT_KEY);
-    if (pttK) setPTTKey(deserializePTTKey(pttK));
-    const prov = localStorage.getItem(STORAGE_KEYS.TTS_PROVIDER) as TTSProvider | null;
-    if (prov) setTTSProviderState(prov);
-    const voice = localStorage.getItem(STORAGE_KEYS.TTS_VOICE);
-    if (voice) setTTSVoiceState(voice);
-    const speed = localStorage.getItem(STORAGE_KEYS.TTS_SPEED);
-    if (speed) setTTSSpeedState(parseFloat(speed));
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSettings(prev => ({ ...prev, ...parsed }));
+      }
+    } catch {
+      // ignore
+    }
+    setLoaded(true);
   }, []);
 
-  const setPushToTalkEnabled = useCallback((enabled: boolean) => {
-    setPTTEnabled(enabled);
-    localStorage.setItem(STORAGE_KEYS.PTT_ENABLED, String(enabled));
+  // Persist on change (skip initial load)
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+      // ignore
+    }
+  }, [settings, loaded]);
+
+  const update = useCallback(<K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  const togglePushToTalk = useCallback(() => {
-    setPTTEnabled(prev => {
-      const next = !prev;
-      localStorage.setItem(STORAGE_KEYS.PTT_ENABLED, String(next));
-      return next;
-    });
+  const reset = useCallback(() => {
+    setSettings(DEFAULTS);
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }, []);
 
-  const setPushToTalkKey = useCallback((key: PushToTalkKey) => {
-    setPTTKey(key);
-    localStorage.setItem(STORAGE_KEYS.PTT_KEY, serializePTTKey(key));
-  }, []);
+  // Get voices for current provider
+  const voices: VoiceOption[] =
+    settings.ttsProvider === 'openai' ? OPENAI_VOICES :
+    settings.ttsProvider === 'azure' || settings.ttsProvider === 'edge' ? AZURE_VOICES :
+    [{ id: 'default', label: 'Default', gender: 'female' as const, provider: 'elevenlabs' }];
 
-  const setTTSProvider = useCallback((provider: TTSProvider) => {
-    setTTSProviderState(provider);
-    localStorage.setItem(STORAGE_KEYS.TTS_PROVIDER, provider);
-    // Reset voice to default for new provider
-    const voices = getVoicesForProvider(provider);
-    const defaultVoice = Object.keys(voices)[0] || '';
-    setTTSVoiceState(defaultVoice);
-    localStorage.setItem(STORAGE_KEYS.TTS_VOICE, defaultVoice);
-  }, []);
+  // Flat accessors for backward compatibility with useVoiceEngine
+  const pushToTalkEnabled = true; // Always enabled when configured
+  const pushToTalkKey = settings.pushToTalkKey as PushToTalkKey;
 
-  const setTTSVoice = useCallback((voice: string) => {
-    setTTSVoiceState(voice);
-    localStorage.setItem(STORAGE_KEYS.TTS_VOICE, voice);
-  }, []);
-
-  const setTTSSpeed = useCallback((speed: number) => {
-    setTTSSpeedState(speed);
-    localStorage.setItem(STORAGE_KEYS.TTS_SPEED, String(speed));
-  }, []);
-
-  return {
-    pushToTalkEnabled, setPushToTalkEnabled, togglePushToTalk,
-    pushToTalkKey, setPushToTalkKey,
-    ttsProvider, setTTSProvider,
-    ttsVoice, setTTSVoice,
-    ttsSpeed, setTTSSpeed,
-    mounted,
-  };
+  return { settings, update, reset, voices, loaded, pushToTalkEnabled, pushToTalkKey };
 }
-
-export default useVoiceSettings;

@@ -15,7 +15,6 @@ import {
   getSpeechRecognitionClass,
   warmUpAudio,
 } from '@/lib/browserCompat';
-import { useVoiceSettings, PushToTalkKey, DEFAULT_PTT_KEY } from './useVoiceSettings';
 
 // ─── Configuration ──────────────────────────────────────────────────
 const SILENCE_TIMEOUT_MS = 1200;   // Send after 1.2s silence
@@ -34,10 +33,8 @@ export interface UseVoiceEngineOptions {
   ttsVoice?: string;
   /** Enable auto-speak responses (default: true when mic is on) */
   autoSpeak?: boolean;
-  /** Enable push-to-talk mode (default: false) */
-  pushToTalkEnabled?: boolean;
-  /** Push-to-talk key code (default: 'Space') */
-  pushToTalkKey?: string;
+  /** Push-to-talk mode: disables silence auto-send, sends on mic-off instead */
+  pttMode?: boolean;
 }
 
 export interface UseVoiceEngineReturn {
@@ -82,10 +79,7 @@ function voiceReducer(ctx: VoiceContext, event: VoiceEvent): VoiceContext {
 
 // ─── Hook ───────────────────────────────────────────────────────────
 export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineReturn {
-  const { onSend, ttsEndpoint = '/api/tts', ttsProvider, ttsVoice, autoSpeak = true, pushToTalkEnabled: defaultPushToTalkEnabled = false, pushToTalkKey: defaultPushToTalkKey = 'Space' } = options;
-
-  // Push-to-talk settings
-  const { pushToTalkEnabled, pushToTalkKey } = useVoiceSettings();
+  const { onSend, ttsEndpoint = '/api/tts', ttsProvider, ttsVoice, autoSpeak = true, pttMode = false } = options;
 
   // State machine
   const [ctx, rawDispatch] = useReducer(voiceReducer, undefined, initialContext);
@@ -104,17 +98,15 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   const accumulatedFinalRef = useRef('');
   const recognitionStartedAtRef = useRef<number | null>(null);
   const healthCheckTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Push-to-talk state
-  const pushToTalkKeyPressedRef = useRef(false);
-  const executeSideEffectsRef = useRef<(effects: SideEffect[]) => void>(() => {});
-  const pushToTalkSettingsRef = useRef({ enabled: false, key: DEFAULT_PTT_KEY as PushToTalkKey });
-  const wasListeningBeforePushToTalkRef = useRef(false);
+  const speakInternalRef = useRef<((text: string) => Promise<void>) | null>(null);
+  const pttModeRef = useRef(pttMode);
+  const autoSpeakRef = useRef(autoSpeak);
 
   // Keep refs in sync
   ctxRef.current = ctx;
   onSendRef.current = onSend;
-  pushToTalkSettingsRef.current = { enabled: pushToTalkEnabled, key: pushToTalkKey };
+  pttModeRef.current = pttMode;
+  autoSpeakRef.current = autoSpeak;
 
   // ─── Browser detection (once) ──────────────────────────────────
   if (!browserSupportRef.current && typeof window !== 'undefined') {
@@ -122,136 +114,14 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
   }
   const browserSupport = browserSupportRef.current || detectVoiceSupport();
 
-  // ─── Shared PTT press logic ────────────────────────────────────
-  const handlePTTPress = useCallback(() => {
-    if (pushToTalkKeyPressedRef.current) return; // already pressed
-    pushToTalkKeyPressedRef.current = true;
-    console.log('[VoiceEngine] Push-to-talk pressed');
-
-    // If G is speaking, barge-in: stop TTS → start recognition → listen
-    if (ctxRef.current.state === 'speaking') {
-      dispatch({ type: 'BARGE_IN' });
-      return;
-    }
-
-    // If G is processing, barge-in to add more context
-    if (ctxRef.current.state === 'processing') {
-      dispatch({ type: 'BARGE_IN' });
-      return;
-    }
-
-    // Normal: turn on mic or start recognition
-    if (ctxRef.current.micOn) {
-      if (ctxRef.current.state === 'idle') {
-        dispatch({ type: 'MIC_ON' });
-      } else if (ctxRef.current.state === 'listening') {
-        executeSideEffectsRef.current([{ type: 'START_RECOGNITION' }]);
-      }
-    } else {
-      dispatch({ type: 'MIC_ON' });
-    }
-  }, []);
-
-  // ─── Shared PTT release logic (immediate send) ───────────────
-  const handlePTTRelease = useCallback(() => {
-    if (!pushToTalkKeyPressedRef.current) return; // wasn't pressed
-    pushToTalkKeyPressedRef.current = false;
-    console.log('[VoiceEngine] Push-to-talk released');
-
-    if (ctxRef.current.state === 'listening') {
-      // Stop recognition
-      restartingRef.current = true;
-      try { recognitionRef.current?.stop(); } catch { /* ok */ }
-      setTimeout(() => { restartingRef.current = false; }, RECOGNITION_RESTART_DELAY + 50);
-
-      // Immediately send accumulated text (don't wait for silence timer)
-      const textToSend = (ctxRef.current.pendingText || ctxRef.current.transcript || '').trim();
-      if (textToSend) {
-        dispatch({ type: 'SILENCE_DETECTED', text: textToSend });
-      }
-    }
-  }, []);
-
-  // ─── Push-to-talk keyboard handlers ───────────────────────────
-  const handlePushToTalkKeyDown = useCallback((e: KeyboardEvent) => {
-    const { enabled, key } = pushToTalkSettingsRef.current;
-    if (!enabled || !mountedRef.current) return;
-    if (key.type !== 'keyboard' || e.code !== key.code) return;
-
-    // Don't trigger when typing in inputs
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-
-    e.preventDefault();
-    handlePTTPress();
-  }, [handlePTTPress]);
-
-  const handlePushToTalkKeyUp = useCallback((e: KeyboardEvent) => {
-    const { enabled, key } = pushToTalkSettingsRef.current;
-    if (!enabled || !mountedRef.current) return;
-    if (key.type !== 'keyboard' || e.code !== key.code) return;
-
-    e.preventDefault();
-    handlePTTRelease();
-  }, [handlePTTRelease]);
-
-  // ─── Push-to-talk mouse handlers ──────────────────────────────
-  const handlePushToTalkMouseDown = useCallback((e: MouseEvent) => {
-    const { enabled, key } = pushToTalkSettingsRef.current;
-    if (!enabled || !mountedRef.current) return;
-    if (key.type !== 'mouse' || e.button !== key.button) return;
-
-    e.preventDefault();
-    handlePTTPress();
-  }, [handlePTTPress]);
-
-  const handlePushToTalkMouseUp = useCallback((e: MouseEvent) => {
-    const { enabled, key } = pushToTalkSettingsRef.current;
-    if (!enabled || !mountedRef.current) return;
-    if (key.type !== 'mouse' || e.button !== key.button) return;
-
-    e.preventDefault();
-    handlePTTRelease();
-  }, [handlePTTRelease]);
-
-  // ─── Push-to-talk event listeners (keyboard + mouse) ─────────
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // Prevent context menu / browser back-forward when mouse button is PTT
-    const preventDefaults = (e: MouseEvent) => {
-      const { enabled, key } = pushToTalkSettingsRef.current;
-      if (enabled && key.type === 'mouse' && e.button === key.button) {
-        e.preventDefault();
-      }
-    };
-
-    document.addEventListener('keydown', handlePushToTalkKeyDown);
-    document.addEventListener('keyup', handlePushToTalkKeyUp);
-    document.addEventListener('mousedown', handlePushToTalkMouseDown);
-    document.addEventListener('mouseup', handlePushToTalkMouseUp);
-    document.addEventListener('contextmenu', preventDefaults);
-
-    return () => {
-      document.removeEventListener('keydown', handlePushToTalkKeyDown);
-      document.removeEventListener('keyup', handlePushToTalkKeyUp);
-      document.removeEventListener('mousedown', handlePushToTalkMouseDown);
-      document.removeEventListener('mouseup', handlePushToTalkMouseUp);
-      document.removeEventListener('contextmenu', preventDefaults);
-    };
-  }, [handlePushToTalkKeyDown, handlePushToTalkKeyUp, handlePushToTalkMouseDown, handlePushToTalkMouseUp]);
-
   // ─── Side effect executor ──────────────────────────────────────
   const executeSideEffects = useCallback((effects: SideEffect[]) => {
     for (const effect of effects) {
       switch (effect.type) {
         case 'START_RECOGNITION': {
-          // In push-to-talk mode, only start recognition if key is pressed
-          if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) {
-            console.log('[VoiceEngine] Push-to-talk mode: not starting recognition until key is pressed');
-            break;
-          }
-          
+          // Warm up AudioContext during user gesture to unlock Chrome autoplay
+          // Do NOT play on the shared Audio element — that corrupts its state
+          warmUpAudio();
           if (!recognitionRef.current) {
             console.warn('[VoiceEngine] START_RECOGNITION: recognitionRef is null — cannot start');
             break;
@@ -278,12 +148,6 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               console.log('[VoiceEngine] Aborted start — state changed during delay');
               return;
             }
-            // In push-to-talk mode, double check key is still pressed
-            if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) {
-              restartingRef.current = false;
-              console.log('[VoiceEngine] Aborted start — push-to-talk key no longer pressed');
-              return;
-            }
             restartingRef.current = false;
             try {
               rec.start();
@@ -292,13 +156,10 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               recognitionStartedAtRef.current = Date.now();
               healthCheckTimerRef.current = setTimeout(() => {
                 if (ctxRef.current.micOn && ctxRef.current.state === 'listening' && recognitionStartedAtRef.current) {
-                  // In push-to-talk mode, only restart if key is still pressed
-                  if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                   console.warn('[VoiceEngine] No speech results after 5s — restarting recognition');
                   try { recognitionRef.current?.stop(); } catch { /* ok */ }
                   setTimeout(() => {
                     if (!mountedRef.current || !ctxRef.current.micOn) return;
-                    if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                     try {
                       recognitionRef.current?.start();
                       recognitionStartedAtRef.current = Date.now();
@@ -317,7 +178,6 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
               // Retry once
               setTimeout(() => {
                 if (!mountedRef.current || !ctxRef.current.micOn) return;
-                if (pushToTalkSettingsRef.current.enabled && !pushToTalkKeyPressedRef.current) return;
                 try { rec.start(); } catch { /* give up */ }
               }, 500);
             }
@@ -360,9 +220,18 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         }
 
         case 'START_TTS': {
-          if (!autoSpeak) break;
-          // Use the speak function
-          speakInternal(effect.text);
+          if (!autoSpeakRef.current) {
+            // Skip TTS but end the speaking state
+            setTimeout(() => dispatch({ type: 'TTS_ENDED' }), 0);
+            break;
+          }
+          // Use ref to always get latest voice/provider settings
+          if (speakInternalRef.current) {
+            speakInternalRef.current(effect.text);
+          } else {
+            console.warn('[VoiceEngine] speakInternal not ready, ending speaking state');
+            setTimeout(() => dispatch({ type: 'TTS_ENDED' }), 0);
+          }
           break;
         }
 
@@ -383,6 +252,7 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
         }
 
         case 'START_SILENCE_TIMER': {
+          if (pttModeRef.current) break; // PTT mode: only send on mic-off release
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
           }
@@ -412,15 +282,6 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
           break;
         }
 
-        case 'ABORT_REQUEST': {
-          // Abort the in-flight AI request so the user can add more context
-          if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-          }
-          break;
-        }
-
         case 'LOG': {
           const logFn = effect.level === 'error' ? console.error
             : effect.level === 'warn' ? console.warn
@@ -431,9 +292,6 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       }
     }
   }, [autoSpeak]);
-
-  // Keep ref in sync
-  executeSideEffectsRef.current = executeSideEffects;
 
   // ─── Dispatch wrapper (state + effects) ────────────────────────
   const dispatch = useCallback((event: VoiceEvent) => {
@@ -447,7 +305,12 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
   // ─── Internal speak function ───────────────────────────────────
   const speakInternal = useCallback(async (text: string) => {
-    if (!audioRef.current || !mountedRef.current) return;
+    if (!mountedRef.current) return;
+    if (!audioRef.current) {
+      console.warn('[VoiceEngine] audioRef not ready for TTS');
+      dispatch({ type: 'TTS_ERROR', error: 'Audio not initialized' });
+      return;
+    }
 
     try {
       const body: Record<string, string> = { text };
@@ -462,58 +325,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.warn('[VoiceEngine] TTS API error:', res.status, errData, '— falling back to browser speechSynthesis');
-        // Fallback: browser Web Speech API (works with zero API keys)
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-          // Chrome bug: getVoices() returns [] on first call. Must wait for voiceschanged.
-          const speakWithFallback = () => {
-            const cleanText = text.replace(/[*_`#>]/g, '').trim();
-            if (!cleanText) {
-              dispatch({ type: 'TTS_ERROR', error: 'Empty text after cleaning' });
-              return;
-            }
-            // Cancel any pending speech first (Chrome won't speak if queue is stuck)
-            window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(cleanText);
-            utt.rate = 1.0;
-            utt.pitch = 1.0;
-            utt.volume = 1.0;
-            const voices = window.speechSynthesis.getVoices();
-            const preferred = voices.find(v => v.lang === 'en-US' && v.localService) || voices.find(v => v.lang.startsWith('en'));
-            if (preferred) utt.voice = preferred;
-            utt.onend = () => dispatch({ type: 'TTS_ENDED' });
-            utt.onerror = (e) => {
-              console.error('[VoiceEngine] Browser TTS error:', e.error);
-              dispatch({ type: 'TTS_ERROR', error: e.error || 'Browser TTS failed' });
-            };
-            dispatch({ type: 'TTS_STARTED' });
-            console.log('[VoiceEngine] Using browser speechSynthesis fallback, voices available:', voices.length);
-            window.speechSynthesis.speak(utt);
-          };
-
-          const voices = window.speechSynthesis.getVoices();
-          if (voices.length === 0) {
-            // Voices not loaded yet — wait for voiceschanged event (Chrome/Edge)
-            console.log('[VoiceEngine] Waiting for voices to load...');
-            const onVoicesChanged = () => {
-              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
-              speakWithFallback();
-            };
-            window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
-            // Safety: if voiceschanged never fires (some browsers), try anyway after 500ms
-            setTimeout(() => {
-              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
-              if (window.speechSynthesis.getVoices().length === 0) {
-                console.warn('[VoiceEngine] Voices never loaded, trying speechSynthesis anyway');
-              }
-              speakWithFallback();
-            }, 500);
-          } else {
-            speakWithFallback();
-          }
-        } else {
-          dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
-        }
+        console.error('[VoiceEngine] TTS API error:', res.status, errData);
+        dispatch({ type: 'TTS_ERROR', error: `TTS failed: ${res.status}` });
         return;
       }
 
@@ -548,6 +361,9 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       dispatch({ type: 'TTS_ERROR', error: err.message || 'TTS network error' });
     }
   }, [ttsEndpoint, ttsProvider, ttsVoice, dispatch]);
+
+  // Keep ref in sync so executeSideEffects always uses latest voice settings
+  speakInternalRef.current = speakInternal;
 
   // ─── Initialize Audio Element ──────────────────────────────────
   useEffect(() => {
@@ -585,19 +401,6 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
       audio.onerror = null;
     };
   }, [dispatch, browserSupport.needsUserGesture]);
-
-  // ─── Preload speechSynthesis voices (Chrome needs this early) ──
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    // Trigger voice loading — Chrome lazily loads voices
-    window.speechSynthesis.getVoices();
-    const handler = () => {
-      const voices = window.speechSynthesis.getVoices();
-      console.log(`[VoiceEngine] Browser voices loaded: ${voices.length}`);
-    };
-    window.speechSynthesis.addEventListener('voiceschanged', handler);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', handler);
-  }, []);
 
   // ─── Initialize Speech Recognition ────────────────────────────
   useEffect(() => {
@@ -755,9 +558,22 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Speaking state stuck recovery ───────────────────────────
+  // If speaking state persists for 30s (TTS never ended), auto-recover
+  useEffect(() => {
+    if (ctx.state !== 'speaking') return;
+    const timeout = setTimeout(() => {
+      if (ctxRef.current.state === 'speaking') {
+        console.warn('[VoiceEngine] Speaking state stuck for 30s — recovering to idle');
+        dispatch({ type: 'TTS_ENDED' });
+      }
+    }, 30000);
+    return () => clearTimeout(timeout);
+  }, [ctx.state, dispatch]);
+
   // ─── Public API ────────────────────────────────────────────────
   const toggleMic = useCallback(async () => {
-    console.log(`[VoiceEngine] toggleMic: micOn=${ctx.micOn}, pushToTalk=${pushToTalkSettingsRef.current.enabled}`);
+    console.log(`[VoiceEngine] toggleMic: micOn=${ctx.micOn}`);
     if (!browserSupport.speechRecognition) {
       alert(
         browserSupport.warnings[0] ||
@@ -817,8 +633,8 @@ export function useVoiceEngine(options: UseVoiceEngineOptions): UseVoiceEngineRe
 
   const speak = useCallback(async (text: string) => {
     dispatch({ type: 'TTS_STARTED' });
-    await speakInternal(text);
-  }, [dispatch, speakInternal]);
+    await (speakInternalRef.current?.(text) ?? Promise.resolve());
+  }, [dispatch]);
 
   const notifyResponse = useCallback((text: string) => {
     dispatch({ type: 'RESPONSE_RECEIVED', text });

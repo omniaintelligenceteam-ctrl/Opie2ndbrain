@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useVoiceEngine } from '@/hooks/useVoiceEngine';
+import { useVoiceSettings } from '@/hooks/useVoiceSettings';
 
 interface ChatMessage {
   id: string;
@@ -16,6 +17,7 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const sessionId = useRef(`voice-${Date.now()}`);
+  const { settings: voiceSettings } = useVoiceSettings();
 
   // Send message to G via the voice-agent API
   const sendToG = useCallback(async (text: string): Promise<string | void> => {
@@ -73,9 +75,10 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
 
   const voiceEngine = useVoiceEngine({
     onSend: sendToG,
-    autoSpeak: true,
-    ttsProvider: 'azure',
-    ttsVoice: 'en-US-GuyNeural',
+    autoSpeak: voiceSettings.autoSpeak,
+    ttsProvider: voiceSettings.ttsProvider,
+    ttsVoice: voiceSettings.ttsVoice,
+    pttMode: true,
   });
 
   const {
@@ -95,6 +98,66 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
     }
   }, [messages, transcript, isLoading]);
 
+  // Push-to-talk handler (keyboard + mouse buttons)
+  useEffect(() => {
+    const pttKey = voiceSettings.pushToTalkKey;
+    if (!pttKey) return;
+
+    const isMouse = pttKey.startsWith('Mouse');
+    const mouseButton = isMouse ? parseInt(pttKey.slice(5)) : -1;
+
+    if (isMouse) {
+      // Mouse button PTT
+      const mouseDown = (e: MouseEvent) => {
+        if (e.button === mouseButton) {
+          e.preventDefault();
+          if (!micOn) toggleMic();
+        }
+      };
+      const mouseUp = (e: MouseEvent) => {
+        if (e.button === mouseButton) {
+          e.preventDefault();
+          if (micOn) toggleMic();
+        }
+      };
+      // Prevent context menu for right-click PTT
+      const contextMenu = (e: MouseEvent) => {
+        if (mouseButton === 2) e.preventDefault();
+      };
+      window.addEventListener('mousedown', mouseDown);
+      window.addEventListener('mouseup', mouseUp);
+      window.addEventListener('contextmenu', contextMenu);
+      return () => {
+        window.removeEventListener('mousedown', mouseDown);
+        window.removeEventListener('mouseup', mouseUp);
+        window.removeEventListener('contextmenu', contextMenu);
+      };
+    } else {
+      // Keyboard PTT
+      const down = (e: KeyboardEvent) => {
+        // Don't trigger when typing in the text input
+        if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+        if (e.code === pttKey && !e.repeat) {
+          e.preventDefault();
+          if (!micOn) toggleMic();
+        }
+      };
+      const up = (e: KeyboardEvent) => {
+        if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+        if (e.code === pttKey) {
+          e.preventDefault();
+          if (micOn) toggleMic();
+        }
+      };
+      window.addEventListener('keydown', down);
+      window.addEventListener('keyup', up);
+      return () => {
+        window.removeEventListener('keydown', down);
+        window.removeEventListener('keyup', up);
+      };
+    }
+  }, [voiceSettings.pushToTalkKey, micOn, toggleMic]);
+
   // Handle text input send
   const handleTextSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -104,10 +167,11 @@ export default function VoiceAgent({ onBack }: { onBack?: () => void }) {
   };
 
   // Status text
+  const pttLabel = voiceSettings.pushToTalkLabel || 'Space';
   const statusText = voiceState === 'listening' ? '🎤 Listening...'
     : voiceState === 'processing' || isLoading ? '⚡ Thinking...'
     : isSpeaking ? '🔊 Speaking...'
-    : micOn ? '🎤 Ready' : '● Tap mic to talk';
+    : micOn ? '🎤 Ready' : `● Hold [${pttLabel}] or tap mic`;
 
   return (
     <div style={styles.container}>

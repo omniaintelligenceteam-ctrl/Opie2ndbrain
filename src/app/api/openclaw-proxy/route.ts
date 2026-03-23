@@ -7,8 +7,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const OPENCLAW_URL = 'https://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net';
-const OPENCLAW_TOKEN = 'opie-token-123';
+const OPENCLAW_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://ubuntu-s-1vcpu-1gb-sfo3-01.tail0fbff3.ts.net:19001';
+const OPENCLAW_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || process.env.GATEWAY_TOKEN || '';
 
 export async function POST(req: NextRequest) {
   try {
