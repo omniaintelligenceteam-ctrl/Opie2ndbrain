@@ -29,6 +29,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Agents',
     icon: '🤖',
     children: [
+      { id: 'oios', label: 'OIOS Command', icon: '⚡' },
       { id: 'agents', label: 'Agent List', icon: '🤖', showCount: true },
       { id: 'organization', label: 'Organization', icon: '🏛️' },
       { id: 'skills', label: 'Skills', icon: '🛠️' },
@@ -271,13 +272,6 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
         >
           <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center' }}>📡</span>
         </Link>
-        <Link
-          href="/oios"
-          style={{ ...navItemStyle, justifyContent: 'center', textDecoration: 'none' }}
-          title="OIOS Command Center"
-        >
-          <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center' }}>⚡</span>
-        </Link>
         <div style={dividerStyle} />
         {NAV_GROUPS.map(group => {
           const hasActiveChild = groupContainsView(group, activeView);
@@ -318,15 +312,6 @@ const SidebarNav: React.FC<SidebarNavProps> = memo(function SidebarNav({
       >
         <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>📡</span>
         <span style={{ flex: 1, fontWeight: 500 }}>Content Center</span>
-      </Link>
-
-      {/* OIOS Command Center - separate page */}
-      <Link
-        href="/oios"
-        style={{ ...navItemStyle, textDecoration: 'none' }}
-      >
-        <span style={{ fontSize: '1.15rem', width: '24px', textAlign: 'center', flexShrink: 0 }}>⚡</span>
-        <span style={{ flex: 1, fontWeight: 500 }}>OIOS Command</span>
       </Link>
 
       <div style={dividerStyle} />

@@ -56,6 +56,7 @@ const AgentPersonalityPanel = lazy(() => import('./AgentPersonalityPanel'));
 const ParticleBackground = lazy(() => import('./ParticleBackground'));
 const ImmersiveVoiceMode = lazy(() => import('./ImmersiveVoiceMode'));
 const SettingsView = lazy(() => import('./SettingsView'));
+const OIOSCommandCenter = lazy(() => import('./OIOSCommandCenter'));
 
 // Re-export Task type for backward compat (lazy can't export types directly)
 import type { Task } from './ActiveTasksPanel';
@@ -2577,6 +2578,24 @@ export default function OpieKanban(): React.ReactElement {
             <div style={{ maxWidth: 600 }}>
               <ContextWindowVisualizer enabled={activeView === 'context'} />
             </div>
+          </div>
+        )}
+
+        {/* OIOS Command Center View */}
+        {activeView === 'oios' && (
+          <div style={{
+            ...styles.viewContainer,
+            padding: isMobile ? '16px' : isTablet ? '24px' : '32px',
+            paddingTop: isMobile ? '72px' : undefined,
+            paddingBottom: isMobile ? '100px' : undefined,
+          }}>
+            <div style={styles.viewHeader}>
+              <h1 style={{ ...styles.viewTitle, fontSize: isMobile ? '1.5rem' : '1.75rem' }}>
+                OIOS Command Center
+              </h1>
+              <p style={styles.viewSubtitle}>Real-time agent orchestration overview</p>
+            </div>
+            <OIOSCommandCenter enabled={activeView === 'oios'} />
           </div>
         )}
 

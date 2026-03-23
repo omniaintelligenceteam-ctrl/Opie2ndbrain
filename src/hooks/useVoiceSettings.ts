@@ -145,5 +145,20 @@ export function useVoiceSettings() {
   const pushToTalkEnabled = true; // Always enabled when configured
   const pushToTalkKey = settings.pushToTalkKey as PushToTalkKey;
 
-  return { settings, update, reset, voices, loaded, pushToTalkEnabled, pushToTalkKey };
+  const setPushToTalkKey = useCallback((key: string | { type: string; code?: string; button?: number }) => {
+    const keyStr = typeof key === 'string' ? key : (key.code ?? `mouse${key.button}`);
+    update('pushToTalkKey', keyStr as PushToTalkKey);
+  }, [update]);
+
+  return { settings, update, reset, voices, loaded, pushToTalkEnabled, pushToTalkKey, setPushToTalkKey };
+}
+
+export function getVoicesForProvider(provider: string): VoiceOption[] {
+  if (provider === 'openai') return OPENAI_VOICES;
+  if (provider === 'azure' || provider === 'edge') return AZURE_VOICES;
+  return [{ id: 'default', label: 'Default', gender: 'female' as const, provider: 'elevenlabs' }];
+}
+
+export function getPushToTalkKeyLabel(key: string): string {
+  return formatKeyLabel(key);
 }
