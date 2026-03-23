@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   '/api/notifications',            // Client-side polling (no auth headers)
   '/api/sidebar/:path*',           // Sidebar SSE stream + polling (browser client, no secrets)
   '/api/agents',                   // Agent list (display only)
+  '/api/oios/:path*',             // OIOS command center APIs
 ];
 
 // API routes that require a valid DASHBOARD_API_KEY
