@@ -58,7 +58,7 @@ function useIsMobile(breakpoint = 768) {
    ═══════════════════════════════════════════════ */
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isMobile = useIsMobile();
 
