@@ -16,15 +16,15 @@ const shortDate = (isoDate: string) =>
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-function useIsNarrow(breakpoint = 1024) {
-  const [narrow, setNarrow] = useState(false);
+function useBreakpoint(breakpoint: number) {
+  const [under, setUnder] = useState(false);
   useEffect(() => {
-    const check = () => setNarrow(window.innerWidth < breakpoint);
+    const check = () => setUnder(window.innerWidth < breakpoint);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, [breakpoint]);
-  return narrow;
+  return under;
 }
 
 export default function TasksView() {
@@ -35,7 +35,8 @@ export default function TasksView() {
     setTodos,
     setUrgencyColumns,
   } = useOpsState();
-  const isNarrow = useIsNarrow();
+  const isNarrow = useBreakpoint(1024);
+  const isMobile = useBreakpoint(640);
 
   const [search, setSearch] = useState('');
   const [newTodoText, setNewTodoText] = useState('');
@@ -51,6 +52,7 @@ export default function TasksView() {
   const [dropGroup, setDropGroup] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [showNewGroup, setShowNewGroup] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const addRef = useRef<HTMLInputElement>(null);
@@ -227,9 +229,9 @@ export default function TasksView() {
     <div style={s.page}>
       {/* ── HEADER ── */}
       <div style={s.headerBar}>
-        <div>
-          <div style={s.title}>TASKS &amp; EMERGENCY BOARD</div>
-          <div style={s.subtitle}>Capture · Prioritize · Crush</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={s.title}>{isMobile ? 'TASKS' : 'TASKS & EMERGENCY BOARD'}</div>
+          {!isMobile && <div style={s.subtitle}>Capture · Prioritize · Crush</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ ...s.syncBadge, ...syncStyle }}>{syncLabel}</span>
@@ -237,23 +239,29 @@ export default function TasksView() {
       </div>
 
       {/* ── STATS ── */}
-      <div style={{ ...s.statsGrid, gridTemplateColumns: isNarrow ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)' }}>
-        <StatCard label="OPEN" value={stats.open} color="#a855f7" />
-        <StatCard label="IMMEDIATE" value={stats.immediate} color="#ef4444" pulse={stats.immediate > 0} />
-        <StatCard label="SOON" value={stats.soon} color="#f59e0b" />
-        <StatCard label="SCHED TODAY" value={stats.scheduledToday} color="#06b6d4" />
-        <StatCard label="DONE TODAY" value={stats.doneToday} color="#22c55e" />
+      <div
+        style={
+          isMobile
+            ? s.statsScroll
+            : { ...s.statsGrid, gridTemplateColumns: isNarrow ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)' }
+        }
+      >
+        <StatCard label="OPEN" value={stats.open} color="#a855f7" mobile={isMobile} />
+        <StatCard label="IMMEDIATE" value={stats.immediate} color="#ef4444" pulse={stats.immediate > 0} mobile={isMobile} />
+        <StatCard label="SOON" value={stats.soon} color="#f59e0b" mobile={isMobile} />
+        <StatCard label="SCHED TODAY" value={stats.scheduledToday} color="#06b6d4" mobile={isMobile} />
+        <StatCard label="DONE TODAY" value={stats.doneToday} color="#22c55e" mobile={isMobile} />
       </div>
 
       {/* ── ADD BAR ── */}
-      <div style={s.addBar}>
-        <div style={s.searchWrap}>
+      <div style={{ ...s.addBar, flexDirection: isMobile ? 'column' : 'row' }}>
+        <div style={{ ...s.searchWrap, width: isMobile ? '100%' : undefined, minWidth: isMobile ? 0 : 220 }}>
           <span style={s.searchIcon}>⌕</span>
           <input
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tasks  ( / )"
+            placeholder={isMobile ? 'Search tasks' : 'Search tasks  ( / )'}
             style={s.searchInput}
           />
           {search && (
@@ -262,11 +270,18 @@ export default function TasksView() {
             </button>
           )}
         </div>
-        <div style={s.quickAdd}>
+        <div
+          style={{
+            ...s.quickAdd,
+            width: isMobile ? '100%' : undefined,
+            minWidth: isMobile ? 0 : 320,
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
+          }}
+        >
           <select
             value={newTodoGroup}
             onChange={(e) => setNewTodoGroup(e.target.value)}
-            style={s.groupSelect}
+            style={{ ...s.groupSelect, flex: isMobile ? '1 1 100%' : undefined, maxWidth: isMobile ? '100%' : 180 }}
           >
             {todoGroups.map((g) => (
               <option key={g} value={g}>
@@ -282,8 +297,8 @@ export default function TasksView() {
             value={newTodoText}
             onChange={(e) => setNewTodoText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addTodo()}
-            placeholder="New task  ( N )"
-            style={s.addInput}
+            placeholder={isMobile ? 'New task' : 'New task  ( N )'}
+            style={{ ...s.addInput, flex: isMobile ? '1 1 60%' : 1 }}
           />
           <button onClick={addTodo} style={s.addBtn} disabled={!newTodoText.trim()}>
             + Add
@@ -292,9 +307,15 @@ export default function TasksView() {
       </div>
 
       {/* ── MAIN GRID: GROUPS  +  EMERGENCY BOARD ── */}
-      <div style={{ ...s.mainRow, flexDirection: isNarrow ? 'column' : 'row' }}>
+      <div
+        style={{
+          ...s.mainRow,
+          flexDirection: isNarrow ? 'column' : 'row',
+          minHeight: isMobile ? 'auto' : 380,
+        }}
+      >
         {/* GROUPS LIST */}
-        <section style={s.groupsPanel}>
+        <section style={{ ...s.groupsPanel, padding: isMobile ? 10 : 12 }}>
           <div style={s.panelHeader}>
             <span style={s.panelTitle}>GROUPS</span>
             <button
@@ -371,12 +392,18 @@ export default function TasksView() {
                         <TaskRow
                           key={t.id}
                           todo={t}
+                          isMobile={isMobile}
                           editingId={editingId}
                           editText={editText}
                           editNoteId={editNoteId}
                           scheduleId={scheduleId}
                           dragTodoId={dragTodoId}
+                          expandedActions={expandedTaskId === t.id}
+                          onToggleActions={() =>
+                            setExpandedTaskId((prev) => (prev === t.id ? null : t.id))
+                          }
                           urgencyColumns={urgencyColumns}
+                          allGroups={todoGroups}
                           onBeginDrag={beginDrag}
                           onEndDrag={() => {
                             setDragTodoId(null);
@@ -408,6 +435,7 @@ export default function TasksView() {
                             setScheduleId(null);
                           }}
                           onSetUrgency={updateUrgency}
+                          onSetGroup={updateGroup}
                         />
                       ))}
                     </div>
@@ -419,7 +447,7 @@ export default function TasksView() {
         </section>
 
         {/* EMERGENCY BOARD */}
-        <section style={s.boardPanel}>
+        <section style={{ ...s.boardPanel, padding: isMobile ? 10 : 12 }}>
           <div style={s.panelHeader}>
             <span style={{ ...s.panelTitle, color: '#fda4af' }}>EMERGENCY BOARD</span>
             <span style={s.boardHint}>Drag to prioritize</span>
@@ -470,8 +498,8 @@ export default function TasksView() {
                     {items.map((t) => (
                       <div
                         key={t.id}
-                        draggable
-                        onDragStart={(e) => beginDrag(t.id, e)}
+                        draggable={!isMobile}
+                        onDragStart={(e) => !isMobile && beginDrag(t.id, e)}
                         onDragEnd={() => {
                           setDragTodoId(null);
                           setDropUrgency(null);
@@ -488,9 +516,11 @@ export default function TasksView() {
                             type="checkbox"
                             checked={t.done}
                             onChange={() => toggleTodo(t.id)}
-                            style={s.checkbox}
+                            style={isMobile ? s.checkboxMobile : s.checkbox}
                           />
-                          <span style={s.boardCardText}>{t.text}</span>
+                          <span style={{ ...s.boardCardText, fontSize: isMobile ? 13 : 12 }}>
+                            {t.text}
+                          </span>
                           <button
                             onClick={() => updateUrgency(t.id, undefined)}
                             style={s.boardCardClose}
@@ -504,6 +534,26 @@ export default function TasksView() {
                           <span style={s.boardCardGroup}>{t.group}</span>
                           {t.scheduledDate && (
                             <span style={s.boardCardDate}>📅 {shortDate(t.scheduledDate)}</span>
+                          )}
+                          {isMobile && (
+                            <select
+                              value={t.urgencyColumnId || ''}
+                              onChange={(e) =>
+                                updateUrgency(
+                                  t.id,
+                                  (e.target.value || undefined) as UrgencyColumnId | undefined,
+                                )
+                              }
+                              style={s.boardMoveSelect}
+                              aria-label="Move to column"
+                            >
+                              {urgencyColumns.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  → {c.title}
+                                </option>
+                              ))}
+                              <option value="">↺ Off board</option>
+                            </select>
                           )}
                         </div>
                       </div>
@@ -574,16 +624,18 @@ function StatCard({
   value,
   color,
   pulse,
+  mobile,
 }: {
   label: string;
   value: number;
   color: string;
   pulse?: boolean;
+  mobile?: boolean;
 }) {
   return (
     <div
       style={{
-        ...s.statCard,
+        ...(mobile ? s.statCardMobile : s.statCard),
         borderColor: `${color}55`,
         boxShadow: pulse && value > 0 ? `0 0 24px ${color}33` : `0 0 12px ${color}11`,
       }}
@@ -596,12 +648,16 @@ function StatCard({
 
 type TaskRowProps = {
   todo: TodoItem;
+  isMobile: boolean;
   editingId: string | null;
   editText: string;
   editNoteId: string | null;
   scheduleId: string | null;
   dragTodoId: string | null;
+  expandedActions: boolean;
+  onToggleActions: () => void;
   urgencyColumns: { id: UrgencyColumnId; title: string; color: string }[];
+  allGroups: string[];
   onBeginDrag: (id: string, e: React.DragEvent<HTMLElement>) => void;
   onEndDrag: () => void;
   onToggle: (id: string) => void;
@@ -617,17 +673,22 @@ type TaskRowProps = {
   onSetSchedule: (id: string, date: string) => void;
   onClearSchedule: (id: string) => void;
   onSetUrgency: (id: string, urgency: UrgencyColumnId | undefined) => void;
+  onSetGroup: (id: string, group: string) => void;
 };
 
 function TaskRow(props: TaskRowProps) {
   const {
     todo: t,
+    isMobile,
     editingId,
     editText,
     editNoteId,
     scheduleId,
     dragTodoId,
+    expandedActions,
+    onToggleActions,
     urgencyColumns,
+    allGroups,
     onBeginDrag,
     onEndDrag,
     onToggle,
@@ -643,6 +704,7 @@ function TaskRow(props: TaskRowProps) {
     onSetSchedule,
     onClearSchedule,
     onSetUrgency,
+    onSetGroup,
   } = props;
 
   const isEditing = editingId === t.id;
@@ -653,17 +715,21 @@ function TaskRow(props: TaskRowProps) {
 
   return (
     <div
-      draggable={!isEditing}
-      onDragStart={(e) => onBeginDrag(t.id, e)}
+      draggable={!isEditing && !isMobile}
+      onDragStart={(e) => !isMobile && onBeginDrag(t.id, e)}
       onDragEnd={onEndDrag}
-      style={{ ...s.taskRow, ...(isDragging ? s.dragging : {}) }}
+      style={{
+        ...s.taskRow,
+        ...(isMobile ? s.taskRowMobile : {}),
+        ...(isDragging ? s.dragging : {}),
+      }}
     >
       <div style={s.taskMain}>
         <input
           type="checkbox"
           checked={t.done}
           onChange={() => onToggle(t.id)}
-          style={s.checkbox}
+          style={isMobile ? s.checkboxMobile : s.checkbox}
         />
         {isEditing ? (
           <input
@@ -679,9 +745,10 @@ function TaskRow(props: TaskRowProps) {
           />
         ) : (
           <span
-            style={s.taskText}
-            onDoubleClick={() => onStartEdit(t.id, t.text)}
-            title="Double-click to edit"
+            style={{ ...s.taskText, fontSize: isMobile ? 13 : 12 }}
+            onClick={() => isMobile && onToggleActions()}
+            onDoubleClick={() => !isMobile && onStartEdit(t.id, t.text)}
+            title={isMobile ? 'Tap for actions' : 'Double-click to edit'}
           >
             {t.text}
           </span>
@@ -707,29 +774,97 @@ function TaskRow(props: TaskRowProps) {
             📝
           </span>
         )}
-        <div style={s.taskActions}>
-          <button onClick={() => onStartEdit(t.id, t.text)} style={s.iconBtn} title="Edit">
-            ✎
+
+        {isMobile ? (
+          <button
+            onClick={onToggleActions}
+            style={s.moreBtn}
+            aria-label="Actions"
+            aria-expanded={expandedActions}
+          >
+            {expandedActions ? '▴' : '⋯'}
           </button>
-          <button onClick={() => onOpenSchedule(t.id)} style={s.iconBtn} title="Schedule">
-            📅
-          </button>
-          <button onClick={() => onOpenNote(t.id)} style={s.iconBtn} title="Note">
-            📝
-          </button>
-          <UrgencyMenu
-            urgencyColumns={urgencyColumns}
-            current={t.urgencyColumnId}
-            onSet={(u) => onSetUrgency(t.id, u)}
-          />
-          <button onClick={() => onRemove(t.id)} style={s.iconBtnDanger} title="Delete">
-            ×
-          </button>
-        </div>
+        ) : (
+          <div style={s.taskActions}>
+            <button onClick={() => onStartEdit(t.id, t.text)} style={s.iconBtn} title="Edit">
+              ✎
+            </button>
+            <button onClick={() => onOpenSchedule(t.id)} style={s.iconBtn} title="Schedule">
+              📅
+            </button>
+            <button onClick={() => onOpenNote(t.id)} style={s.iconBtn} title="Note">
+              📝
+            </button>
+            <UrgencyMenu
+              urgencyColumns={urgencyColumns}
+              current={t.urgencyColumnId}
+              onSet={(u) => onSetUrgency(t.id, u)}
+            />
+            <button onClick={() => onRemove(t.id)} style={s.iconBtnDanger} title="Delete">
+              ×
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Mobile: tap-to-expand action drawer */}
+      {isMobile && expandedActions && (
+        <div style={s.mobileActions}>
+          <button onClick={() => onStartEdit(t.id, t.text)} style={s.mobileActionBtn}>
+            ✎ Edit
+          </button>
+          <button onClick={() => onOpenSchedule(t.id)} style={s.mobileActionBtn}>
+            📅 Schedule
+          </button>
+          <button onClick={() => onOpenNote(t.id)} style={s.mobileActionBtn}>
+            📝 Note
+          </button>
+          <div style={s.mobileActionRow}>
+            <label style={s.mobileLabel}>Priority</label>
+            <select
+              value={t.urgencyColumnId || ''}
+              onChange={(e) =>
+                onSetUrgency(t.id, (e.target.value || undefined) as UrgencyColumnId | undefined)
+              }
+              style={s.mobileSelect}
+            >
+              <option value="">— None —</option>
+              {urgencyColumns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={s.mobileActionRow}>
+            <label style={s.mobileLabel}>Group</label>
+            <select
+              value={t.group}
+              onChange={(e) => onSetGroup(t.id, e.target.value)}
+              style={s.mobileSelect}
+            >
+              {allGroups.includes(t.group) ? null : <option value={t.group}>{t.group}</option>}
+              {allGroups.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => {
+              onRemove(t.id);
+              onToggleActions();
+            }}
+            style={s.mobileDeleteBtn}
+          >
+            🗑 Delete
+          </button>
+        </div>
+      )}
+
       {isSchedOpen && (
-        <div style={s.subPanel}>
+        <div style={{ ...s.subPanel, flexWrap: 'wrap' }}>
           <input
             type="date"
             defaultValue={t.scheduledDate || ''}
@@ -748,7 +883,7 @@ function TaskRow(props: TaskRowProps) {
       )}
 
       {isNoteOpen && (
-        <div style={s.subPanel}>
+        <div style={{ ...s.subPanel, flexDirection: 'column', alignItems: 'stretch' }}>
           <textarea
             defaultValue={t.note || ''}
             onBlur={(e) => onSaveNote(t.id, e.target.value)}
@@ -824,9 +959,10 @@ const s: Record<string, React.CSSProperties> = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    gap: 12,
+    gap: 10,
     overflow: 'auto',
     padding: 4,
+    WebkitOverflowScrolling: 'touch',
   },
 
   headerBar: {
@@ -870,6 +1006,15 @@ const s: Record<string, React.CSSProperties> = {
     gap: 10,
     flexShrink: 0,
   },
+  statsScroll: {
+    display: 'flex',
+    gap: 8,
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    paddingBottom: 4,
+    flexShrink: 0,
+    scrollSnapType: 'x mandatory',
+  },
   statCard: {
     background: 'linear-gradient(135deg, rgba(17,17,28,0.95), rgba(13,13,22,0.95))',
     border: '1px solid',
@@ -879,6 +1024,18 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
     transition: 'box-shadow 0.4s ease',
+  },
+  statCardMobile: {
+    background: 'linear-gradient(135deg, rgba(17,17,28,0.95), rgba(13,13,22,0.95))',
+    border: '1px solid',
+    borderRadius: 12,
+    padding: '10px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    minWidth: 112,
+    flexShrink: 0,
+    scrollSnapAlign: 'start',
   },
   statLabel: {
     fontFamily: M,
@@ -1127,10 +1284,15 @@ const s: Record<string, React.CSSProperties> = {
     cursor: 'grab',
     transition: 'background 0.15s, border-color 0.15s',
   },
+  taskRowMobile: {
+    padding: '10px 10px',
+    cursor: 'default',
+  },
   taskMain: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   taskText: {
     flex: 1,
@@ -1197,6 +1359,100 @@ const s: Record<string, React.CSSProperties> = {
     accentColor: '#a855f7',
     cursor: 'pointer',
     flexShrink: 0,
+  },
+  checkboxMobile: {
+    width: 20,
+    height: 20,
+    accentColor: '#a855f7',
+    cursor: 'pointer',
+    flexShrink: 0,
+  },
+  moreBtn: {
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    color: '#cbd5e1',
+    cursor: 'pointer',
+    fontSize: 18,
+    fontFamily: M,
+    padding: '4px 12px',
+    borderRadius: 8,
+    minWidth: 44,
+    minHeight: 32,
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  mobileActions: {
+    marginTop: 8,
+    padding: 10,
+    background: 'rgba(168,85,247,0.06)',
+    border: '1px solid rgba(168,85,247,0.18)',
+    borderRadius: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  mobileActionBtn: {
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    color: '#e5e7eb',
+    borderRadius: 8,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    fontFamily: M,
+    fontSize: 13,
+    fontWeight: 600,
+    textAlign: 'left' as const,
+    minHeight: 40,
+  },
+  mobileActionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobileLabel: {
+    fontFamily: M,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    minWidth: 64,
+    textTransform: 'uppercase',
+  },
+  mobileSelect: {
+    flex: 1,
+    background: '#0a0a14',
+    border: '1px solid rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    color: '#e5e7eb',
+    padding: '10px 10px',
+    fontFamily: M,
+    fontSize: 13,
+    minHeight: 40,
+  },
+  mobileDeleteBtn: {
+    background: 'rgba(239,68,68,0.08)',
+    border: '1px solid rgba(239,68,68,0.35)',
+    color: '#fca5a5',
+    borderRadius: 8,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    fontFamily: M,
+    fontSize: 13,
+    fontWeight: 700,
+    textAlign: 'left' as const,
+    minHeight: 40,
+  },
+  boardMoveSelect: {
+    background: '#0a0a14',
+    border: '1px solid rgba(255,255,255,0.18)',
+    borderRadius: 7,
+    color: '#cbd5e1',
+    padding: '4px 6px',
+    fontFamily: M,
+    fontSize: 11,
+    flex: 1,
+    minWidth: 110,
+    minHeight: 28,
   },
   subPanel: {
     marginTop: 6,
