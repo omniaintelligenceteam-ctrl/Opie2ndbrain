@@ -7,6 +7,7 @@ import MemoryActivityWidget from '@/components/ops/MemoryActivityWidget';
 import OrganizationChart from '@/components/ops/OrganizationChart';
 import KanbanBoard from '@/components/ops/KanbanBoard';
 import CalendarView from '@/components/ops/CalendarView';
+import TasksView from '@/components/ops/TasksView';
 import TheHive from '@/components/ops/TheHive';
 import VoiceAgent from '@/components/VoiceAgent';
 import { useVoiceSettings, TTS_PROVIDERS, getVoicesForProvider, getPushToTalkKeyLabel, type PushToTalkKey } from '@/hooks/useVoiceSettings';
@@ -15,7 +16,7 @@ const RELAY_BASE = process.env.NEXT_PUBLIC_OPIE_RELAY_URL || '';
 const IS_DEMO = !RELAY_BASE;
 const FONT_MONO = "'JetBrains Mono', 'Fira Code', monospace";
 
-type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'voice' | 'settings';
+type Tab = 'dashboard' | 'orchestration' | 'leads' | 'crons' | 'costs' | 'kanban' | 'calendar' | 'tasks' | 'voice' | 'settings';
 type Temp = 'all' | 'hot' | 'warm' | 'cold';
 
 type Lead = {
@@ -32,6 +33,7 @@ type CronJob = {
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'DASHBOARD', icon: '📊' },
   { id: 'calendar', label: 'CALENDAR', icon: '📅' },
+  { id: 'tasks', label: 'TASKS', icon: '✅' },
   { id: 'kanban', label: 'KANBAN', icon: '📌' },
   { id: 'orchestration', label: 'ORG CHART', icon: '🏗️' },
   { id: 'leads', label: 'LEADS', icon: '📋' },
@@ -219,6 +221,7 @@ export default function DashboardPage() {
           {activeTab === 'costs' && <CostsView isMobile={isMobile} />}
           {activeTab === 'kanban' && <KanbanBoard />}
           {activeTab === 'calendar' && <CalendarView />}
+          {activeTab === 'tasks' && <TasksView />}
           {activeTab === 'voice' && <VoiceAgent onBack={() => setActiveTab('dashboard')} />}
           {activeTab === 'settings' && <SettingsPanel />}
         </div>
