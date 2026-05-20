@@ -287,8 +287,14 @@
     },
     {
       "path": "src\\app\\page.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1779293395018,
+      "accessCount": 12,
+      "lastAccessed": 1779296315617,
+      "type": "file"
+    },
+    {
+      "path": "src\\hooks\\useOpsState.ts",
+      "accessCount": 4,
+      "lastAccessed": 1779294704293,
       "type": "file"
     },
     {
@@ -322,12 +328,6 @@
       "type": "file"
     },
     {
-      "path": "src\\hooks\\useOpsState.ts",
-      "accessCount": 1,
-      "lastAccessed": 1779293090974,
-      "type": "file"
-    },
-    {
       "path": "src\\app\\layout.tsx",
       "accessCount": 1,
       "lastAccessed": 1779293864057,
@@ -337,6 +337,12 @@
       "path": "public\\sw.js",
       "accessCount": 1,
       "lastAccessed": 1779293877770,
+      "type": "file"
+    },
+    {
+      "path": "src\\components\\ops\\PlannerView.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1779296269956,
       "type": "file"
     }
   ],
