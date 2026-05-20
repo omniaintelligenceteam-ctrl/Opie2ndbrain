@@ -2,7 +2,7 @@
   "name": "Opie 2nd Brain",
   "short_name": "Opie",
   "description": "Your AI-powered second brain and agent army commander",
-  "start_url": "/opie",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0d1a",
   "theme_color": "#667eea",
@@ -32,15 +32,15 @@
   "categories": ["productivity", "utilities"],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "url": "/opie?view=dashboard",
+      "name": "OIOS Command Center",
+      "short_name": "OIOS",
+      "url": "/oios",
       "icons": [{ "src": "/opie-avatar.png", "sizes": "96x96" }]
     },
     {
-      "name": "Voice Chat",
-      "short_name": "Voice",
-      "url": "/opie?view=voice",
+      "name": "Content Command Center",
+      "short_name": "Content",
+      "url": "/content-command-center",
       "icons": [{ "src": "/opie-avatar.png", "sizes": "96x96" }]
     }
   ]
