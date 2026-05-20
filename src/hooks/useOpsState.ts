@@ -104,6 +104,8 @@ const normalizeOpsState = (value: OpsStatePayload) => ({
 
 type Listener = () => void;
 
+const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
 class OpsStateStore {
   todos: TodoItem[] = defaultTodos;
   events: CalendarEvent[] = defaultEvents;
@@ -113,6 +115,8 @@ class OpsStateStore {
   private listeners = new Set<Listener>();
   private syncTimer: number | null = null;
   private hydrationPromise: Promise<void> | null = null;
+  private autoSyncAttached = false;
+  private refreshInterval: number | null = null;
 
   subscribe(listener: Listener) {
     this.listeners.add(listener);
@@ -171,6 +175,77 @@ class OpsStateStore {
       this.emit();
     })();
     return this.hydrationPromise;
+  }
+
+  /**
+   * Pull the latest state from Supabase and apply only if changed.
+   * Skips when a local write is pending so we don't clobber unsaved edits.
+   */
+  async refresh() {
+    if (!this.hasHydrated) return;
+    if (this.syncTimer != null) return; // pending local write — let it flush first
+    try {
+      const res = await fetch('/api/ops-state', { cache: 'no-store' });
+      if (!res.ok) {
+        this.syncStatus = 'offline';
+        this.emit();
+        return;
+      }
+      const body = await res.json();
+      if (!body?.state) {
+        this.syncStatus = 'synced';
+        this.emit();
+        return;
+      }
+      const normalized = normalizeOpsState(body.state as OpsStatePayload);
+      let changed = false;
+      if (normalized.todos && JSON.stringify(normalized.todos) !== JSON.stringify(this.todos)) {
+        this.todos = normalized.todos;
+        changed = true;
+      }
+      if (normalized.events && JSON.stringify(normalized.events) !== JSON.stringify(this.events)) {
+        this.events = normalized.events;
+        changed = true;
+      }
+      if (
+        normalized.urgencyColumns &&
+        JSON.stringify(normalized.urgencyColumns) !== JSON.stringify(this.urgencyColumns)
+      ) {
+        this.urgencyColumns = normalized.urgencyColumns;
+        changed = true;
+      }
+      this.syncStatus = 'synced';
+      if (changed) {
+        try {
+          localStorage.setItem(TODO_KEY, JSON.stringify(this.todos));
+          localStorage.setItem(EVENTS_KEY, JSON.stringify(this.events));
+          localStorage.setItem(URGENCY_COLUMNS_KEY, JSON.stringify(this.urgencyColumns));
+        } catch {}
+      }
+      this.emit();
+    } catch {
+      this.syncStatus = 'offline';
+      this.emit();
+    }
+  }
+
+  /**
+   * Wire up auto-refresh: re-fetch from cloud on window focus, on
+   * visibility change to visible, and as a 6-hour backstop interval.
+   * Idempotent — safe to call from every hook subscriber.
+   */
+  attachAutoSync() {
+    if (this.autoSyncAttached) return;
+    if (typeof window === 'undefined') return;
+    this.autoSyncAttached = true;
+
+    const onFocus = () => this.refresh();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') this.refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    this.refreshInterval = window.setInterval(() => this.refresh(), REFRESH_INTERVAL_MS);
   }
 
   private scheduleSync() {
@@ -241,7 +316,11 @@ export function useOpsState() {
     const unsub = store.subscribe(() => {
       if (mounted.current) force((n) => n + 1);
     });
-    if (!store.hasHydrated) store.hydrate();
+    if (!store.hasHydrated) {
+      store.hydrate().then(() => store.attachAutoSync());
+    } else {
+      store.attachAutoSync();
+    }
     return () => {
       mounted.current = false;
       unsub();
