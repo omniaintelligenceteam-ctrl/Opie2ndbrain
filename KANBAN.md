@@ -32,6 +32,7 @@
 | First 20 customers | Reach out to landscape lighting contractors | Wes + Opie |
 | AI mockup testing | Test GPT Image 1.5, Flux 2 Pro for mockups | Opie |
 | Voice chat integration | Connect dashboard voice to real Opie | Opie |
+| Tom CPA | Follow up with Tom (CPA) | Wes |
 
 ### 🟢 Normal
 
